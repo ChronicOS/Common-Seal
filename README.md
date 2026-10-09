@@ -10,6 +10,8 @@ Board, company secretarial and compliance on one record. This repository holds t
   - `0002_create_organisation.sql` – lets a signed-in user create an organisation and become its owner.
   - `0003_entities.sql` – entities, ownership links, officeholders, setup prompts, and tighter table privileges.
   - `0004_board.sql` – board meetings, agenda, attendance, draft notes, resolutions, minutes that lock, the two-person wipe of draft notes, and adding members.
+  - `0005_invitations.sql` – invite people by email before they have an account.
+  - `0006_delegations.sql` – delegations of authority, signing rules and powers of attorney.
 - `netlify.toml` – build settings and security headers.
 
 ## Deploying to Netlify

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import Authority from "./Authority";
 import { formatDay, loadAssurance, type AssuranceSummary } from "./board";
 import { CHECKIN_KEY, dueCheckIns, progress } from "./checks";
 import { createEntity, loadGroup, setPrompt } from "./data";
@@ -13,10 +14,11 @@ const RECORDS_ROLES = ["owner", "admin", "secretary", "legal", "compliance"];
 const BOARD_WRITE_ROLES = ["owner", "admin", "secretary"];
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-type Tab = "overview" | "meetings" | "people";
+type Tab = "overview" | "meetings" | "authority" | "people";
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "meetings", label: "Meetings" },
+  { id: "authority", label: "Authority" },
   { id: "people", label: "People" },
 ];
 
@@ -98,6 +100,15 @@ export default function Workspace({ membership, userId }: { membership: Membersh
       <>
         {nav}
         <Members organisationId={organisation.id} role={role} />
+      </>
+    );
+  }
+
+  if (tab === "authority") {
+    return (
+      <>
+        {nav}
+        <Authority organisationId={organisation.id} group={data} canEdit={canEdit} />
       </>
     );
   }

@@ -661,3 +661,37 @@ input[type="date"],
 input[type="datetime-local"] {
   max-width: 280px;
 }
+
+/* ---- Phase 3: authority ---- */
+.block-tight {
+  margin: 0 0 24px;
+}
+
+.answers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px 24px;
+}
+
+.answers > p {
+  grid-column: 1 / -1;
+}
+
+.answers h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+input.short-wide {
+  max-width: 220px;
+}
+
+.card .segmented {
+  align-self: flex-start;
+}
