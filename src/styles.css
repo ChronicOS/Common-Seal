@@ -966,3 +966,26 @@ fieldset.question legend {
 .reading + h2 {
   margin-top: 32px;
 }
+
+ol.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+ol.steps > li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+ol.steps > li p {
+  margin: 4px 0 0;
+}
+
+ol.steps > li.step-open {
+  border-left: 4px solid var(--ink);
+}

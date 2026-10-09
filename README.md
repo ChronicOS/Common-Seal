@@ -17,6 +17,7 @@ Board, company secretarial and compliance on one record. This repository holds t
   - `0009_due_diligence.sql` – third-party and customer due diligence, the contract approval gate, and the gifts and conflicts registers.
   - `0010_intercompany.sql` – intercompany arrangements: contracts between two group entities, approved and signed by each side.
   - `0011_training.sql` – training: standard library, your own modules, assignments, marked attempts and completion records.
+  - `0012_workflows.sql` – workflow builder: your own step-by-step processes, runs and their evidence.
 - `netlify.toml` – build settings and security headers.
 
 ## Deploying to Netlify

@@ -3,7 +3,9 @@ import Authority from "./Authority";
 import Contracts from "./Contracts";
 import Declarations from "./Declarations";
 import Training from "./Training";
-import { loadTrainingSummary, type TrainingSummary } from "./training";
+import Workflows from "./Workflows";
+import { loadWorkflowSummary, type WorkflowSummary } from "./workflows";
+import { loadTrainingSummary, today, type TrainingSummary } from "./training";
 import { formatDay, loadAssurance, type AssuranceSummary } from "./board";
 import { CHECKIN_KEY, dueCheckIns, progress } from "./checks";
 import { createEntity, loadGroup, setPrompt } from "./data";
@@ -23,7 +25,7 @@ const RECORDS_ROLES = ["owner", "admin", "secretary", "legal", "compliance"];
 const BOARD_WRITE_ROLES = ["owner", "admin", "secretary"];
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-type Tab = "overview" | "meetings" | "register" | "contracts" | "intercompany" | "parties" | "declarations" | "training" | "authority" | "people";
+type Tab = "overview" | "meetings" | "register" | "contracts" | "intercompany" | "parties" | "declarations" | "training" | "workflows" | "authority" | "people";
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "meetings", label: "Meetings" },
@@ -33,6 +35,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "parties", label: "Third parties" },
   { id: "declarations", label: "Declarations" },
   { id: "training", label: "Training" },
+  { id: "workflows", label: "Workflows" },
   { id: "authority", label: "Authority" },
   { id: "people", label: "People" },
 ];
@@ -47,6 +50,7 @@ export default function Workspace({ membership, userId }: { membership: Membersh
   const [registerSummary, setRegisterSummary] = useState<RegisterSummary | null>(null);
   const [partySummary, setPartySummary] = useState<PartySummary | null>(null);
   const [trainingSummary, setTrainingSummary] = useState<TrainingSummary | null>(null);
+  const [workflowSummary, setWorkflowSummary] = useState<WorkflowSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [entityId, setEntityId] = useState<string | null>(null);
   const [meetingId, setMeetingId] = useState<string | null>(null);
@@ -79,6 +83,7 @@ export default function Workspace({ membership, userId }: { membership: Membersh
     void loadRegisterSummary(organisation.id).then(setRegisterSummary);
     void loadPartySummary(organisation.id).then(setPartySummary);
     void loadTrainingSummary(organisation.id).then(setTrainingSummary, () => setTrainingSummary(null));
+    void loadWorkflowSummary(organisation.id, today()).then(setWorkflowSummary, () => setWorkflowSummary(null));
   }, [onOverview, organisation.id]);
 
   const openEntity = (id: string) => {
@@ -146,6 +151,17 @@ export default function Workspace({ membership, userId }: { membership: Membersh
         {nav}
         <div className="workspace-main">
         <Parties organisationId={organisation.id} role={role} />
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === "workflows") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+        <Workflows organisationId={organisation.id} role={role} entities={data?.entities ?? []} />
         </div>
       </div>
     );
@@ -421,6 +437,17 @@ export default function Workspace({ membership, userId }: { membership: Membersh
               </p>
             </>
           )}
+        </section>
+        <section className="card">
+          <h2>Workflow steps open</h2>
+          <p className="big-number">{workflowSummary ? workflowSummary.open : "–"}</p>
+          <p>
+            {workflowSummary && workflowSummary.overdue > 0 ? (
+              <strong className="warning-text">{workflowSummary.overdue} overdue</strong>
+            ) : (
+              "None overdue"
+            )}
+          </p>
         </section>
       </div>
 
