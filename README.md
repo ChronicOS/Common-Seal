@@ -1,1 +1,33 @@
-# Common-Seal
+# Common Seal
+
+Board, company secretarial and compliance on one record. This repository holds the web app and the database migrations.
+
+## What is here
+
+- `src/` – the web app (React, TypeScript, Vite). First slice: sign in by email link, create an organisation, see an empty assurance view.
+- `supabase/migrations/` – database schema, run in order in the Supabase SQL editor.
+  - `0001_phase0_foundations.sql` – tenancy, documents, AI review, legal holds, deletion, audit log, row-level security.
+  - `0002_create_organisation.sql` – lets a signed-in user create an organisation and become its owner.
+- `netlify.toml` – build settings and security headers.
+
+## Deploying to Netlify
+
+1. Import this repository in Netlify. Build settings are read from `netlify.toml`.
+2. Add two environment variables:
+   - `VITE_SUPABASE_URL` – the project URL, e.g. `https://abcd1234.supabase.co`
+   - `VITE_SUPABASE_PUBLISHABLE_KEY` – the publishable key (starts `sb_publishable_`)
+3. Deploy, then add the site's address to the allowed redirect URLs in Supabase's authentication settings.
+
+Only the publishable key belongs here. The secret key and database password must never be committed or added to Netlify.
+
+## Running locally
+
+```
+cp .env.example .env.local   # then fill in the two values
+npm install
+npm run dev
+```
+
+## Data residency
+
+The Supabase project must be in Sydney (`ap-southeast-2`). Netlify serves only the front-end code; no customer data is stored there. The app loads no third-party fonts or scripts.
