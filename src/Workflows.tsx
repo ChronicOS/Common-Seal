@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import Attachments from "./Attachments";
 import { formatDay, loadMembers, type Member } from "./board";
 import { today } from "./training";
 import type { Entity } from "./types";
@@ -181,6 +182,9 @@ export default function Workflows({ organisationId, role, entities }: Props) {
                     {formatDay(s.completed_at)}
                     {s.response ? `: ${s.response}` : "."}
                   </p>
+                )}
+                {s.status !== "waiting" && s.status !== "cancelled" && (
+                  <Attachments subjectTable="workflow_run_steps" subjectId={s.id} canAttach={s.status === "open" && canDo(s)} />
                 )}
                 {s.status === "open" &&
                   (canDo(s) ? (

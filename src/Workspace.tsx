@@ -8,6 +8,11 @@ import Policies from "./Policies";
 import SpeakUp from "./SpeakUp";
 import Expenses from "./Expenses";
 import Horizon from "./Horizon";
+import ModernSlavery from "./ModernSlavery";
+import Attestations from "./Attestations";
+import ForYou from "./ForYou";
+import Report from "./Report";
+import { loadInbox, type InboxItem } from "./inbox";
 import { loadPolicySummary, type PolicySummary } from "./policies";
 import { loadSpeakUpSummary, type SpeakUpSummary } from "./speakup";
 import { loadExpenseSummary, type ExpenseSummary } from "./expenses";
@@ -33,13 +38,17 @@ const BOARD_WRITE_ROLES = ["owner", "admin", "secretary"];
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Tab =
-  | "overview" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
+  | "overview" | "foryou" | "report" | "modernslavery" | "attestations" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
   | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "expenses" | "speakup" | "people";
 const TABS: { id: Tab; label: string; group?: string }[] = [
   { id: "overview", label: "Overview", group: "Board" },
+  { id: "foryou", label: "For you" },
+  { id: "report", label: "Board report" },
   { id: "meetings", label: "Meetings" },
   { id: "register", label: "Register", group: "Risk and compliance" },
+  { id: "attestations", label: "Attestations" },
   { id: "policies", label: "Policies" },
+  { id: "modernslavery", label: "Modern slavery" },
   { id: "training", label: "Training" },
   { id: "workflows", label: "Workflows" },
   { id: "horizon", label: "Horizon" },
@@ -67,6 +76,7 @@ export default function Workspace({ membership, userId }: { membership: Membersh
   const [policySummary, setPolicySummary] = useState<PolicySummary | null>(null);
   const [speakUpSummary, setSpeakUpSummary] = useState<SpeakUpSummary | null>(null);
   const [expenseSummary, setExpenseSummary] = useState<ExpenseSummary | null>(null);
+  const [inbox, setInbox] = useState<InboxItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [entityId, setEntityId] = useState<string | null>(null);
   const [meetingId, setMeetingId] = useState<string | null>(null);
@@ -105,6 +115,18 @@ export default function Workspace({ membership, userId }: { membership: Membersh
     void loadExpenseSummary(organisation.id).then(setExpenseSummary, () => setExpenseSummary(null));
   }, [onOverview, organisation.id]);
 
+  // Refreshed on every change of section, so the count in the menu stays current
+  useEffect(() => {
+    let live = true;
+    loadInbox(organisation.id, role, userId).then(
+      (items) => live && setInbox(items),
+      () => live && setInbox([]),
+    );
+    return () => {
+      live = false;
+    };
+  }, [organisation.id, role, userId, tab]);
+
   const openEntity = (id: string) => {
     setVisited((v) => (v.includes(id) ? v : [...v, id]));
     setEntityId(id);
@@ -129,6 +151,7 @@ export default function Workspace({ membership, userId }: { membership: Membersh
             onClick={() => go(t.id)}
           >
             {t.label}
+            {t.id === "foryou" && inbox && inbox.length > 0 && <span className="nav-count">{inbox.length}</span>}
           </button>
         </Fragment>
       ))}
@@ -216,6 +239,50 @@ export default function Workspace({ membership, userId }: { membership: Membersh
         {nav}
         <div className="workspace-main">
         <Horizon canManage={canEdit} onOpenWorkflows={() => go("workflows")} />
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === "foryou") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+        <ForYou items={inbox} onOpen={(t) => go(t as Tab)} />
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === "report") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+        <Report organisationId={organisation.id} organisationName={organisation.name} />
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === "modernslavery") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+        <ModernSlavery organisationId={organisation.id} role={role} entities={data?.entities ?? []} />
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === "attestations") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+        <Attestations organisationId={organisation.id} role={role} userId={userId} />
         </div>
       </div>
     );

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import Attachments from "./Attachments";
 import { formatDay, loadMembers, type Member } from "./board";
 import {
   approvePolicyDraft,
@@ -212,6 +213,7 @@ export default function Policies({ organisationId, role, userId }: Props) {
               Version {approved.version_no}, in force from {formatDay(approved.effective_on ?? approved.approved_at!)}, approved by {nameOf(approved.approved_by)}
             </p>
             <Wording content={approved.content} />
+            <Attachments subjectTable="policies" subjectId={policy.id} canAttach={canWrite} label="Supporting documents" />
           </section>
         ) : (
           <p className="card warning">No version of this policy has been approved yet, so it is not in force.</p>

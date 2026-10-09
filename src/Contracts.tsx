@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import Attachments from "./Attachments";
 import {
   ANY,
   holders,
@@ -407,6 +408,10 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
               </div>
             );
           })}
+        </section>
+
+        <section className="card block">
+          <Attachments subjectTable="contracts" subjectId={open.id} canAttach={canRecord} label="Contract documents" />
         </section>
 
         <section className="card block">

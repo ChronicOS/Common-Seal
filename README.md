@@ -45,3 +45,8 @@ The Supabase project must be in Sydney (`ap-southeast-2`). Netlify serves only t
   - `0013_policies.sql` – policy repository: owned policies, versioned wording, approval and review dates.
   - `0014_speak_up.sql` – speak-up reports and investigations, visible only to the people given each case.
   - `0015_expenses.sql` – expense claims, approval by someone else, and automatic gift declarations.
+  - `0016_attachments.sql` – evidence files attached to records, with a fingerprint for each file.
+  - `0017_modern_slavery.sql` – modern slavery statement against the seven criteria, supplier reviews, approval and lodgement.
+  - `0018_attestations.sql` – attestation rounds: accountable people confirm or raise exceptions.
+
+After running migrations, run `supabase/checks/health_check.sql` in the SQL editor. It only reads, and every row should say `pass`.

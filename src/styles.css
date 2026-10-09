@@ -1029,3 +1029,126 @@ ol.steps > li.step-open {
   letter-spacing: 0.06em;
   user-select: all;
 }
+
+/* ---- Attachments ---- */
+.attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.attachments ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.attach-button {
+  cursor: pointer;
+}
+
+.quiet-button {
+  display: inline-block;
+  padding: 8px 14px;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.attach-button:focus-within .quiet-button {
+  outline: 2px solid var(--wax);
+  outline-offset: 2px;
+}
+
+/* ---- Inbox count, statement, report and printing ---- */
+.nav-count {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--wax);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.criterion {
+  margin-bottom: 12px;
+}
+
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 16px;
+}
+
+.report-table th,
+.report-table td {
+  padding: 12px 12px 12px 0;
+  border-top: 1px solid var(--rule);
+  text-align: left;
+  vertical-align: top;
+}
+
+.report-table thead th {
+  border-top: 0;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--soft);
+}
+
+.report-table tbody th {
+  width: 24%;
+}
+
+@media (max-width: 800px) {
+  .report-table,
+  .report-table tbody,
+  .report-table tr,
+  .report-table th,
+  .report-table td {
+    display: block;
+    width: auto;
+  }
+
+  .report-table thead {
+    display: none;
+  }
+
+  .report-table td {
+    border-top: 0;
+    padding-top: 0;
+  }
+}
+
+@media print {
+  .masthead,
+  .side-nav,
+  .footnote,
+  .no-print,
+  .org-switch {
+    display: none !important;
+  }
+
+  .workspace {
+    display: block;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  .card {
+    break-inside: avoid;
+  }
+}

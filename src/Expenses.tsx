@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import Attachments from "./Attachments";
 import { money } from "./authority";
 import { formatDay } from "./board";
 import {
@@ -196,6 +197,10 @@ export default function Expenses({ organisationId, role, userId, entities }: Pro
               })}
             </ul>
           )}
+        </section>
+
+        <section className="block">
+          <Attachments subjectTable="expense_claims" subjectId={claim.id} canAttach={editable} label="Receipts" />
         </section>
 
         {editable && (
