@@ -9,6 +9,7 @@ Board, company secretarial and compliance on one record. This repository holds t
   - `0001_phase0_foundations.sql` – tenancy, documents, AI review, legal holds, deletion, audit log, row-level security.
   - `0002_create_organisation.sql` – lets a signed-in user create an organisation and become its owner.
   - `0003_entities.sql` – entities, ownership links, officeholders, setup prompts, and tighter table privileges.
+  - `0004_board.sql` – board meetings, agenda, attendance, draft notes, resolutions, minutes that lock, the two-person wipe of draft notes, and adding members.
 - `netlify.toml` – build settings and security headers.
 
 ## Deploying to Netlify

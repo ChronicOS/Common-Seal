@@ -1,26 +1,37 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { formatDay, loadAssurance, type AssuranceSummary } from "./board";
 import { CHECKIN_KEY, dueCheckIns, progress } from "./checks";
 import { createEntity, loadGroup, setPrompt } from "./data";
 import EntityDetail from "./EntityDetail";
 import GroupChart from "./GroupChart";
+import MeetingPage from "./MeetingPage";
+import Meetings from "./Meetings";
+import Members from "./Members";
 import type { GroupData, Membership } from "./types";
 
 const RECORDS_ROLES = ["owner", "admin", "secretary", "legal", "compliance"];
+const BOARD_WRITE_ROLES = ["owner", "admin", "secretary"];
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-export default function Workspace({ membership }: { membership: Membership }) {
+type Tab = "overview" | "meetings" | "people";
+const TABS: { id: Tab; label: string }[] = [
+  { id: "overview", label: "Overview" },
+  { id: "meetings", label: "Meetings" },
+  { id: "people", label: "People" },
+];
+
+export default function Workspace({ membership, userId }: { membership: Membership; userId: string }) {
   const { organisation, role } = membership;
   const canEdit = RECORDS_ROLES.includes(role);
 
+  const [tab, setTab] = useState<Tab>("overview");
   const [data, setData] = useState<GroupData | null>(null);
+  const [assurance, setAssurance] = useState<AssuranceSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [entityId, setEntityId] = useState<string | null>(null);
+  const [meetingId, setMeetingId] = useState<string | null>(null);
   // Entities opened in this visit are not nagged about again until the next visit.
   const [visited, setVisited] = useState<string[]>([]);
-  const openEntity = (id: string) => {
-    setVisited((v) => (v.includes(id) ? v : [...v, id]));
-    setOpenId(id);
-  };
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -37,6 +48,42 @@ export default function Workspace({ membership }: { membership: Membership }) {
     void reload();
   }, [reload]);
 
+  // Refresh the summary whenever the overview comes back into view.
+  const onOverview = tab === "overview" && !entityId;
+  useEffect(() => {
+    if (!onOverview) return;
+    loadAssurance(organisation.id)
+      .then(setAssurance)
+      .catch(() => setAssurance(null));
+  }, [onOverview, organisation.id]);
+
+  const openEntity = (id: string) => {
+    setVisited((v) => (v.includes(id) ? v : [...v, id]));
+    setEntityId(id);
+  };
+
+  const go = (next: Tab) => {
+    setTab(next);
+    setEntityId(null);
+    setMeetingId(null);
+  };
+
+  const nav = (
+    <nav className="tabs" aria-label="Sections">
+      {TABS.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          className={tab === t.id ? "tab on" : "tab"}
+          aria-current={tab === t.id ? "page" : undefined}
+          onClick={() => go(t.id)}
+        >
+          {t.label}
+        </button>
+      ))}
+    </nav>
+  );
+
   if (error && !data) {
     return (
       <p className="error" role="alert">
@@ -46,18 +93,55 @@ export default function Workspace({ membership }: { membership: Membership }) {
   }
   if (!data) return <p className="lead">Loading…</p>;
 
-  const open = openId ? data.entities.find((e) => e.id === openId) : undefined;
+  if (tab === "people") {
+    return (
+      <>
+        {nav}
+        <Members organisationId={organisation.id} role={role} />
+      </>
+    );
+  }
+
+  if (tab === "meetings") {
+    return (
+      <>
+        {nav}
+        {meetingId ? (
+          <MeetingPage
+            key={meetingId}
+            organisationId={organisation.id}
+            meetingId={meetingId}
+            role={role}
+            userId={userId}
+            onBack={() => setMeetingId(null)}
+          />
+        ) : (
+          <Meetings
+            organisationId={organisation.id}
+            group={data}
+            canWrite={BOARD_WRITE_ROLES.includes(role)}
+            onOpen={setMeetingId}
+          />
+        )}
+      </>
+    );
+  }
+
+  const open = entityId ? data.entities.find((e) => e.id === entityId) : undefined;
   if (open) {
     return (
-      <EntityDetail
-        key={open.id}
-        organisationId={organisation.id}
-        entity={open}
-        data={data}
-        canEdit={canEdit}
-        reload={reload}
-        onBack={() => setOpenId(null)}
-      />
+      <>
+        {nav}
+        <EntityDetail
+          key={open.id}
+          organisationId={organisation.id}
+          entity={open}
+          data={data}
+          canEdit={canEdit}
+          reload={reload}
+          onBack={() => setEntityId(null)}
+        />
+      </>
     );
   }
 
@@ -77,9 +161,9 @@ export default function Workspace({ membership }: { membership: Membership }) {
     }
   }
 
-  async function snooze(entityId: string) {
+  async function snooze(id: string) {
     try {
-      await setPrompt(organisation.id, entityId, CHECKIN_KEY, "snoozed", new Date(Date.now() + WEEK_MS));
+      await setPrompt(organisation.id, id, CHECKIN_KEY, "snoozed", new Date(Date.now() + WEEK_MS));
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save that.");
@@ -87,9 +171,11 @@ export default function Workspace({ membership }: { membership: Membership }) {
   }
 
   const checkIn = canEdit ? dueCheckIns(data).find((e) => !visited.includes(e.id)) : undefined;
+  const passed = assurance?.decisions.filter((d) => d.outcome === "passed") ?? [];
 
   return (
     <>
+      {nav}
       <p className="eyebrow">Director assurance view</p>
       <h1>{organisation.name}</h1>
       <dl className="facts">
@@ -122,6 +208,40 @@ export default function Workspace({ membership }: { membership: Membership }) {
           </div>
         </section>
       )}
+
+      <div className="tiles block">
+        <section className="card">
+          <h2>Decisions on record</h2>
+          <p className="big-number">{assurance ? passed.length : "–"}</p>
+          {passed.length === 0 ? (
+            <p>Resolutions appear here once a meeting's minutes are locked.</p>
+          ) : (
+            <ul className="plain">
+              {passed.slice(0, 3).map((d) => (
+                <li key={d.id}>
+                  {d.text} <span className="muted">· {formatDay(d.meeting.scheduled_at)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+        <section className="card">
+          <h2>Open actions</h2>
+          <p className="big-number">{assurance ? assurance.openActions : "–"}</p>
+          <p>
+            {assurance && assurance.overdueActions > 0 ? (
+              <strong className="warning-text">{assurance.overdueActions} overdue</strong>
+            ) : (
+              "None overdue"
+            )}
+          </p>
+        </section>
+        <section className="card">
+          <h2>Obligations status</h2>
+          <p className="status-unknown">Unknown</p>
+          <p>No obligations are recorded yet, so nothing is reported as on track.</p>
+        </section>
+      </div>
 
       <section className="block">
         <h2>Group structure</h2>
@@ -169,15 +289,6 @@ export default function Workspace({ membership }: { membership: Membership }) {
             )}
           </form>
         )}
-      </section>
-
-      <section className="card block">
-        <h2>Obligations status</h2>
-        <p className="status-unknown">Unknown</p>
-        <p>
-          No obligations are recorded yet, so there is nothing to report as on track. Status appears here once
-          obligations have owners and dated evidence.
-        </p>
       </section>
     </>
   );
