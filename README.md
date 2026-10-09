@@ -12,6 +12,7 @@ Board, company secretarial and compliance on one record. This repository holds t
   - `0004_board.sql` – board meetings, agenda, attendance, draft notes, resolutions, minutes that lock, the two-person wipe of draft notes, and adding members.
   - `0005_invitations.sql` – invite people by email before they have an account.
   - `0006_delegations.sql` – delegations of authority, signing rules and powers of attorney.
+  - `0007_contracts.sql` – contracts, approval routing from the delegation rules, signatures, reminders and the exceptions register.
 - `netlify.toml` – build settings and security headers.
 
 ## Deploying to Netlify

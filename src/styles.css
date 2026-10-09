@@ -695,3 +695,25 @@ input.short-wide {
 .card .segmented {
   align-self: flex-start;
 }
+
+/* ---- Phase 3: contracts ---- */
+label.check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 400;
+}
+
+label.check input {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+}
+
+.card.warning.block {
+  margin-top: 32px;
+}
+
+.card.note.block {
+  margin: 32px 0 0;
+}

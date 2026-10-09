@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Authority from "./Authority";
+import Contracts from "./Contracts";
 import { formatDay, loadAssurance, type AssuranceSummary } from "./board";
 import { CHECKIN_KEY, dueCheckIns, progress } from "./checks";
 import { createEntity, loadGroup, setPrompt } from "./data";
@@ -14,10 +15,11 @@ const RECORDS_ROLES = ["owner", "admin", "secretary", "legal", "compliance"];
 const BOARD_WRITE_ROLES = ["owner", "admin", "secretary"];
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-type Tab = "overview" | "meetings" | "authority" | "people";
+type Tab = "overview" | "meetings" | "contracts" | "authority" | "people";
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "meetings", label: "Meetings" },
+  { id: "contracts", label: "Contracts" },
   { id: "authority", label: "Authority" },
   { id: "people", label: "People" },
 ];
@@ -100,6 +102,15 @@ export default function Workspace({ membership, userId }: { membership: Membersh
       <>
         {nav}
         <Members organisationId={organisation.id} role={role} />
+      </>
+    );
+  }
+
+  if (tab === "contracts") {
+    return (
+      <>
+        {nav}
+        <Contracts organisationId={organisation.id} group={data} role={role} />
       </>
     );
   }
@@ -244,6 +255,17 @@ export default function Workspace({ membership, userId }: { membership: Membersh
               <strong className="warning-text">{assurance.overdueActions} overdue</strong>
             ) : (
               "None overdue"
+            )}
+          </p>
+        </section>
+        <section className="card">
+          <h2>Authority exceptions</h2>
+          <p className="big-number">{assurance ? assurance.exceptions : "–"}</p>
+          <p>
+            {assurance && assurance.exceptions > 0 ? (
+              <strong className="warning-text">Contracts signed out of process</strong>
+            ) : (
+              "No contracts signed out of process"
             )}
           </p>
         </section>

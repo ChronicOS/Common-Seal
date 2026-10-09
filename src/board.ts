@@ -392,11 +392,11 @@ export async function releaseHold(holdId: string) {
 // ---- Assurance summary and members ----
 
 export type Decision = { id: string; text: string; outcome: Outcome; meeting: { title: string; scheduled_at: string } };
-export type AssuranceSummary = { decisions: Decision[]; openActions: number; overdueActions: number };
+export type AssuranceSummary = { decisions: Decision[]; openActions: number; overdueActions: number; exceptions: number };
 
 export async function loadAssurance(organisationId: string): Promise<AssuranceSummary> {
   const client = db();
-  const [decisions, tasks] = await Promise.all([
+  const [decisions, tasks, exceptions] = await Promise.all([
     client
       .from("resolutions")
       .select("id, text, outcome, meeting:meetings!inner(title, scheduled_at, status)")
@@ -404,7 +404,9 @@ export async function loadAssurance(organisationId: string): Promise<AssuranceSu
       .eq("meeting.status", "minutes_final")
       .order("created_at", { ascending: false }),
     client.from("tasks").select("id, due_at").eq("organisation_id", organisationId).in("status", ["open", "in_progress"]),
+    client.from("authority_exceptions").select("id").eq("organisation_id", organisationId),
   ]);
+  // The exceptions register arrives with the contracts migration; until then it reads as none.
   check(decisions.error ?? tasks.error);
   const open = (tasks.data ?? []) as { id: string; due_at: string | null }[];
   const now = Date.now();
@@ -412,6 +414,7 @@ export async function loadAssurance(organisationId: string): Promise<AssuranceSu
     decisions: (decisions.data ?? []) as unknown as Decision[],
     openActions: open.length,
     overdueActions: open.filter((t) => t.due_at && new Date(t.due_at).getTime() < now).length,
+    exceptions: (exceptions.data ?? []).length,
   };
 }
 
