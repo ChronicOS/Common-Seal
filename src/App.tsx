@@ -272,6 +272,11 @@ export default function App() {
   const loadMemberships = useCallback(async () => {
     if (!supabase || !userId) return;
     setLoadError(null);
+    // Take up any invitations waiting for this email. Failure here must not block sign-in.
+    await supabase.rpc("accept_invitations").then(
+      () => undefined,
+      () => undefined,
+    );
     const { data, error } = await supabase
       .from("memberships")
       .select("role, organisation:organisations(id, name, tier, data_region)")

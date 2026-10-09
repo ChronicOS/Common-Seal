@@ -436,8 +436,28 @@ export async function loadMembers(organisationId: string): Promise<Member[]> {
   }));
 }
 
-export async function addMember(organisationId: string, email: string, role: string) {
-  check((await db().rpc("add_member", { p_org: organisationId, p_email: email, p_role: role })).error);
+/** Adds the person now if they already have an account; otherwise records an invitation. */
+export async function inviteMember(organisationId: string, email: string, role: string): Promise<"added" | "invited"> {
+  const { data, error } = await db().rpc("invite_member", { p_org: organisationId, p_email: email, p_role: role });
+  check(error);
+  return data as "added" | "invited";
+}
+
+export type Invitation = { id: string; email: string; role: string; created_at: string };
+
+export async function loadInvitations(organisationId: string): Promise<Invitation[]> {
+  const { data, error } = await db()
+    .from("invitations")
+    .select("id, email, role, created_at")
+    .eq("organisation_id", organisationId)
+    .eq("status", "pending")
+    .order("created_at");
+  check(error);
+  return (data ?? []) as Invitation[];
+}
+
+export async function revokeInvitation(id: string) {
+  check((await db().from("invitations").update({ status: "revoked" }).eq("id", id)).error);
 }
 
 // ---- Minutes drafted from the meeting record ----

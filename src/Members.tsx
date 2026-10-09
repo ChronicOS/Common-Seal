@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { addMember, loadMembers, type Member } from "./board";
+import {
+  formatDay,
+  inviteMember,
+  loadInvitations,
+  loadMembers,
+  revokeInvitation,
+  type Invitation,
+  type Member,
+} from "./board";
 
 const ROLES: { value: string; label: string }[] = [
   { value: "secretary", label: "Company secretary" },
@@ -10,42 +18,55 @@ const ROLES: { value: string; label: string }[] = [
   { value: "member", label: "Member" },
   { value: "auditor", label: "Auditor (read only)" },
 ];
+const roleLabel = (role: string) => ROLES.find((r) => r.value === role)?.label ?? role;
 
 export default function Members({ organisationId, role }: { organisationId: string; role: string }) {
-  const canAdd = role === "owner" || role === "admin";
+  const canInvite = role === "owner" || role === "admin";
   const [members, setMembers] = useState<Member[] | null>(null);
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [email, setEmail] = useState("");
   const [newRole, setNewRole] = useState("secretary");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<string | null>(null);
+  const [done, setDone] = useState<{ email: string; result: "added" | "invited" } | null>(null);
 
   const reload = useCallback(async () => {
     try {
       setMembers(await loadMembers(organisationId));
+      if (canInvite) setInvitations(await loadInvitations(organisationId));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load members.");
+      setError(e instanceof Error ? e.message : "Could not load people.");
     }
-  }, [organisationId]);
+  }, [organisationId, canInvite]);
 
   useEffect(() => {
     void reload();
   }, [reload]);
 
-  async function add(event: FormEvent) {
+  async function invite(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError(null);
     setDone(null);
     try {
-      await addMember(organisationId, email, newRole);
-      setDone(`${email.trim()} added.`);
+      const result = await inviteMember(organisationId, email, newRole);
+      setDone({ email: email.trim(), result });
       setEmail("");
       await reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not add that person.");
+      setError(e instanceof Error ? e.message : "Could not invite that person.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function revoke(id: string) {
+    setError(null);
+    try {
+      await revokeInvitation(id);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not revoke the invitation.");
     }
   }
 
@@ -64,12 +85,33 @@ export default function Members({ organisationId, role }: { organisationId: stri
           ))}
         </ul>
       )}
-      {!canAdd && <p className="muted">Only an owner or admin can see everyone and add people.</p>}
+      {!canInvite && <p className="muted">Only an owner or admin can see everyone and invite people.</p>}
 
-      {canAdd && (
-        <form className="card form" onSubmit={add}>
-          <h2>Add a person</h2>
-          <p className="muted">They need to have signed in to Common Seal once before you can add them.</p>
+      {canInvite && invitations.length > 0 && (
+        <section className="block">
+          <h2>Invited, not yet joined</h2>
+          <ul className="entity-list">
+            {invitations.map((i) => (
+              <li key={i.id} className="member-row">
+                <span>
+                  <span className="entity-name">{i.email}</span>
+                  <span className="muted">
+                    {" "}
+                    · {roleLabel(i.role)} · invited {formatDay(i.created_at)}
+                  </span>
+                </span>
+                <button type="button" className="link-dark" aria-label={`Revoke invitation for ${i.email}`} onClick={() => void revoke(i.id)}>
+                  Revoke
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {canInvite && (
+        <form className="card form" onSubmit={invite}>
+          <h2>Invite a person</h2>
           <label htmlFor="member-email">Email</label>
           <input id="member-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           <label htmlFor="member-role">Role</label>
@@ -81,9 +123,20 @@ export default function Members({ organisationId, role }: { organisationId: stri
             ))}
           </select>
           <button type="submit" disabled={busy}>
-            {busy ? "Adding…" : "Add person"}
+            {busy ? "Inviting…" : "Invite"}
           </button>
-          {done && <p role="status">{done}</p>}
+          {done?.result === "added" && <p role="status">{done.email} already had an account and has been added.</p>}
+          {done?.result === "invited" && (
+            <div role="status">
+              <p>
+                <strong>{done.email} is invited.</strong> They will join automatically the first time they sign in with
+                that email.
+              </p>
+              <p>
+                No email is sent yet, so send them this link yourself: <code>{window.location.origin}</code>
+              </p>
+            </div>
+          )}
         </form>
       )}
       {error && (
