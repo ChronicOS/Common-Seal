@@ -6,6 +6,7 @@ import { formatDay, loadAssurance, type AssuranceSummary } from "./board";
 import { CHECKIN_KEY, dueCheckIns, progress } from "./checks";
 import { createEntity, loadGroup, setPrompt } from "./data";
 import EntityDetail from "./EntityDetail";
+import Intercompany from "./Intercompany";
 import GroupChart from "./GroupChart";
 import MeetingPage from "./MeetingPage";
 import Meetings from "./Meetings";
@@ -20,12 +21,13 @@ const RECORDS_ROLES = ["owner", "admin", "secretary", "legal", "compliance"];
 const BOARD_WRITE_ROLES = ["owner", "admin", "secretary"];
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-type Tab = "overview" | "meetings" | "register" | "contracts" | "parties" | "declarations" | "authority" | "people";
+type Tab = "overview" | "meetings" | "register" | "contracts" | "intercompany" | "parties" | "declarations" | "authority" | "people";
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "meetings", label: "Meetings" },
   { id: "register", label: "Register" },
   { id: "contracts", label: "Contracts" },
+  { id: "intercompany", label: "Intercompany" },
   { id: "parties", label: "Third parties" },
   { id: "declarations", label: "Declarations" },
   { id: "authority", label: "Authority" },
@@ -44,6 +46,7 @@ export default function Workspace({ membership, userId }: { membership: Membersh
   const [error, setError] = useState<string | null>(null);
   const [entityId, setEntityId] = useState<string | null>(null);
   const [meetingId, setMeetingId] = useState<string | null>(null);
+  const [contractId, setContractId] = useState<string | null>(null);
   // Entities opened in this visit are not nagged about again until the next visit.
   const [visited, setVisited] = useState<string[]>([]);
   const [name, setName] = useState("");
@@ -82,10 +85,11 @@ export default function Workspace({ membership, userId }: { membership: Membersh
     setTab(next);
     setEntityId(null);
     setMeetingId(null);
+    setContractId(null);
   };
 
   const nav = (
-    <nav className="tabs" aria-label="Sections">
+    <nav className="side-nav" aria-label="Sections">
       {TABS.map((t) => (
         <button
           key={t.id}
@@ -111,62 +115,94 @@ export default function Workspace({ membership, userId }: { membership: Membersh
 
   if (tab === "people") {
     return (
-      <>
+      <div className="workspace">
         {nav}
+        <div className="workspace-main">
         <Members organisationId={organisation.id} role={role} />
-      </>
+        </div>
+      </div>
     );
   }
 
   if (tab === "register") {
     return (
-      <>
+      <div className="workspace">
         {nav}
+        <div className="workspace-main">
         <Register organisation={organisation} group={data} role={role} reloadGroup={reload} />
-      </>
+        </div>
+      </div>
     );
   }
 
   if (tab === "parties") {
     return (
-      <>
+      <div className="workspace">
         {nav}
+        <div className="workspace-main">
         <Parties organisationId={organisation.id} role={role} />
-      </>
+        </div>
+      </div>
     );
   }
 
   if (tab === "declarations") {
     return (
-      <>
+      <div className="workspace">
         {nav}
+        <div className="workspace-main">
         <Declarations organisationId={organisation.id} role={role} />
-      </>
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === "intercompany") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+          <Intercompany
+            organisation={organisation}
+            group={data}
+            role={role}
+            onOpenContract={(id) => {
+              setContractId(id);
+              setTab("contracts");
+            }}
+          />
+        </div>
+      </div>
     );
   }
 
   if (tab === "contracts") {
     return (
-      <>
+      <div className="workspace">
         {nav}
-        <Contracts organisationId={organisation.id} group={data} role={role} />
-      </>
+        <div className="workspace-main">
+        <Contracts key={contractId ?? "list"} organisationId={organisation.id} group={data} role={role} initialOpenId={contractId} />
+        </div>
+      </div>
     );
   }
 
   if (tab === "authority") {
     return (
-      <>
+      <div className="workspace">
         {nav}
+        <div className="workspace-main">
         <Authority organisationId={organisation.id} group={data} canEdit={canEdit} />
-      </>
+        </div>
+      </div>
     );
   }
 
   if (tab === "meetings") {
     return (
-      <>
+      <div className="workspace">
         {nav}
+        <div className="workspace-main">
         {meetingId ? (
           <MeetingPage
             key={meetingId}
@@ -184,15 +220,17 @@ export default function Workspace({ membership, userId }: { membership: Membersh
             onOpen={setMeetingId}
           />
         )}
-      </>
+        </div>
+      </div>
     );
   }
 
   const open = entityId ? data.entities.find((e) => e.id === entityId) : undefined;
   if (open) {
     return (
-      <>
+      <div className="workspace">
         {nav}
+        <div className="workspace-main">
         <EntityDetail
           key={open.id}
           organisationId={organisation.id}
@@ -202,7 +240,8 @@ export default function Workspace({ membership, userId }: { membership: Membersh
           reload={reload}
           onBack={() => setEntityId(null)}
         />
-      </>
+        </div>
+      </div>
     );
   }
 
@@ -235,8 +274,9 @@ export default function Workspace({ membership, userId }: { membership: Membersh
   const passed = assurance?.decisions.filter((d) => d.outcome === "passed") ?? [];
 
   return (
-    <>
+    <div className="workspace">
       {nav}
+      <div className="workspace-main">
       <p className="eyebrow">Director assurance view</p>
       <h1>{organisation.name}</h1>
       <dl className="facts">
@@ -393,6 +433,7 @@ export default function Workspace({ membership, userId }: { membership: Membersh
           </form>
         )}
       </section>
-    </>
+      </div>
+    </div>
   );
 }

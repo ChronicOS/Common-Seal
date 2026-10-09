@@ -15,12 +15,20 @@ export type Contract = {
   summary: string | null;
   status: ContractStatus;
   created_at: string;
-  counterparty: { id: string; name: string };
+  /** The outside party; null for an intercompany arrangement. */
+  counterparty: { id: string; name: string } | null;
+  /** The other group entity, for an intercompany arrangement. */
+  counterparty_entity_id?: string | null;
+  arrangement_type?: string | null;
+  pricing_basis?: string | null;
+  interest_rate?: number | null;
 };
 
 export type Approval = {
   id: string;
   contract_id: string;
+  /** Which side this approval is for. Absent on records made before intercompany was added. */
+  entity_id?: string | null;
   required_holder: string;
   basis: string;
   status: "pending" | "approved" | "rejected";
@@ -31,7 +39,7 @@ export type Approval = {
   created_at: string;
 };
 
-export type Signature = { id: string; contract_id: string; capacity: string; signed_by: string; signed_on: string };
+export type Signature = { id: string; contract_id: string; entity_id?: string | null; capacity: string; signed_by: string; signed_on: string };
 export type AuthorityException = { id: string; contract_id: string; kind: string; detail: string; created_at: string };
 export type Reminder = { id: string; subject_id: string; title: string; due_at: string | null; status: string };
 
@@ -68,19 +76,17 @@ export async function loadContracts(organisationId: string): Promise<ContractsDa
   const [contracts, approvals, signatures, exceptions, reminders, counterparties, people] = await Promise.all([
     client
       .from("contracts")
-      .select(
-        "id, entity_id, title, transaction_type, value_amount, starts_on, ends_on, notice_by, auto_renews, summary, status, created_at, counterparty:counterparties(id, name)",
-      )
+      .select("*, counterparty:counterparties(id, name)")
       .eq("organisation_id", organisationId)
       .order("created_at", { ascending: false }),
     client
       .from("contract_approvals")
-      .select("id, contract_id, required_holder, basis, status, decided_by, decided_at, on_behalf, comment, created_at")
+      .select("*")
       .eq("organisation_id", organisationId)
       .order("created_at", { ascending: false }),
     client
       .from("contract_signatures")
-      .select("id, contract_id, capacity, signed_by, signed_on")
+      .select("*")
       .eq("organisation_id", organisationId),
     client
       .from("authority_exceptions")
@@ -180,13 +186,22 @@ export async function decideApproval(approvalId: string, approve: boolean, comme
 }
 
 /** Returns the number of exceptions the signature raised. */
-export async function recordSignature(contractId: string, ruleId: string | null, signedBy: string, signedOn: string) {
-  const { data, error } = await db().rpc("record_contract_signature", {
+export async function recordSignature(
+  contractId: string,
+  ruleId: string | null,
+  signedBy: string,
+  signedOn: string,
+  entityId?: string,
+) {
+  const args: Record<string, unknown> = {
     p_contract: contractId,
     p_rule: ruleId,
     p_signed_by: signedBy,
     p_signed_on: signedOn,
-  });
+  };
+  // Only sent for intercompany arrangements, so ordinary contracts work before that migration is run.
+  if (entityId) args.p_entity = entityId;
+  const { data, error } = await db().rpc("record_contract_signature", args);
   check(error);
   return Number(data ?? 0);
 }
@@ -195,3 +210,54 @@ export const EXCEPTION_LABELS: Record<string, string> = {
   signed_before_approval: "Signed before approval",
   signed_outside_authority: "Signed outside authority",
 };
+
+export const ARRANGEMENT_TYPES = [
+  "Services",
+  "Loan",
+  "Distribution",
+  "Intellectual property licence",
+  "Cost sharing",
+  "Guarantee",
+  "Secondment",
+];
+export const INTERCOMPANY_TYPE = "Intercompany";
+
+export type NewArrangement = {
+  providerId: string;
+  recipientId: string;
+  arrangementType: string;
+  title: string;
+  value: number | null;
+  pricingBasis: string;
+  interestRate: number | null;
+  startsOn: string | null;
+  endsOn: string | null;
+  reviewBy: string | null;
+};
+
+/** Files an intercompany arrangement and sends it to both sides for approval. */
+export async function fileArrangement(organisationId: string, a: NewArrangement): Promise<string> {
+  const client = db();
+  const contract = await client
+    .from("contracts")
+    .insert({
+      organisation_id: organisationId,
+      entity_id: a.providerId,
+      counterparty_entity_id: a.recipientId,
+      title: a.title.trim(),
+      transaction_type: INTERCOMPANY_TYPE,
+      arrangement_type: a.arrangementType,
+      value_amount: a.value,
+      pricing_basis: a.pricingBasis.trim() || null,
+      interest_rate: a.interestRate,
+      starts_on: a.startsOn,
+      ends_on: a.endsOn,
+      notice_by: a.reviewBy,
+    })
+    .select("id")
+    .single();
+  check(contract.error);
+  const id = contract.data!.id as string;
+  check((await client.rpc("submit_contract", { p_contract: id })).error);
+  return id;
+}

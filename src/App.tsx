@@ -24,12 +24,14 @@ function remember(id: string) {
 
 type ShellProps = {
   children: ReactNode;
+  /** The signed-in workspace uses the full width so the side navigation fits. */
+  wide?: boolean;
   email?: string;
   onSignOut?: () => void;
   onPassword?: () => void;
 };
 
-function Shell({ children, email, onSignOut, onPassword }: ShellProps) {
+function Shell({ children, wide, email, onSignOut, onPassword }: ShellProps) {
   return (
     <div className="page">
       <header className="masthead">
@@ -46,7 +48,7 @@ function Shell({ children, email, onSignOut, onPassword }: ShellProps) {
           </span>
         )}
       </header>
-      <main className="content">{children}</main>
+      <main className={wide ? "content content-wide" : "content"}>{children}</main>
       <footer className="footnote">Test environment. Do not enter real company information.</footer>
     </div>
   );
@@ -343,6 +345,7 @@ export default function App() {
 
   return (
     <Shell
+      wide={Boolean(current) && !showPassword}
       email={session.user.email}
       onSignOut={() => void client.auth.signOut()}
       onPassword={() => setShowPassword(true)}

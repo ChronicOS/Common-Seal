@@ -790,3 +790,146 @@ select:disabled {
 section.block > .card.form {
   margin-top: 20px;
 }
+
+/* ---- Side navigation ---- */
+.content-wide {
+  max-width: 1040px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 48px;
+  align-items: start;
+}
+
+.workspace-main {
+  min-width: 0;
+  max-width: 720px;
+}
+
+.side-nav {
+  position: sticky;
+  top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 16px;
+  border-right: 1px solid var(--rule);
+}
+
+.side-nav button.tab {
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 0;
+  border-left: 3px solid transparent;
+  border-radius: 0 6px 6px 0;
+}
+
+.side-nav button.tab:hover {
+  background: var(--card);
+}
+
+.side-nav button.tab.on {
+  border-left-color: var(--wax);
+  background: var(--card);
+}
+
+.content-wide .org-switch {
+  margin: -16px 0 24px;
+}
+
+/* On narrow screens the navigation becomes a strip you can swipe sideways */
+@media (max-width: 800px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .side-nav {
+    position: static;
+    flex-direction: row;
+    gap: 4px;
+    padding: 0 0 4px;
+    margin-top: -16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--rule);
+    overflow-x: auto;
+  }
+
+  .side-nav button.tab {
+    width: auto;
+    flex: none;
+    padding: 8px 10px 10px;
+    border-left: 0;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
+    white-space: nowrap;
+  }
+
+  .side-nav button.tab.on {
+    border-bottom-color: var(--wax);
+    background: none;
+  }
+}
+
+/* ---- Intercompany ---- */
+.side-block + .side-block {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+}
+
+.side-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chart-link-faint {
+  stroke: var(--rule);
+}
+
+.map-node rect {
+  fill: #fff;
+  stroke: var(--soft);
+  stroke-width: 1;
+}
+
+.flow path {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.75;
+}
+
+.flow text {
+  font-size: 12px;
+  font-weight: 600;
+  fill: var(--ink);
+  paint-order: stroke;
+  stroke: var(--card);
+  stroke-width: 4px;
+}
+
+.flow-head {
+  fill: var(--ink);
+}
+
+.flow-gap path {
+  stroke: #8f2f1b;
+  stroke-dasharray: 6 4;
+}
+
+.flow-gap text {
+  fill: #8f2f1b;
+}
+
+.chip {
+  align-self: flex-start;
+}
+
+.card.warning .link-dark {
+  display: inline;
+  text-align: left;
+}

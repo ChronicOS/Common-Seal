@@ -8,7 +8,7 @@ const GAP_X = 24;
 const GAP_Y = 60;
 const PAD = 12;
 
-type Placed = { entity: Entity; x: number; y: number };
+export type Placed = { entity: Entity; x: number; y: number };
 
 function wrapName(name: string): string[] {
   const words = name.split(/\s+/);
@@ -30,7 +30,16 @@ function wrapName(name: string): string[] {
 
 const pctLabel = (r: Relationship) => (r.ownership_pct === null ? "" : `${Number(r.ownership_pct)}%`);
 
-export default function GroupChart({ data, onOpen }: { data: GroupData; onOpen: (id: string) => void }) {
+export type GroupLayout = {
+  placed: Map<string, Placed>;
+  primary: Map<string, Relationship>;
+  current: Relationship[];
+  width: number;
+  height: number;
+};
+
+/** Positions every entity in a tree under its largest owner. Shared by the group chart and the intercompany map. */
+export function layoutGroup(data: GroupData): GroupLayout {
   const current = data.relationships.filter((r) => !r.ends_on);
   const byId = new Map(data.entities.map((e) => [e.id, e]));
 
@@ -65,6 +74,13 @@ export default function GroupChart({ data, onOpen }: { data: GroupData; onOpen: 
 
   const width = Math.max(nextLeaf, 1) * (W + GAP_X) - GAP_X + PAD * 2;
   const height = (maxDepth + 1) * (H + GAP_Y) - GAP_Y + PAD * 2;
+  return { placed, primary, current, width, height };
+}
+
+export const NODE = { W, H, PAD, GAP_Y };
+
+export default function GroupChart({ data, onOpen }: { data: GroupData; onOpen: (id: string) => void }) {
+  const { placed, primary, current, width, height } = layoutGroup(data);
 
   const keyOpen = (id: string) => (event: KeyboardEvent) => {
     if (event.key === "Enter" || event.key === " ") {
