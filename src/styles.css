@@ -989,3 +989,43 @@ ol.steps > li p {
 ol.steps > li.step-open {
   border-left: 4px solid var(--ink);
 }
+
+/* ---- Grouped navigation ---- */
+.nav-group {
+  margin: 16px 0 4px 15px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--soft);
+}
+
+.nav-group:first-child {
+  margin-top: 0;
+}
+
+@media (max-width: 800px) {
+  .nav-group {
+    display: none;
+  }
+}
+
+.reading h3 {
+  margin: 20px 0 4px;
+  font-size: 17px;
+}
+
+.reading h3:first-child {
+  margin-top: 0;
+}
+
+.pre-wrap {
+  white-space: pre-wrap;
+}
+
+.big-number.code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 26px;
+  letter-spacing: 0.06em;
+  user-select: all;
+}

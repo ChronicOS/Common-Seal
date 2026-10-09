@@ -1,9 +1,16 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Fragment, useCallback, useEffect, useState, type FormEvent } from "react";
 import Authority from "./Authority";
 import Contracts from "./Contracts";
 import Declarations from "./Declarations";
 import Training from "./Training";
 import Workflows from "./Workflows";
+import Policies from "./Policies";
+import SpeakUp from "./SpeakUp";
+import Expenses from "./Expenses";
+import Horizon from "./Horizon";
+import { loadPolicySummary, type PolicySummary } from "./policies";
+import { loadSpeakUpSummary, type SpeakUpSummary } from "./speakup";
+import { loadExpenseSummary, type ExpenseSummary } from "./expenses";
 import { loadWorkflowSummary, type WorkflowSummary } from "./workflows";
 import { loadTrainingSummary, today, type TrainingSummary } from "./training";
 import { formatDay, loadAssurance, type AssuranceSummary } from "./board";
@@ -25,19 +32,25 @@ const RECORDS_ROLES = ["owner", "admin", "secretary", "legal", "compliance"];
 const BOARD_WRITE_ROLES = ["owner", "admin", "secretary"];
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-type Tab = "overview" | "meetings" | "register" | "contracts" | "intercompany" | "parties" | "declarations" | "training" | "workflows" | "authority" | "people";
-const TABS: { id: Tab; label: string }[] = [
-  { id: "overview", label: "Overview" },
+type Tab =
+  | "overview" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
+  | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "expenses" | "speakup" | "people";
+const TABS: { id: Tab; label: string; group?: string }[] = [
+  { id: "overview", label: "Overview", group: "Board" },
   { id: "meetings", label: "Meetings" },
-  { id: "register", label: "Register" },
-  { id: "contracts", label: "Contracts" },
-  { id: "intercompany", label: "Intercompany" },
-  { id: "parties", label: "Third parties" },
-  { id: "declarations", label: "Declarations" },
+  { id: "register", label: "Register", group: "Risk and compliance" },
+  { id: "policies", label: "Policies" },
   { id: "training", label: "Training" },
   { id: "workflows", label: "Workflows" },
+  { id: "horizon", label: "Horizon" },
+  { id: "contracts", label: "Contracts", group: "Contracts and third parties" },
+  { id: "intercompany", label: "Intercompany" },
+  { id: "parties", label: "Third parties" },
   { id: "authority", label: "Authority" },
-  { id: "people", label: "People" },
+  { id: "declarations", label: "Declarations", group: "Conduct" },
+  { id: "expenses", label: "Expenses" },
+  { id: "speakup", label: "Speak up" },
+  { id: "people", label: "People", group: "Setup" },
 ];
 
 export default function Workspace({ membership, userId }: { membership: Membership; userId: string }) {
@@ -51,6 +64,9 @@ export default function Workspace({ membership, userId }: { membership: Membersh
   const [partySummary, setPartySummary] = useState<PartySummary | null>(null);
   const [trainingSummary, setTrainingSummary] = useState<TrainingSummary | null>(null);
   const [workflowSummary, setWorkflowSummary] = useState<WorkflowSummary | null>(null);
+  const [policySummary, setPolicySummary] = useState<PolicySummary | null>(null);
+  const [speakUpSummary, setSpeakUpSummary] = useState<SpeakUpSummary | null>(null);
+  const [expenseSummary, setExpenseSummary] = useState<ExpenseSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [entityId, setEntityId] = useState<string | null>(null);
   const [meetingId, setMeetingId] = useState<string | null>(null);
@@ -84,6 +100,9 @@ export default function Workspace({ membership, userId }: { membership: Membersh
     void loadPartySummary(organisation.id).then(setPartySummary);
     void loadTrainingSummary(organisation.id).then(setTrainingSummary, () => setTrainingSummary(null));
     void loadWorkflowSummary(organisation.id, today()).then(setWorkflowSummary, () => setWorkflowSummary(null));
+    void loadPolicySummary(organisation.id, today()).then(setPolicySummary, () => setPolicySummary(null));
+    void loadSpeakUpSummary(organisation.id).then(setSpeakUpSummary, () => setSpeakUpSummary(null));
+    void loadExpenseSummary(organisation.id).then(setExpenseSummary, () => setExpenseSummary(null));
   }, [onOverview, organisation.id]);
 
   const openEntity = (id: string) => {
@@ -101,15 +120,17 @@ export default function Workspace({ membership, userId }: { membership: Membersh
   const nav = (
     <nav className="side-nav" aria-label="Sections">
       {TABS.map((t) => (
-        <button
-          key={t.id}
-          type="button"
-          className={tab === t.id ? "tab on" : "tab"}
-          aria-current={tab === t.id ? "page" : undefined}
-          onClick={() => go(t.id)}
-        >
-          {t.label}
-        </button>
+        <Fragment key={t.id}>
+          {t.group && <span className="nav-group">{t.group}</span>}
+          <button
+            type="button"
+            className={tab === t.id ? "tab on" : "tab"}
+            aria-current={tab === t.id ? "page" : undefined}
+            onClick={() => go(t.id)}
+          >
+            {t.label}
+          </button>
+        </Fragment>
       ))}
     </nav>
   );
@@ -151,6 +172,50 @@ export default function Workspace({ membership, userId }: { membership: Membersh
         {nav}
         <div className="workspace-main">
         <Parties organisationId={organisation.id} role={role} />
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === "policies") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+        <Policies organisationId={organisation.id} role={role} userId={userId} />
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === "speakup") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+        <SpeakUp organisationId={organisation.id} role={role} />
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === "expenses") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+        <Expenses organisationId={organisation.id} role={role} userId={userId} entities={data?.entities ?? []} />
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === "horizon") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+        <Horizon canManage={canEdit} onOpenWorkflows={() => go("workflows")} />
         </div>
       </div>
     );
@@ -448,6 +513,56 @@ export default function Workspace({ membership, userId }: { membership: Membersh
               "None overdue"
             )}
           </p>
+        </section>
+        <section className="card">
+          <h2>Policies</h2>
+          {!policySummary || policySummary.inForce + policySummary.draftOnly === 0 ? (
+            <>
+              <p className="status-unknown">Unknown</p>
+              <p>No policies are recorded yet.</p>
+            </>
+          ) : (
+            <>
+              <p className="big-number">{policySummary.inForce}</p>
+              <p>
+                In force ·{" "}
+                {policySummary.overdue > 0 ? <strong className="warning-text">{policySummary.overdue} overdue for review</strong> : "none overdue for review"}
+                {policySummary.draftOnly > 0 ? ` · ${policySummary.draftOnly} not yet approved` : ""}
+              </p>
+            </>
+          )}
+        </section>
+        <section className="card">
+          <h2>Speak-up reports</h2>
+          {!speakUpSummary ? (
+            <>
+              <p className="big-number">–</p>
+              <p>Numbers are shown to directors and the compliance team.</p>
+            </>
+          ) : speakUpSummary.recipients === 0 ? (
+            <>
+              <p className="status-unknown">Unknown</p>
+              <p>Nobody is appointed to receive reports, so none can be made.</p>
+            </>
+          ) : (
+            <>
+              <p className="big-number">{speakUpSummary.open}</p>
+              <p>
+                Open ·{" "}
+                {speakUpSummary.open_over_90_days > 0 ? (
+                  <strong className="warning-text">{speakUpSummary.open_over_90_days} open more than 90 days</strong>
+                ) : (
+                  "none open more than 90 days"
+                )}{" "}
+                · {speakUpSummary.received_12_months} received and {speakUpSummary.substantiated_12_months} substantiated in 12 months
+              </p>
+            </>
+          )}
+        </section>
+        <section className="card">
+          <h2>Expense claims waiting</h2>
+          <p className="big-number">{expenseSummary ? expenseSummary.awaiting : "–"}</p>
+          <p>Awaiting a decision</p>
         </section>
       </div>
 

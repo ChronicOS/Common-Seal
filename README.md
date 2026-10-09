@@ -41,3 +41,7 @@ npm run dev
 ## Data residency
 
 The Supabase project must be in Sydney (`ap-southeast-2`). Netlify serves only the front-end code; no customer data is stored there. The app loads no third-party fonts or scripts.
+
+  - `0013_policies.sql` – policy repository: owned policies, versioned wording, approval and review dates.
+  - `0014_speak_up.sql` – speak-up reports and investigations, visible only to the people given each case.
+  - `0015_expenses.sql` – expense claims, approval by someone else, and automatic gift declarations.
