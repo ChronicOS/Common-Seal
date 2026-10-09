@@ -41,7 +41,7 @@ export type ContractsData = {
   signatures: Signature[];
   exceptions: AuthorityException[];
   reminders: Reminder[];
-  counterparties: { id: string; name: string }[];
+  counterparties: { id: string; name: string; risk_rating?: string | null; dd_status?: string | null }[];
   people: { user_id: string | null; full_name: string }[];
 };
 
@@ -93,7 +93,7 @@ export async function loadContracts(organisationId: string): Promise<ContractsDa
       .eq("organisation_id", organisationId)
       .eq("subject_table", "contracts")
       .order("due_at"),
-    client.from("counterparties").select("id, name").eq("organisation_id", organisationId).order("name"),
+    client.from("counterparties").select("*").eq("organisation_id", organisationId).order("name"),
     client.from("people").select("user_id, full_name").eq("organisation_id", organisationId),
   ]);
   check(
@@ -114,7 +114,7 @@ export async function loadContracts(organisationId: string): Promise<ContractsDa
     signatures: (signatures.data ?? []) as Signature[],
     exceptions: (exceptions.data ?? []) as AuthorityException[],
     reminders: (reminders.data ?? []) as Reminder[],
-    counterparties: (counterparties.data ?? []) as { id: string; name: string }[],
+    counterparties: (counterparties.data ?? []) as ContractsData["counterparties"],
     people: (people.data ?? []) as { user_id: string | null; full_name: string }[],
   };
 }

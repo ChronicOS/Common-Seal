@@ -154,6 +154,21 @@ export default function Contracts({ organisationId, group, role }: Props) {
           <span className="chip">{CONTRACT_STATUS[open.status]}</span>
         </p>
 
+        {(() => {
+          const party = data.counterparties.find((p) => p.id === open.counterparty.id);
+          const blocked = party?.dd_status === "rejected" || (party?.dd_status === "open" && party?.risk_rating === "high");
+          const label = !party?.dd_status
+            ? "No due diligence on record for the other party."
+            : party.dd_status === "rejected"
+              ? "The other party was rejected in due diligence, so this contract cannot be approved."
+              : party.dd_status === "open"
+                ? party.risk_rating === "high"
+                  ? "The other party is rated high risk and its due diligence is not finished, so this contract cannot be approved yet."
+                  : "Due diligence on the other party is in progress."
+                : `The other party is cleared${party.dd_status === "cleared_with_conditions" ? " with conditions" : ""} (${party.risk_rating ?? "unrated"} risk).`;
+          return <p className={blocked ? "card warning" : "muted"}>{label}</p>;
+        })()}
+
         <dl className="detail-list two">
           <div>
             <dt>Type</dt>

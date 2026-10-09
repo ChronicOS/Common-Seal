@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Authority from "./Authority";
 import Contracts from "./Contracts";
+import Declarations from "./Declarations";
 import { formatDay, loadAssurance, type AssuranceSummary } from "./board";
 import { CHECKIN_KEY, dueCheckIns, progress } from "./checks";
 import { createEntity, loadGroup, setPrompt } from "./data";
@@ -9,6 +10,8 @@ import GroupChart from "./GroupChart";
 import MeetingPage from "./MeetingPage";
 import Meetings from "./Meetings";
 import Members from "./Members";
+import Parties from "./Parties";
+import { loadPartySummary, type PartySummary } from "./parties";
 import Register from "./Register";
 import { loadRegisterSummary, type RegisterSummary } from "./register";
 import type { GroupData, Membership } from "./types";
@@ -17,12 +20,14 @@ const RECORDS_ROLES = ["owner", "admin", "secretary", "legal", "compliance"];
 const BOARD_WRITE_ROLES = ["owner", "admin", "secretary"];
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-type Tab = "overview" | "meetings" | "register" | "contracts" | "authority" | "people";
+type Tab = "overview" | "meetings" | "register" | "contracts" | "parties" | "declarations" | "authority" | "people";
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "meetings", label: "Meetings" },
   { id: "register", label: "Register" },
   { id: "contracts", label: "Contracts" },
+  { id: "parties", label: "Third parties" },
+  { id: "declarations", label: "Declarations" },
   { id: "authority", label: "Authority" },
   { id: "people", label: "People" },
 ];
@@ -35,6 +40,7 @@ export default function Workspace({ membership, userId }: { membership: Membersh
   const [data, setData] = useState<GroupData | null>(null);
   const [assurance, setAssurance] = useState<AssuranceSummary | null>(null);
   const [registerSummary, setRegisterSummary] = useState<RegisterSummary | null>(null);
+  const [partySummary, setPartySummary] = useState<PartySummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [entityId, setEntityId] = useState<string | null>(null);
   const [meetingId, setMeetingId] = useState<string | null>(null);
@@ -64,6 +70,7 @@ export default function Workspace({ membership, userId }: { membership: Membersh
       .then(setAssurance)
       .catch(() => setAssurance(null));
     void loadRegisterSummary(organisation.id).then(setRegisterSummary);
+    void loadPartySummary(organisation.id).then(setPartySummary);
   }, [onOverview, organisation.id]);
 
   const openEntity = (id: string) => {
@@ -116,6 +123,24 @@ export default function Workspace({ membership, userId }: { membership: Membersh
       <>
         {nav}
         <Register organisation={organisation} group={data} role={role} reloadGroup={reload} />
+      </>
+    );
+  }
+
+  if (tab === "parties") {
+    return (
+      <>
+        {nav}
+        <Parties organisationId={organisation.id} role={role} />
+      </>
+    );
+  }
+
+  if (tab === "declarations") {
+    return (
+      <>
+        {nav}
+        <Declarations organisationId={organisation.id} role={role} />
       </>
     );
   }
@@ -280,6 +305,19 @@ export default function Workspace({ membership, userId }: { membership: Membersh
               <strong className="warning-text">Contracts signed out of process</strong>
             ) : (
               "No contracts signed out of process"
+            )}
+          </p>
+        </section>
+        <section className="card">
+          <h2>High-risk third parties</h2>
+          <p className="big-number">{partySummary ? partySummary.highRisk : "–"}</p>
+          <p>
+            {partySummary && (partySummary.open > 0 || partySummary.rejected > 0) ? (
+              <>
+                {partySummary.open} with due diligence open · {partySummary.rejected} rejected
+              </>
+            ) : (
+              "No due diligence open"
             )}
           </p>
         </section>

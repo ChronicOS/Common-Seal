@@ -747,3 +747,46 @@ select:disabled {
   background: var(--paper);
   color: var(--soft);
 }
+
+/* ---- Phase 5: due diligence and declarations ---- */
+.chip-alert {
+  border-color: #8f2f1b;
+  color: #8f2f1b;
+}
+
+.check-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.plain-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.plain-fieldset legend {
+  padding: 0;
+  margin-bottom: 8px;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.review {
+  margin-top: 12px;
+}
+
+.card h3 {
+  margin: 8px 0 0;
+  font-size: 17px;
+}
+
+section.block > .card.form {
+  margin-top: 20px;
+}
