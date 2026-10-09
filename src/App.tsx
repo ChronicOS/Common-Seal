@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { isConfigured, supabase } from "./supabase";
-
-type Organisation = { id: string; name: string; tier: string; data_region: string };
-type Membership = { role: string; organisation: Organisation };
+import type { Membership } from "./types";
+import Workspace from "./Workspace";
 
 function Shell({ children, email, onSignOut }: { children: ReactNode; email?: string; onSignOut?: () => void }) {
   return (
@@ -127,38 +126,6 @@ function CreateOrganisation({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-function Home({ membership }: { membership: Membership }) {
-  const { organisation, role } = membership;
-  return (
-    <>
-      <p className="eyebrow">Director assurance view</p>
-      <h1>{organisation.name}</h1>
-      <dl className="facts">
-        <div>
-          <dt>Your role</dt>
-          <dd className="capitalise">{role}</dd>
-        </div>
-        <div>
-          <dt>Tier</dt>
-          <dd className="capitalise">{organisation.tier}</dd>
-        </div>
-        <div>
-          <dt>Data region</dt>
-          <dd>{organisation.data_region}</dd>
-        </div>
-      </dl>
-      <section className="card">
-        <h2>Obligations status</h2>
-        <p className="status-unknown">Unknown</p>
-        <p>
-          No obligations are recorded yet, so there is nothing to report as on track. Status appears here once
-          obligations have owners and dated evidence.
-        </p>
-      </section>
-    </>
-  );
-}
-
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
@@ -213,7 +180,7 @@ export default function App() {
       ) : memberships.length === 0 ? (
         <CreateOrganisation onCreated={() => void loadMemberships()} />
       ) : (
-        <Home membership={memberships[0]} />
+        <Workspace membership={memberships[0]} />
       )}
     </Shell>
   );

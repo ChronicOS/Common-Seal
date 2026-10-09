@@ -1,0 +1,184 @@
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { CHECKIN_KEY, dueCheckIns, progress } from "./checks";
+import { createEntity, loadGroup, setPrompt } from "./data";
+import EntityDetail from "./EntityDetail";
+import GroupChart from "./GroupChart";
+import type { GroupData, Membership } from "./types";
+
+const RECORDS_ROLES = ["owner", "admin", "secretary", "legal", "compliance"];
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+export default function Workspace({ membership }: { membership: Membership }) {
+  const { organisation, role } = membership;
+  const canEdit = RECORDS_ROLES.includes(role);
+
+  const [data, setData] = useState<GroupData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  // Entities opened in this visit are not nagged about again until the next visit.
+  const [visited, setVisited] = useState<string[]>([]);
+  const openEntity = (id: string) => {
+    setVisited((v) => (v.includes(id) ? v : [...v, id]));
+    setOpenId(id);
+  };
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const reload = useCallback(async () => {
+    try {
+      setData(await loadGroup(organisation.id));
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load your entities.");
+    }
+  }, [organisation.id]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  if (error && !data) {
+    return (
+      <p className="error" role="alert">
+        Could not load your entities: {error}
+      </p>
+    );
+  }
+  if (!data) return <p className="lead">Loading…</p>;
+
+  const open = openId ? data.entities.find((e) => e.id === openId) : undefined;
+  if (open) {
+    return (
+      <EntityDetail
+        key={open.id}
+        organisationId={organisation.id}
+        entity={open}
+        data={data}
+        canEdit={canEdit}
+        reload={reload}
+        onBack={() => setOpenId(null)}
+      />
+    );
+  }
+
+  async function add(event: FormEvent) {
+    event.preventDefault();
+    if (name.trim().length < 2) return setError("Enter the entity's name.");
+    setBusy(true);
+    try {
+      const created = await createEntity(organisation.id, name);
+      setName("");
+      await reload();
+      openEntity(created.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not add the entity.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function snooze(entityId: string) {
+    try {
+      await setPrompt(organisation.id, entityId, CHECKIN_KEY, "snoozed", new Date(Date.now() + WEEK_MS));
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save that.");
+    }
+  }
+
+  const checkIn = canEdit ? dueCheckIns(data).find((e) => !visited.includes(e.id)) : undefined;
+
+  return (
+    <>
+      <p className="eyebrow">Director assurance view</p>
+      <h1>{organisation.name}</h1>
+      <dl className="facts">
+        <div>
+          <dt>Your role</dt>
+          <dd className="capitalise">{role}</dd>
+        </div>
+        <div>
+          <dt>Tier</dt>
+          <dd className="capitalise">{organisation.tier}</dd>
+        </div>
+        <div>
+          <dt>Entities</dt>
+          <dd>{data.entities.length}</dd>
+        </div>
+      </dl>
+
+      {checkIn && (
+        <section className="card checkin" aria-label="Reminder">
+          <p>
+            You started telling us about <strong>{checkIn.name}</strong>. Do you want to complete its details?
+          </p>
+          <div className="row">
+            <button type="button" onClick={() => openEntity(checkIn.id)}>
+              Continue
+            </button>
+            <button type="button" className="quiet" onClick={() => void snooze(checkIn.id)}>
+              Not now
+            </button>
+          </div>
+        </section>
+      )}
+
+      <section className="block">
+        <h2>Group structure</h2>
+        {data.entities.length === 0 ? (
+          <p className="muted">No entities yet. Add your first company below; a name is enough to start.</p>
+        ) : (
+          <>
+            <GroupChart data={data} onOpen={openEntity} />
+            <ul className="entity-list">
+              {data.entities.map((entity) => {
+                const p = progress(data, entity);
+                return (
+                  <li key={entity.id}>
+                    <button type="button" className="entity-row" onClick={() => openEntity(entity.id)}>
+                      <span className="entity-name">{entity.name}</span>
+                      <span className={p.queue.length ? "muted" : undefined}>
+                        {p.answered} of {p.total} details
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+        {canEdit && (
+          <form className="card form" onSubmit={add}>
+            <label htmlFor="entity-name">Add an entity</label>
+            <div className="row">
+              <input
+                id="entity-name"
+                className="grow"
+                placeholder="Company name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+              <button type="submit" disabled={busy}>
+                {busy ? "Adding…" : "Add"}
+              </button>
+            </div>
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
+          </form>
+        )}
+      </section>
+
+      <section className="card block">
+        <h2>Obligations status</h2>
+        <p className="status-unknown">Unknown</p>
+        <p>
+          No obligations are recorded yet, so there is nothing to report as on track. Status appears here once
+          obligations have owners and dated evidence.
+        </p>
+      </section>
+    </>
+  );
+}

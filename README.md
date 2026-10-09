@@ -4,10 +4,11 @@ Board, company secretarial and compliance on one record. This repository holds t
 
 ## What is here
 
-- `src/` – the web app (React, TypeScript, Vite). First slice: sign in by email link, create an organisation, see an empty assurance view.
+- `src/` – the web app (React, TypeScript, Vite). Sign in by email link, create an organisation, add entities with guided prompts, and see the group chart.
 - `supabase/migrations/` – database schema, run in order in the Supabase SQL editor.
   - `0001_phase0_foundations.sql` – tenancy, documents, AI review, legal holds, deletion, audit log, row-level security.
   - `0002_create_organisation.sql` – lets a signed-in user create an organisation and become its owner.
+  - `0003_entities.sql` – entities, ownership links, officeholders, setup prompts, and tighter table privileges.
 - `netlify.toml` – build settings and security headers.
 
 ## Deploying to Netlify
