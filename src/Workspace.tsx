@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Authority from "./Authority";
 import Contracts from "./Contracts";
 import Declarations from "./Declarations";
+import Training from "./Training";
+import { loadTrainingSummary, type TrainingSummary } from "./training";
 import { formatDay, loadAssurance, type AssuranceSummary } from "./board";
 import { CHECKIN_KEY, dueCheckIns, progress } from "./checks";
 import { createEntity, loadGroup, setPrompt } from "./data";
@@ -21,7 +23,7 @@ const RECORDS_ROLES = ["owner", "admin", "secretary", "legal", "compliance"];
 const BOARD_WRITE_ROLES = ["owner", "admin", "secretary"];
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-type Tab = "overview" | "meetings" | "register" | "contracts" | "intercompany" | "parties" | "declarations" | "authority" | "people";
+type Tab = "overview" | "meetings" | "register" | "contracts" | "intercompany" | "parties" | "declarations" | "training" | "authority" | "people";
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "meetings", label: "Meetings" },
@@ -30,6 +32,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "intercompany", label: "Intercompany" },
   { id: "parties", label: "Third parties" },
   { id: "declarations", label: "Declarations" },
+  { id: "training", label: "Training" },
   { id: "authority", label: "Authority" },
   { id: "people", label: "People" },
 ];
@@ -43,6 +46,7 @@ export default function Workspace({ membership, userId }: { membership: Membersh
   const [assurance, setAssurance] = useState<AssuranceSummary | null>(null);
   const [registerSummary, setRegisterSummary] = useState<RegisterSummary | null>(null);
   const [partySummary, setPartySummary] = useState<PartySummary | null>(null);
+  const [trainingSummary, setTrainingSummary] = useState<TrainingSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [entityId, setEntityId] = useState<string | null>(null);
   const [meetingId, setMeetingId] = useState<string | null>(null);
@@ -74,6 +78,7 @@ export default function Workspace({ membership, userId }: { membership: Membersh
       .catch(() => setAssurance(null));
     void loadRegisterSummary(organisation.id).then(setRegisterSummary);
     void loadPartySummary(organisation.id).then(setPartySummary);
+    void loadTrainingSummary(organisation.id).then(setTrainingSummary, () => setTrainingSummary(null));
   }, [onOverview, organisation.id]);
 
   const openEntity = (id: string) => {
@@ -141,6 +146,17 @@ export default function Workspace({ membership, userId }: { membership: Membersh
         {nav}
         <div className="workspace-main">
         <Parties organisationId={organisation.id} role={role} />
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === "training") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+        <Training organisationId={organisation.id} role={role} userId={userId} />
         </div>
       </div>
     );
@@ -380,6 +396,28 @@ export default function Workspace({ membership, userId }: { membership: Membersh
               <p>
                 {registerSummary.active} confirmed · {registerSummary.overdue} overdue for review ·{" "}
                 {registerSummary.withGaps} with ownership gaps
+              </p>
+            </>
+          )}
+        </section>
+        <section className="card">
+          <h2>Training</h2>
+          {!trainingSummary || trainingSummary.assigned === 0 ? (
+            <>
+              <p className="status-unknown">Unknown</p>
+              <p>No training is assigned yet, so nothing is reported as complete.</p>
+            </>
+          ) : (
+            <>
+              <p className="big-number">
+                {trainingSummary.complete} of {trainingSummary.assigned}
+              </p>
+              <p>
+                {trainingSummary.overdue > 0 ? (
+                  <strong className="warning-text">{trainingSummary.overdue} overdue</strong>
+                ) : (
+                  "Assignments complete · none overdue"
+                )}
               </p>
             </>
           )}

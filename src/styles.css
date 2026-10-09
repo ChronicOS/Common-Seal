@@ -933,3 +933,36 @@ section.block > .card.form {
   display: inline;
   text-align: left;
 }
+
+.reading p {
+  max-width: 62ch;
+  line-height: 1.6;
+}
+
+.reading p:first-child {
+  margin-top: 0;
+}
+
+fieldset.question {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 20px 0;
+}
+
+fieldset.question legend {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.question-list li {
+  margin-bottom: 10px;
+}
+
+.question-list ul {
+  margin-top: 4px;
+}
+
+.reading + h2 {
+  margin-top: 32px;
+}
