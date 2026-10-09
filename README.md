@@ -13,6 +13,7 @@ Board, company secretarial and compliance on one record. This repository holds t
   - `0005_invitations.sql` – invite people by email before they have an account.
   - `0006_delegations.sql` – delegations of authority, signing rules and powers of attorney.
   - `0007_contracts.sql` – contracts, approval routing from the delegation rules, signatures, reminders and the exceptions register.
+  - `0008_register.sql` – risk and compliance register at local, regional and global levels, ownership (responsible, accountable, consulted, informed) and sector templates.
 - `netlify.toml` – build settings and security headers.
 
 ## Deploying to Netlify

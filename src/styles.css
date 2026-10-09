@@ -717,3 +717,33 @@ label.check input {
 .card.note.block {
   margin: 32px 0 0;
 }
+
+/* ---- Phase 4: register ---- */
+.raci {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.raci .card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.raci h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.field .label {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+textarea:disabled,
+input:disabled,
+select:disabled {
+  background: var(--paper);
+  color: var(--soft);
+}

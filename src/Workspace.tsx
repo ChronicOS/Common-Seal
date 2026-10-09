@@ -9,16 +9,19 @@ import GroupChart from "./GroupChart";
 import MeetingPage from "./MeetingPage";
 import Meetings from "./Meetings";
 import Members from "./Members";
+import Register from "./Register";
+import { loadRegisterSummary, type RegisterSummary } from "./register";
 import type { GroupData, Membership } from "./types";
 
 const RECORDS_ROLES = ["owner", "admin", "secretary", "legal", "compliance"];
 const BOARD_WRITE_ROLES = ["owner", "admin", "secretary"];
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-type Tab = "overview" | "meetings" | "contracts" | "authority" | "people";
+type Tab = "overview" | "meetings" | "register" | "contracts" | "authority" | "people";
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "meetings", label: "Meetings" },
+  { id: "register", label: "Register" },
   { id: "contracts", label: "Contracts" },
   { id: "authority", label: "Authority" },
   { id: "people", label: "People" },
@@ -31,6 +34,7 @@ export default function Workspace({ membership, userId }: { membership: Membersh
   const [tab, setTab] = useState<Tab>("overview");
   const [data, setData] = useState<GroupData | null>(null);
   const [assurance, setAssurance] = useState<AssuranceSummary | null>(null);
+  const [registerSummary, setRegisterSummary] = useState<RegisterSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [entityId, setEntityId] = useState<string | null>(null);
   const [meetingId, setMeetingId] = useState<string | null>(null);
@@ -59,6 +63,7 @@ export default function Workspace({ membership, userId }: { membership: Membersh
     loadAssurance(organisation.id)
       .then(setAssurance)
       .catch(() => setAssurance(null));
+    void loadRegisterSummary(organisation.id).then(setRegisterSummary);
   }, [onOverview, organisation.id]);
 
   const openEntity = (id: string) => {
@@ -102,6 +107,15 @@ export default function Workspace({ membership, userId }: { membership: Membersh
       <>
         {nav}
         <Members organisationId={organisation.id} role={role} />
+      </>
+    );
+  }
+
+  if (tab === "register") {
+    return (
+      <>
+        {nav}
+        <Register organisation={organisation} group={data} role={role} reloadGroup={reload} />
       </>
     );
   }
@@ -271,8 +285,26 @@ export default function Workspace({ membership, userId }: { membership: Membersh
         </section>
         <section className="card">
           <h2>Obligations status</h2>
-          <p className="status-unknown">Unknown</p>
-          <p>No obligations are recorded yet, so nothing is reported as on track.</p>
+          {!registerSummary || registerSummary.active === 0 ? (
+            <>
+              <p className="status-unknown">Unknown</p>
+              <p>
+                {registerSummary && registerSummary.proposed > 0
+                  ? `${registerSummary.proposed} suggested entries are waiting to be confirmed.`
+                  : "Nothing is confirmed on the register yet, so nothing is reported as on track."}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="status-unknown">
+                {registerSummary.overdue > 0 ? "Overdue" : registerSummary.withGaps > 0 ? "Needs attention" : "On track"}
+              </p>
+              <p>
+                {registerSummary.active} confirmed · {registerSummary.overdue} overdue for review ·{" "}
+                {registerSummary.withGaps} with ownership gaps
+              </p>
+            </>
+          )}
         </section>
       </div>
 

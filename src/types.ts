@@ -22,6 +22,8 @@ export type Entity = {
   is_listed: boolean;
   status: string;
   created_at: string;
+  /** Set by the register migration; undefined until it has been run. */
+  region?: string | null;
 };
 
 export type Relationship = {
