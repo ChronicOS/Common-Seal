@@ -1,3 +1,4 @@
+import { has, roleLabels } from "./roles";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { formatDay, loadMembers, type Member } from "./board";
 import {
@@ -188,9 +189,9 @@ function CommentBox({ item, busy, onSave, onCancel }: { item: Item; busy: boolea
 }
 
 export default function RiskRegister({ organisationId, organisationName, role, userId }: Props) {
-  const canManage = MANAGE_ROLES.includes(role);
+  const canManage = has(role, ...MANAGE_ROLES);
   // Whoever manages the register can name the report owner
-  const isAdmin = MANAGE_ROLES.includes(role);
+  const isAdmin = has(role, ...MANAGE_ROLES);
 
   const [data, setData] = useState<RiskData | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -775,7 +776,7 @@ export default function RiskRegister({ organisationId, organisationName, role, u
               </button>
             </div>
           ) : (
-            !owner && <p className="muted">An owner, administrator, secretary, legal or compliance member names this person. Your role here is {role}.</p>
+            !owner && <p className="muted">An owner, administrator, secretary, legal or compliance member names this person. Your role here is {roleLabels(role)}.</p>
           )}
         </div>
 

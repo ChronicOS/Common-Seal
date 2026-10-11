@@ -1,3 +1,4 @@
+import { has, only } from "./roles";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Attachments from "./Attachments";
 import {
@@ -131,8 +132,8 @@ function SignForm({
 }
 
 export default function Contracts({ organisationId, group, role, initialOpenId }: Props) {
-  const canFile = role !== "auditor";
-  const canRecord = ["owner", "admin", "secretary", "legal", "compliance"].includes(role);
+  const canFile = !only(role, "auditor");
+  const canRecord = has(role, ...["owner", "admin", "secretary", "legal", "compliance"]);
 
   const [data, setData] = useState<ContractsData | null>(null);
   const [authority, setAuthority] = useState<AuthorityData | null>(null);

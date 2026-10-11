@@ -56,3 +56,4 @@ The Supabase project must be in Sydney (`ap-southeast-2`). Netlify serves only t
 After running migrations, run `supabase/checks/health_check.sql` in the SQL editor. It only reads, and every row should say `pass`.\n  - `0023_risk_reviews.sql` – risk register as a review cycle: categories, responsible users, reminders and escalation, action follow-up, report owner.
   - `0024_risk_entry.sql` – risks saved one at a time and editable later, a Finished step, and report owner comments with a resolved tick.
   - `0025_risk_owner_roles.sql` – secretary, legal and compliance can name the report owner, as well as owner and administrator.
+  - `0026_multiple_roles.sql` – a person can hold several roles; Invite (new people) and Assign (existing people) are separate; the last owner cannot be removed.

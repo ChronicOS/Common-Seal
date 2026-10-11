@@ -1,3 +1,4 @@
+import { has } from "./roles";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { money } from "./authority";
 import { formatDay } from "./board";
@@ -39,8 +40,8 @@ function short(name: string, max = 24) {
 }
 
 export default function Intercompany({ organisation, group, role, onOpenContract }: Props) {
-  const canFile = ["owner", "admin", "secretary", "legal", "compliance"].includes(role);
-  const isAdmin = role === "owner" || role === "admin";
+  const canFile = has(role, ...["owner", "admin", "secretary", "legal", "compliance"]);
+  const isAdmin = has(role, "owner") || has(role, "admin");
   const allowed = organisation.tier === "large";
 
   const [data, setData] = useState<ContractsData | null>(null);

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { isConfigured, supabase } from "./supabase";
+import { joinRoles } from "./roles";
 import type { Membership } from "./types";
 import Workspace from "./Workspace";
 
@@ -279,16 +280,16 @@ export default function App() {
       () => undefined,
       () => undefined,
     );
-    const { data, error } = await supabase
-      .from("memberships")
-      .select("role, organisation:organisations(id, name, tier, data_region)")
-      .eq("user_id", userId)
-      .eq("is_active", true);
+    const client = supabase;
+    const read = (columns: string) => client.from("memberships").select(`${columns}, organisation:organisations(id, name, tier, data_region)`).eq("user_id", userId).eq("is_active", true);
+    let { data, error } = await read("role, extra_roles");
+    // Before the multiple-roles migration has been run there is no extra_roles column
+    if (error) ({ data, error } = await read("role"));
     if (error) {
       setLoadError(error.message);
       return;
     }
-    setMemberships((data ?? []) as unknown as Membership[]);
+    setMemberships(((data ?? []) as unknown as (Membership & { extra_roles?: string[] })[]).map((m) => ({ role: joinRoles(m.role, m.extra_roles), organisation: m.organisation })));
   }, [userId]);
 
   useEffect(() => {

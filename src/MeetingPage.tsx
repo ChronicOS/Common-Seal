@@ -1,3 +1,4 @@
+import { has } from "./roles";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   addAction,
@@ -223,9 +224,9 @@ function ItemNotes({
 }
 
 export default function MeetingPage({ organisationId, meetingId, role, userId, onBack }: Props) {
-  const canWrite = ["owner", "admin", "secretary"].includes(role);
-  const canRecords = ["owner", "admin", "secretary", "legal", "compliance"].includes(role);
-  const canHold = ["owner", "admin", "legal"].includes(role);
+  const canWrite = has(role, ...["owner", "admin", "secretary"]);
+  const canRecords = has(role, ...["owner", "admin", "secretary", "legal", "compliance"]);
+  const canHold = has(role, ...["owner", "admin", "legal"]);
 
   const [detail, setDetail] = useState<MeetingDetail | null>(null);
   const [error, setError] = useState<string | null>(null);

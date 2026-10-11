@@ -1,4 +1,5 @@
 export type Organisation = { id: string; name: string; tier: string; data_region: string };
+/** role holds every role the person has here, comma separated; read it with the helpers in roles.ts */
 export type Membership = { role: string; organisation: Organisation };
 
 export type EntityForm =

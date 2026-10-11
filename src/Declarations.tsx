@@ -1,3 +1,4 @@
+import { has, only } from "./roles";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { money } from "./authority";
 import { formatDay } from "./board";
@@ -39,8 +40,8 @@ function ConflictReview({ conflict, busy, onSave }: { conflict: Conflict; busy: 
 }
 
 export default function Declarations({ organisationId, role }: Props) {
-  const canDecide = ["owner", "admin", "secretary", "legal", "compliance"].includes(role);
-  const canDeclare = role !== "auditor";
+  const canDecide = has(role, ...["owner", "admin", "secretary", "legal", "compliance"]);
+  const canDeclare = !only(role, "auditor");
 
   const [data, setData] = useState<{ gifts: Gift[]; conflicts: Conflict[] } | null>(null);
   const [error, setError] = useState<string | null>(null);

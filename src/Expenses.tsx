@@ -1,3 +1,4 @@
+import { has, only } from "./roles";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Attachments from "./Attachments";
 import { money } from "./authority";
@@ -32,8 +33,8 @@ const savedName = () => {
 };
 
 export default function Expenses({ organisationId, role, userId, entities }: Props) {
-  const canDecide = MANAGE_ROLES.includes(role);
-  const canClaim = role !== "auditor";
+  const canDecide = has(role, ...MANAGE_ROLES);
+  const canClaim = !only(role, "auditor");
 
   const [data, setData] = useState<ExpenseData | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);

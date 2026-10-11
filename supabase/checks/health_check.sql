@@ -18,6 +18,9 @@ checks (check_name, ok, detail) as (
          case when to_regclass('public.' || e.marker) is null then 'Table ' || e.marker || ' is missing' else '' end
   from expected e
   union all
+  select 'Migration 0026 has been run',
+         exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'memberships' and column_name = 'extra_roles'), ''
+  union all
   select 'Migration 0025 has been run',
          exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'risk_owners' and policyname = 'risk_owners_insert' and with_check like '%records_roles%'), ''
   union all

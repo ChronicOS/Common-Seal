@@ -1,3 +1,4 @@
+import { has } from "./roles";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Attachments from "./Attachments";
 import { formatDay, loadMembers, type Member } from "./board";
@@ -60,7 +61,7 @@ function StepAction({ step, busy, onComplete }: { step: RunStep; busy: boolean; 
 }
 
 export default function Workflows({ organisationId, role, entities }: Props) {
-  const canManage = MANAGE_ROLES.includes(role);
+  const canManage = has(role, ...MANAGE_ROLES);
 
   const [data, setData] = useState<WorkflowData | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -121,7 +122,7 @@ export default function Workflows({ organisationId, role, entities }: Props) {
   const workflowOf = (id: string) => data.workflows.find((w) => w.id === id);
   const stepsOfRun = (id: string) => data.runSteps.filter((s) => s.run_id === id);
   const memberName = (id: string | null) => members.find((m) => m.user_id === id)?.name ?? "someone";
-  const canDo = (s: RunStep) => canManage || (s.assignee_role !== null && s.assignee_role === role);
+  const canDo = (s: RunStep) => canManage || (has(role, s.assignee_role));
   const progress = (r: Run) => {
     const all = stepsOfRun(r.id);
     const open = all.find((s) => s.status === "open");

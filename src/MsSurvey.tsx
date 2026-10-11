@@ -1,3 +1,4 @@
+import { has } from "./roles";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { money } from "./authority";
 import { formatDay } from "./board";
@@ -86,8 +87,8 @@ function ConcernDecision({ busy, onDecide }: { busy: boolean; onDecide: (decisio
 }
 
 export default function MsSurvey({ organisationId, organisationName, role, statements, onOpenChange }: Props) {
-  const canManage = MANAGE_ROLES.includes(role);
-  const isLegal = LEGAL_ROLES.includes(role);
+  const canManage = has(role, ...MANAGE_ROLES);
+  const isLegal = has(role, ...LEGAL_ROLES);
 
   const [data, setData] = useState<SurveyData | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);

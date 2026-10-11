@@ -1,3 +1,4 @@
+import { joinRoles } from "./roles";
 import { supabase } from "./supabase";
 import type { GroupData } from "./types";
 
@@ -422,10 +423,13 @@ export type Member = { user_id: string; role: string; is_active: boolean; name: 
 
 export async function loadMembers(organisationId: string): Promise<Member[]> {
   const client = db();
-  const [memberships, people] = await Promise.all([
-    client.from("memberships").select("user_id, role, is_active").eq("organisation_id", organisationId),
+  const readMembers = (columns: string) => client.from("memberships").select(columns).eq("organisation_id", organisationId);
+  const [first, people] = await Promise.all([
+    readMembers("user_id, role, extra_roles, is_active"),
     client.from("people").select("user_id, full_name, email").eq("organisation_id", organisationId).not("user_id", "is", null),
   ]);
+  // Before the multiple-roles migration has been run there is no extra_roles column
+  const memberships = first.error ? await readMembers("user_id, role, is_active") : first;
   check(memberships.error ?? people.error);
   const names = new Map(
     ((people.data ?? []) as { user_id: string; full_name: string; email: string | null }[]).map((p) => [
@@ -433,30 +437,34 @@ export async function loadMembers(organisationId: string): Promise<Member[]> {
       p.email ?? p.full_name,
     ]),
   );
-  return ((memberships.data ?? []) as Omit<Member, "name">[]).map((m) => ({
-    ...m,
+  return ((memberships.data ?? []) as unknown as (Omit<Member, "name"> & { extra_roles?: string[] })[]).map((m) => ({
+    user_id: m.user_id,
+    is_active: m.is_active,
+    role: joinRoles(m.role, m.extra_roles),
     name: names.get(m.user_id) ?? "Unknown user",
   }));
 }
 
 /** Adds the person now if they already have an account; otherwise records an invitation. */
-export async function inviteMember(organisationId: string, email: string, role: string): Promise<"added" | "invited"> {
-  const { data, error } = await db().rpc("invite_member", { p_org: organisationId, p_email: email, p_role: role });
+export async function inviteMember(organisationId: string, email: string, roles: string[]): Promise<"added" | "invited"> {
+  const { data, error } = await db().rpc("invite_member", { p_org: organisationId, p_email: email, p_roles: roles });
   check(error);
   return data as "added" | "invited";
+}
+
+/** Assign: set the roles of someone who is already a member, or remove their access. */
+export async function setMemberRoles(organisationId: string, userId: string, roles: string[], active = true) {
+  check((await db().rpc("set_member_roles", { p_org: organisationId, p_user: userId, p_roles: roles, p_active: active })).error);
 }
 
 export type Invitation = { id: string; email: string; role: string; created_at: string };
 
 export async function loadInvitations(organisationId: string): Promise<Invitation[]> {
-  const { data, error } = await db()
-    .from("invitations")
-    .select("id, email, role, created_at")
-    .eq("organisation_id", organisationId)
-    .eq("status", "pending")
-    .order("created_at");
+  const read = (columns: string) => db().from("invitations").select(columns).eq("organisation_id", organisationId).eq("status", "pending").order("created_at");
+  let { data, error } = await read("id, email, role, extra_roles, created_at");
+  if (error) ({ data, error } = await read("id, email, role, created_at"));
   check(error);
-  return (data ?? []) as Invitation[];
+  return ((data ?? []) as unknown as (Invitation & { extra_roles?: string[] })[]).map((i) => ({ id: i.id, email: i.email, created_at: i.created_at, role: joinRoles(i.role, i.extra_roles) }));
 }
 
 export async function revokeInvitation(id: string) {

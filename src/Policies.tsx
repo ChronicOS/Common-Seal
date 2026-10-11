@@ -1,3 +1,4 @@
+import { has } from "./roles";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Attachments from "./Attachments";
 import { formatDay, loadMembers, type Member } from "./board";
@@ -97,7 +98,7 @@ function Writer({
 }
 
 export default function Policies({ organisationId, role, userId }: Props) {
-  const canManage = MANAGE_ROLES.includes(role);
+  const canManage = has(role, ...MANAGE_ROLES);
 
   const [data, setData] = useState<PolicyData | null>(null);
   const [members, setMembers] = useState<Member[]>([]);

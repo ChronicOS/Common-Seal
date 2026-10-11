@@ -1,3 +1,4 @@
+import { has } from "./roles";
 import { loadContracts } from "./contracts";
 import { loadDeclarations } from "./declarations";
 import { loadExpenses } from "./expenses";
@@ -22,7 +23,7 @@ const soon = (iso: string | null, days: number) => {
  * A module whose migration has not been run is skipped without failing the rest.
  */
 export async function loadInbox(organisationId: string, role: string, userId: string): Promise<InboxItem[]> {
-  const manage = MANAGE_ROLES.includes(role);
+  const manage = has(role, ...MANAGE_ROLES);
   const t = today();
   const items: InboxItem[] = [];
   const add = (tab: string, kind: string, id: string, title: string, due: string | null) =>
@@ -45,7 +46,7 @@ export async function loadInbox(organisationId: string, role: string, userId: st
     }),
     safely(async () => {
       const d = await loadWorkflows(organisationId);
-      for (const s of d.runSteps.filter((x) => x.status === "open" && (manage ? x.assignee_role === null || x.assignee_role === role : x.assignee_role === role))) {
+      for (const s of d.runSteps.filter((x) => x.status === "open" && (manage ? x.assignee_role === null || has(role, x.assignee_role) : has(role, x.assignee_role)))) {
         const run = d.runs.find((r) => r.id === s.run_id);
         add("workflows", "Workflow step", s.id, `${run?.subject ?? "Workflow"}: ${s.title}`, s.due_on);
       }

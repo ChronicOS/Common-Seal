@@ -1,3 +1,4 @@
+import { has } from "./roles";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { formatDay } from "./board";
 import {
@@ -166,7 +167,7 @@ function ReportText({ content }: { content: string }) {
 }
 
 export default function ModernSlavery({ organisationId, organisationName, role, entities }: Props) {
-  const canManage = MANAGE_ROLES.includes(role);
+  const canManage = has(role, ...MANAGE_ROLES);
 
   const [data, setData] = useState<MsData | null>(null);
   const [facts, setFacts] = useState<MsFacts | null>(null);

@@ -1,3 +1,4 @@
+import { has, only } from "./roles";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { formatDay, formatWhen } from "./board";
 import {
@@ -64,8 +65,8 @@ function CheckRow({ check, canEdit, busy, onSave }: { check: DdCheck; canEdit: b
 }
 
 export default function Parties({ organisationId, role }: Props) {
-  const canEdit = ["owner", "admin", "secretary", "legal", "compliance"].includes(role);
-  const canAdd = role !== "auditor";
+  const canEdit = has(role, ...["owner", "admin", "secretary", "legal", "compliance"]);
+  const canAdd = !only(role, "auditor");
 
   const [data, setData] = useState<PartiesData | null>(null);
   const [error, setError] = useState<string | null>(null);

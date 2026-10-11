@@ -1,3 +1,4 @@
+import { has, roleLabels } from "./roles";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { formatDay, loadMembers, type Member } from "./board";
 import {
@@ -153,8 +154,8 @@ function Take({
 }
 
 export default function Training({ organisationId, role, userId }: Props) {
-  const canManage = MANAGE_ROLES.includes(role);
-  const seesAll = SEE_ALL_ROLES.includes(role);
+  const canManage = has(role, ...MANAGE_ROLES);
+  const seesAll = has(role, ...SEE_ALL_ROLES);
 
   const [data, setData] = useState<TrainingData | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -333,7 +334,7 @@ export default function Training({ organisationId, role, userId }: Props) {
                         checked={chosen.includes(m.user_id)}
                         onChange={(e) => setChosen(e.target.checked ? [...chosen, m.user_id] : chosen.filter((id) => id !== m.user_id))}
                       />{" "}
-                      {m.name} <span className="muted capitalise">· {m.role}</span>
+                      {m.name} <span className="muted">· {roleLabels(m.role)}</span>
                     </label>
                   ))}
                 </fieldset>

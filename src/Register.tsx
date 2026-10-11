@@ -1,3 +1,4 @@
+import { has } from "./roles";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { formatDay } from "./board";
 import {
@@ -110,8 +111,8 @@ function OwnerAdder({
 }
 
 export default function Register({ organisation, group, role, reloadGroup }: Props) {
-  const canEdit = ["owner", "admin", "secretary", "legal", "compliance"].includes(role);
-  const isAdmin = role === "owner" || role === "admin";
+  const canEdit = has(role, ...["owner", "admin", "secretary", "legal", "compliance"]);
+  const isAdmin = has(role, "owner") || has(role, "admin");
 
   const [data, setData] = useState<RegisterData | null>(null);
   const [error, setError] = useState<string | null>(null);

@@ -1,3 +1,4 @@
+import { has, roleLabels } from "./roles";
 import { Fragment, useCallback, useEffect, useState, type FormEvent } from "react";
 import Authority from "./Authority";
 import Contracts from "./Contracts";
@@ -64,7 +65,7 @@ const TABS: { id: Tab; label: string; group?: string }[] = [
 
 export default function Workspace({ membership, userId }: { membership: Membership; userId: string }) {
   const { organisation, role } = membership;
-  const canEdit = RECORDS_ROLES.includes(role);
+  const canEdit = has(role, ...RECORDS_ROLES);
 
   const [tab, setTab] = useState<Tab>("overview");
   const [data, setData] = useState<GroupData | null>(null);
@@ -380,7 +381,7 @@ export default function Workspace({ membership, userId }: { membership: Membersh
           <Meetings
             organisationId={organisation.id}
             group={data}
-            canWrite={BOARD_WRITE_ROLES.includes(role)}
+            canWrite={has(role, ...BOARD_WRITE_ROLES)}
             onOpen={setMeetingId}
           />
         )}
@@ -446,7 +447,7 @@ export default function Workspace({ membership, userId }: { membership: Membersh
       <dl className="facts">
         <div>
           <dt>Your role</dt>
-          <dd className="capitalise">{role}</dd>
+          <dd>{roleLabels(role)}</dd>
         </div>
         <div>
           <dt>Tier</dt>

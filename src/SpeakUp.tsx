@@ -1,3 +1,4 @@
+import { has } from "./roles";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { formatDay, loadMembers, type Member } from "./board";
 import {
@@ -83,7 +84,7 @@ function CaseForm({ c, team, busy, onSave }: { c: SpeakUpCase; team: Member[]; b
 }
 
 export default function SpeakUp({ organisationId, role }: Props) {
-  const isAdmin = role === "owner" || role === "admin";
+  const isAdmin = has(role, "owner") || has(role, "admin");
 
   const [data, setData] = useState<SpeakUpData | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
