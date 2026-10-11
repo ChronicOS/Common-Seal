@@ -46,7 +46,7 @@ type Tab =
 const SECTIONS = ["Board", "Risk and compliance", "Contracts and third parties", "Conduct"] as const;
 const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = [
   { id: "foryou", label: "For you" },
-  { id: "overview", label: "Overview", section: "Board" },
+  { id: "overview", label: "Overview" },
   { id: "company", label: "Company Info", section: "Board" },
   { id: "report", label: "Board report", section: "Board" },
   { id: "meetings", label: "Meetings", section: "Board" },
@@ -178,6 +178,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
         </p>
       )}
       <div className="nav-section solo">{item(TABS.find((t) => t.id === "foryou")!)}</div>
+      <div className="nav-section solo">{item(TABS.find((t) => t.id === "overview")!)}</div>
       {SECTIONS.map((section) => {
         const items = TABS.filter((t) => t.section === section);
         const current = items.some((t) => t.id === tab);

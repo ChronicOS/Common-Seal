@@ -1436,6 +1436,7 @@ details.category[open] summary {
 }
 
 .nav-section.solo button.tab {
+  font-weight: 700;
   font-size: 17px;
   color: var(--ink);
 }
