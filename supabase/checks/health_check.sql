@@ -7,7 +7,7 @@ with expected (migration, marker) as (
   values ('0001', 'organisations'), ('0003', 'entities'), ('0004', 'meetings'), ('0005', 'invitations'),
          ('0006', 'delegation_rules'), ('0007', 'contracts'), ('0008', 'register_entries'), ('0009', 'dd_cases'),
          ('0011', 'training_modules'), ('0012', 'workflows'), ('0013', 'policies'), ('0014', 'speak_up_cases'),
-         ('0015', 'expense_claims'), ('0016', 'document_links'), ('0017', 'ms_statements'), ('0018', 'attestation_rounds'), ('0020', 'ms_campaigns')
+         ('0015', 'expense_claims'), ('0016', 'document_links'), ('0017', 'ms_statements'), ('0018', 'attestation_rounds'), ('0020', 'ms_campaigns'), ('0023', 'risk_reviews')
 ),
 tables as (
   select c.oid, c.relname, c.relrowsecurity
@@ -48,14 +48,14 @@ checks (check_name, ok, detail) as (
          coalesce((select string_agg(distinct g.table_name, ', ') from information_schema.role_table_grants g
                    where g.grantee = 'authenticated' and g.table_schema = 'public' and g.privilege_type = 'TRUNCATE'), '')
   union all
-  -- The supplier questionnaire is the one deliberate exception: two functions that need the code from a supplier's link
-  select 'Visitors who are not signed in can run nothing except the supplier questionnaire',
+  -- The deliberate exceptions: six functions that each need the long code from a person's own link
+  select 'Visitors who are not signed in can run nothing except the personal-link pages',
          not exists (select 1 from pg_proc p where p.pronamespace in ('public'::regnamespace, 'app'::regnamespace)
-                       and p.proname not in ('ms_questionnaire', 'ms_submit_questionnaire')
+                       and p.proname not in ('ms_questionnaire', 'ms_submit_questionnaire', 'risk_request', 'risk_submit', 'risk_action', 'risk_action_update')
                        and p.prosecdef and has_function_privilege('anon', p.oid, 'execute')),
          coalesce((select string_agg(p.proname, ', ') from pg_proc p
                    where p.pronamespace in ('public'::regnamespace, 'app'::regnamespace)
-                     and p.proname not in ('ms_questionnaire', 'ms_submit_questionnaire')
+                     and p.proname not in ('ms_questionnaire', 'ms_submit_questionnaire', 'risk_request', 'risk_submit', 'risk_action', 'risk_action_update')
                      and p.prosecdef and has_function_privilege('anon', p.oid, 'execute')), '')
   union all
   select 'Every privileged function has a fixed search path',
@@ -67,10 +67,10 @@ checks (check_name, ok, detail) as (
   union all
   select 'Internal helpers cannot be called directly',
          not exists (select 1 from pg_proc p where p.pronamespace = 'app'::regnamespace
-                       and p.proname in ('advance_workflow_run', 'covering_rules', 'rule_holder', 'rule_basis', 'attach_target', 'ms_rate_recipient')
+                       and p.proname in ('advance_workflow_run', 'covering_rules', 'rule_holder', 'rule_basis', 'attach_target', 'ms_rate_recipient', 'start_risk_review')
                        and has_function_privilege('authenticated', p.oid, 'execute')),
          coalesce((select string_agg(p.proname, ', ') from pg_proc p where p.pronamespace = 'app'::regnamespace
-                     and p.proname in ('advance_workflow_run', 'covering_rules', 'rule_holder', 'rule_basis', 'attach_target', 'ms_rate_recipient')
+                     and p.proname in ('advance_workflow_run', 'covering_rules', 'rule_holder', 'rule_basis', 'attach_target', 'ms_rate_recipient', 'start_risk_review')
                      and has_function_privilege('authenticated', p.oid, 'execute')), '')
   union all
   select 'The file store is private', exists (select 1 from storage.buckets b where b.id = 'documents' and not b.public), ''

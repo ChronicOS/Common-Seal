@@ -9,7 +9,7 @@ import SpeakUp from "./SpeakUp";
 import Expenses from "./Expenses";
 import Horizon from "./Horizon";
 import ModernSlavery from "./ModernSlavery";
-import Attestations from "./Attestations";
+import RiskRegister from "./RiskRegister";
 import ForYou from "./ForYou";
 import Report from "./Report";
 import { loadInbox, type InboxItem } from "./inbox";
@@ -30,7 +30,7 @@ import Members from "./Members";
 import Parties from "./Parties";
 import { loadPartySummary, type PartySummary } from "./parties";
 import Register from "./Register";
-import { loadRegisterSummary, type RegisterSummary } from "./register";
+import { loadRiskSummary, type RiskSummary } from "./risk";
 import type { GroupData, Membership } from "./types";
 
 const RECORDS_ROLES = ["owner", "admin", "secretary", "legal", "compliance"];
@@ -38,15 +38,15 @@ const BOARD_WRITE_ROLES = ["owner", "admin", "secretary"];
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Tab =
-  | "overview" | "foryou" | "report" | "modernslavery" | "attestations" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
+  | "overview" | "foryou" | "report" | "modernslavery" | "oldregister" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
   | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "expenses" | "speakup" | "people";
 const TABS: { id: Tab; label: string; group?: string }[] = [
   { id: "overview", label: "Overview", group: "Board" },
   { id: "foryou", label: "For you" },
   { id: "report", label: "Board report" },
   { id: "meetings", label: "Meetings" },
-  { id: "register", label: "Register", group: "Risk and compliance" },
-  { id: "attestations", label: "Attestations" },
+  { id: "register", label: "Risk Register", group: "Risk and compliance" },
+  { id: "oldregister", label: "(Old Register)" },
   { id: "policies", label: "Policies" },
   { id: "modernslavery", label: "Modern slavery" },
   { id: "training", label: "Training" },
@@ -69,7 +69,7 @@ export default function Workspace({ membership, userId }: { membership: Membersh
   const [tab, setTab] = useState<Tab>("overview");
   const [data, setData] = useState<GroupData | null>(null);
   const [assurance, setAssurance] = useState<AssuranceSummary | null>(null);
-  const [registerSummary, setRegisterSummary] = useState<RegisterSummary | null>(null);
+  const [riskSummary, setRiskSummary] = useState<RiskSummary | null>(null);
   const [partySummary, setPartySummary] = useState<PartySummary | null>(null);
   const [trainingSummary, setTrainingSummary] = useState<TrainingSummary | null>(null);
   const [workflowSummary, setWorkflowSummary] = useState<WorkflowSummary | null>(null);
@@ -106,7 +106,7 @@ export default function Workspace({ membership, userId }: { membership: Membersh
     loadAssurance(organisation.id)
       .then(setAssurance)
       .catch(() => setAssurance(null));
-    void loadRegisterSummary(organisation.id).then(setRegisterSummary);
+    void loadRiskSummary(organisation.id).then(setRiskSummary, () => setRiskSummary(null));
     void loadPartySummary(organisation.id).then(setPartySummary);
     void loadTrainingSummary(organisation.id).then(setTrainingSummary, () => setTrainingSummary(null));
     void loadWorkflowSummary(organisation.id, today()).then(setWorkflowSummary, () => setWorkflowSummary(null));
@@ -178,7 +178,7 @@ export default function Workspace({ membership, userId }: { membership: Membersh
     );
   }
 
-  if (tab === "register") {
+  if (tab === "oldregister") {
     return (
       <div className="workspace">
         {nav}
@@ -277,12 +277,12 @@ export default function Workspace({ membership, userId }: { membership: Membersh
     );
   }
 
-  if (tab === "attestations") {
+  if (tab === "register") {
     return (
       <div className="workspace">
         {nav}
         <div className="workspace-main">
-        <Attestations organisationId={organisation.id} role={role} userId={userId} />
+        <RiskRegister organisationId={organisation.id} organisationName={organisation.name} role={role} userId={userId} />
         </div>
       </div>
     );
@@ -526,24 +526,19 @@ export default function Workspace({ membership, userId }: { membership: Membersh
           </p>
         </section>
         <section className="card">
-          <h2>Obligations status</h2>
-          {!registerSummary || registerSummary.active === 0 ? (
+          <h2>Risk review</h2>
+          {!riskSummary || !riskSummary.review ? (
             <>
               <p className="status-unknown">Unknown</p>
-              <p>
-                {registerSummary && registerSummary.proposed > 0
-                  ? `${registerSummary.proposed} suggested entries are waiting to be confirmed.`
-                  : "Nothing is confirmed on the register yet, so nothing is reported as on track."}
-              </p>
+              <p>No risk review has been run, so nothing is reported.</p>
             </>
           ) : (
             <>
-              <p className="status-unknown">
-                {registerSummary.overdue > 0 ? "Overdue" : registerSummary.withGaps > 0 ? "Needs attention" : "On track"}
-              </p>
+              <p className="status-unknown">{riskSummary.review.status === "final" ? "Final" : "In progress"}</p>
               <p>
-                {registerSummary.active} confirmed · {registerSummary.overdue} overdue for review ·{" "}
-                {registerSummary.withGaps} with ownership gaps
+                {riskSummary.review.name}
+                {riskSummary.review.status !== "final" && riskSummary.awaiting > 0 ? ` · ${riskSummary.awaiting} categories awaiting input` : ""} · {riskSummary.openActions} open actions ·{" "}
+                {riskSummary.overdueActions > 0 ? <strong className="warning-text">{riskSummary.overdueActions} overdue</strong> : "none overdue"}
               </p>
             </>
           )}

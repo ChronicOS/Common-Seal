@@ -1,26 +1,22 @@
 import { useEffect, useState } from "react";
-import { loadAttestations, tally, type AttestationItem, type Round, type RoundTally } from "./attestations";
 import { formatDay, loadAssurance, type AssuranceSummary } from "./board";
 import { loadMsSummary, MS_STATUS, type MsSummary } from "./modernslavery";
 import { loadPartySummary, type PartySummary } from "./parties";
 import { loadPolicySummary, type PolicySummary } from "./policies";
-import { loadRegisterSummary, type RegisterSummary } from "./register";
+import { loadRiskSummary, type RiskSummary } from "./risk";
 import { loadSpeakUpSummary, type SpeakUpSummary } from "./speakup";
 import { loadTrainingSummary, today, type TrainingSummary } from "./training";
 import { loadWorkflowSummary, type WorkflowSummary } from "./workflows";
 
 type Loaded = {
   assurance: AssuranceSummary | null;
-  register: RegisterSummary | null;
+  risk: RiskSummary | null;
   parties: PartySummary | null;
   training: TrainingSummary | null;
   workflows: WorkflowSummary | null;
   policies: PolicySummary | null;
   speakUp: SpeakUpSummary | null;
   ms: MsSummary | null;
-  round: Round | null;
-  tally: RoundTally | null;
-  exceptions: AttestationItem[];
 };
 
 const quiet = <T,>(p: Promise<T>): Promise<T | null> => p.catch(() => null);
@@ -44,20 +40,17 @@ export default function Report({ organisationId, organisationName }: { organisat
   useEffect(() => {
     let live = true;
     void (async () => {
-      const [assurance, register, parties, training, workflows, policies, speakUp, ms, attest] = await Promise.all([
+      const [assurance, risk, parties, training, workflows, policies, speakUp, ms] = await Promise.all([
         quiet(loadAssurance(organisationId)),
-        quiet(loadRegisterSummary(organisationId)),
+        quiet(loadRiskSummary(organisationId)),
         quiet(loadPartySummary(organisationId)),
         quiet(loadTrainingSummary(organisationId)),
         quiet(loadWorkflowSummary(organisationId, today())),
         quiet(loadPolicySummary(organisationId, today())),
         quiet(loadSpeakUpSummary(organisationId)),
         quiet(loadMsSummary(organisationId)),
-        quiet(loadAttestations(organisationId)),
       ]);
-      const round = attest?.rounds[0] ?? null;
-      const items = round && attest ? attest.items.filter((i) => i.round_id === round.id) : [];
-      if (live) setD({ assurance, register, parties, training, workflows, policies, speakUp, ms, round, tally: round ? tally(items) : null, exceptions: items.filter((i) => i.response !== "confirmed") });
+      if (live) setD({ assurance, risk, parties, training, workflows, policies, speakUp, ms });
     })();
     return () => {
       live = false;
@@ -66,7 +59,7 @@ export default function Report({ organisationId, organisationName }: { organisat
 
   if (!d) return <p className="lead">Preparing the report…</p>;
 
-  const { assurance: a, register: r, parties: p, training: t, workflows: w, policies: pol, speakUp: su, ms, round, tally: at } = d;
+  const { assurance: a, risk: r, parties: p, training: t, workflows: w, policies: pol, speakUp: su, ms } = d;
   const stmt = ms?.latest ?? null;
 
   return (
@@ -104,18 +97,13 @@ export default function Report({ organisationId, organisationName }: { organisat
             status={!a ? "unknown" : a.exceptions > 0 ? "attention" : "ok"}
           />
           <Line
-            area="Risks and obligations"
-            finding={r && r.active > 0 ? `${r.active} confirmed · ${r.overdue} overdue for review · ${r.withGaps} with ownership gaps` : "Nothing is confirmed on the register"}
-            status={!r || r.active === 0 ? "unknown" : r.overdue + r.withGaps > 0 ? "attention" : "ok"}
-          />
-          <Line
-            area="Attestations"
+            area="Risk review"
             finding={
-              round && at
-                ? `${round.name} (${round.status}): ${at.confirmed} of ${at.total} confirmed · ${at.exceptions} exceptions · ${at.waiting} not answered · ${at.nobody} with nobody to ask`
-                : "No attestation round has been run"
+              r?.review
+                ? `${r.review.name}: ${r.review.status === "final" ? "final" : `in progress, ${r.awaiting} categories awaiting input`} · ${r.openActions} open actions · ${r.overdueActions} overdue`
+                : "No risk review has been run"
             }
-            status={!round || !at ? "unknown" : at.exceptions + at.waiting + at.nobody > 0 ? "attention" : "ok"}
+            status={!r?.review ? "unknown" : r.overdueActions > 0 || (r.review.status !== "final" && r.review.forum_on < today()) ? "attention" : "ok"}
           />
           <Line
             area="Policies"
@@ -155,28 +143,6 @@ export default function Report({ organisationId, organisationName }: { organisat
           />
         </tbody>
       </table>
-
-      {d.exceptions.length > 0 && round && (
-        <section className="block">
-          <h2>Not confirmed in {round.name}</h2>
-          <ul className="plain rows">
-            {d.exceptions.map((i) => (
-              <li key={i.id}>
-                <strong>{i.title}</strong>{" "}
-                <span className="muted">
-                  · {i.response === "exception" ? `exception raised by ${i.attester_name ?? "the accountable person"}` : i.attester_user_id ? `not answered by ${i.attester_name ?? "the accountable person"}` : "nobody to ask"}
-                </span>
-                {i.comment && (
-                  <>
-                    <br />
-                    {i.comment}
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
 
       {a && a.decisions.length > 0 && (
         <section className="block">

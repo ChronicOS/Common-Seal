@@ -1285,3 +1285,57 @@ a.link-dark {
     display: none;
   }
 }
+
+/* ---- Risk register ---- */
+.choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin: 8px 0 8px;
+}
+
+button.choice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  text-align: left;
+  color: var(--ink);
+  font-weight: 400;
+  border: 1px solid var(--ink);
+}
+
+button.choice strong {
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 400;
+}
+
+button.choice:hover {
+  background: #fff;
+}
+
+details.category {
+  margin-bottom: 10px;
+}
+
+details.category summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
+  cursor: pointer;
+}
+
+details.category[open] summary {
+  margin-bottom: 16px;
+}
+
+.risk-slide {
+  margin-bottom: 14px;
+}
+
+.risk-slide h3 {
+  margin: 0;
+  font-size: 18px;
+}

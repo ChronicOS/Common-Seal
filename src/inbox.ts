@@ -84,15 +84,13 @@ export async function loadInbox(organisationId: string, role: string, userId: st
     }),
     safely(async () => {
       if (!supabase) return;
-      const { data, error } = await supabase
-        .from("attestation_items")
-        .select("id, title, round:attestation_rounds!inner(due_on, status)")
-        .eq("organisation_id", organisationId)
-        .eq("attester_user_id", userId)
-        .is("response", null);
+      // The report owner and backups are told when a risk review is waiting for them
+      const owners = await supabase.from("risk_owners").select("user_id").eq("organisation_id", organisationId).eq("user_id", userId);
+      if (owners.error || (owners.data ?? []).length === 0) return;
+      const { data, error } = await supabase.from("risk_reviews").select("id, name, forum_on, escalate_on, status").eq("organisation_id", organisationId).eq("status", "collecting");
       if (error) return;
-      for (const i of (data ?? []) as unknown as { id: string; title: string; round: { due_on: string; status: string } }[]) {
-        if (i.round.status === "open") add("attestations", "Attestation to give", i.id, i.title, i.round.due_on);
+      for (const r of (data ?? []) as { id: string; name: string; forum_on: string; escalate_on: string }[]) {
+        if (r.escalate_on <= t) add("register", "Risk report to review and finalise", r.id, r.name, r.forum_on);
       }
     }),
   ]);
