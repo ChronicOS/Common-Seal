@@ -58,3 +58,4 @@ After running migrations, run `supabase/checks/health_check.sql` in the SQL edit
   - `0025_risk_owner_roles.sql` – secretary, legal and compliance can name the report owner, as well as owner and administrator.
   - `0026_multiple_roles.sql` – a person can hold several roles; Invite (new people) and Assign (existing people) are separate; the last owner cannot be removed.
   - `0027_admin_manages_owners.sql` – an administrator can change or remove anyone, including an owner; there must always be at least one owner.
+  - `0028_risk_report_send_to.sql` – who the risk report is sent to (the report owner by default, with others added).

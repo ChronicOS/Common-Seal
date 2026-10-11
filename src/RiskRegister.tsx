@@ -19,6 +19,7 @@ import {
   markRequestSent,
   promptDue,
   removeContact,
+  setReportRecipients,
   replaceContact,
   removeOwner,
   requestEmailDue,
@@ -63,6 +64,53 @@ function ContactForm({ fixedRole, busy, initial, onAdd, onCancel }: { fixedRole:
         Cancel
       </button>
     </div>
+  );
+}
+
+/** Who the report is sent to: the report owner by default, with others added or removed. */
+function SendTo({ initial, isDefault, busy, href, onSave }: { initial: string[]; isDefault: boolean; busy: boolean; href: (list: string[]) => string; onSave: (list: string[]) => void }) {
+  const [list, setList] = useState(initial);
+  const [email, setEmail] = useState("");
+  const [saved, setSaved] = useState(initial.join(","));
+  const valid = /^\S+@\S+\.\S+$/.test(email.trim());
+  const add = () => {
+    const e = email.trim().toLowerCase();
+    if (valid && !list.includes(e)) setList([...list, e]);
+    setEmail("");
+  };
+  return (
+    <section className="card form">
+      <h2>Send to</h2>
+      <p className="muted">{isDefault ? "By default the report goes to the person responsible for it. " : ""}Add anyone else who should receive it.</p>
+      {list.length === 0 && <p className="warning-text">Nobody is listed yet. Add at least one email address.</p>}
+      <ul className="plain">
+        {list.map((e) => (
+          <li key={e} className="row">
+            <span>{e}</span>
+            <button type="button" className="link-dark small" aria-label={`Remove ${e}`} onClick={() => setList(list.filter((x) => x !== e))}>
+              Remove
+            </button>
+          </li>
+        ))}
+      </ul>
+      <div className="row">
+        <input aria-label="Email address to add" type="email" placeholder="name@company.com" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }} />
+        <button type="button" className="quiet" disabled={!valid} onClick={add}>
+          Add person
+        </button>
+      </div>
+      <div className="row">
+        <button type="button" className="quiet" disabled={busy || list.join(",") === saved} onClick={() => { onSave(list); setSaved(list.join(",")); }}>
+          Save list
+        </button>
+        {list.length > 0 && (
+          <a className="link-dark" href={href(list)}>
+            Open email to {list.length === 1 ? "this person" : `these ${list.length} people`}
+          </a>
+        )}
+      </div>
+      <p className="muted">Common Seal cannot attach the file for you yet: download the PowerPoint above and attach it to the email.</p>
+    </section>
   );
 }
 
@@ -112,8 +160,6 @@ function ModifyReview({ r, busy, onSave, onCancelReview }: { r: Review; busy: bo
     >
       <label htmlFor="mr-name">Name</label>
       <input id="mr-name" value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} />
-      <label htmlFor="mr-forum">Where the report goes</label>
-      <input id="mr-forum" value={v.forum} onChange={(e) => setV({ ...v, forum: e.target.value })} />
       <div className="row">
         <span className="field">
           <label htmlFor="mr-date">Forum date</label>
@@ -201,7 +247,6 @@ export default function RiskRegister({ organisationId, organisationName, role, u
   const [busy, setBusy] = useState(false);
 
   const [name, setName] = useState("");
-  const [forum, setForum] = useState("Risk and Compliance forum");
   const [forumOn, setForumOn] = useState(() => addDays(today(), 45));
   const [frequency, setFrequency] = useState<Frequency>("quarterly");
   const [bespoke, setBespoke] = useState("");
@@ -263,6 +308,8 @@ export default function RiskRegister({ organisationId, organisationName, role, u
   const canRun = canManage || isOwner;
   const memberName = (id: string) => members.find((m) => m.user_id === id)?.name ?? "A member";
   const owner = data.owners.find((o) => !o.is_backup);
+  const ownerName = owner ? memberName(owner.user_id) : "";
+  const ownerEmail = /.+@.+\..+/.test(ownerName) ? ownerName : null;
   const backups = data.owners.filter((o) => o.is_backup);
   const contactsOf = (categoryId: string) => data.contacts.filter((k) => k.category_id === categoryId);
   const active = data.categories.filter((c) => c.is_active);
@@ -313,14 +360,12 @@ export default function RiskRegister({ organisationId, organisationName, role, u
             if (!runNow && forumOn < today()) return setError("The forum date cannot be in the past.");
             let id = "";
             void run(async () => {
-              id = await createReview(organisationId, { name, forum, forumOn: runNow ? null : forumOn, frequency: runNow ? "once" : frequency });
+              id = await createReview(organisationId, { name, forum: "", forumOn: runNow ? null : forumOn, frequency: runNow ? "once" : frequency });
             }).then((ok) => ok && go({ kind: "review", id }));
           }}
         >
           <label htmlFor="rv-name">Name</label>
           <input id="rv-name" placeholder="e.g. Q4 2026 risk review" value={name} onChange={(e) => setName(e.target.value)} />
-          <label htmlFor="rv-forum">Where the report goes</label>
-          <input id="rv-forum" placeholder="e.g. Risk and Compliance forum, or the board" value={forum} onChange={(e) => setForum(e.target.value)} />
           {!runNow && (
             <div className="row">
               <span className="field">
@@ -348,7 +393,7 @@ export default function RiskRegister({ organisationId, organisationName, role, u
               <li>Escalation to the manager: {formatDay(addDays(startOn, 24))} (five days later)</li>
               <li>The report owner reviews and finalises: one week</li>
               <li>
-                {forum || "Forum"}: {formatDay(forumDate)}
+                Report due: {formatDay(forumDate)}
               </li>
             </ul>
             {!runNow && addDays(forumOn, -31) < today() && <p className="warning-text">That date is less than 31 days away, so requests go out today and the steps are squeezed to fit.</p>}
@@ -617,8 +662,18 @@ export default function RiskRegister({ organisationId, organisationName, role, u
             >
               Finalise the report
             </button>
-            <p className="muted">Finalise once you have reviewed the inputs. Then download the PowerPoint and send it to {r.forum ?? "the forum"}.</p>
+            <p className="muted">Finalise once you have reviewed the inputs. Then download the PowerPoint and send it using "Send to" below.</p>
           </section>
+        )}
+        {r.status !== "scheduled" && (canEdit || canManage) && (
+          <SendTo
+            key={r.id}
+            initial={r.send_to ?? (ownerEmail ? [ownerEmail] : [])}
+            isDefault={!r.send_to}
+            busy={busy}
+            href={(list) => mailto(list, `${r.name}: risk report${r.status === "final" ? "" : " (draft)"}`, `Please find attached the risk report for ${r.name}${r.status === "final" ? "" : ", in draft"}.\n\n[Attach the PowerPoint file downloaded from Common Seal before sending.]\n`)}
+            onSave={(list) => void run(() => setReportRecipients(r.id, list), "Saved who the report goes to.")}
+          />
         )}
         {!isOwner && collecting && <p className="muted">Only {owner ? memberName(owner.user_id) : "the person responsible for the report"} and their backups can edit, comment and finalise.</p>}
       </>

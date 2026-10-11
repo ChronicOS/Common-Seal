@@ -8,6 +8,8 @@ export type Review = {
   id: string;
   name: string;
   forum: string | null;
+  /** Who the report is sent to; null or missing means the report owner */
+  send_to?: string[] | null;
   frequency: Frequency;
   forum_on: string;
   start_on: string;
@@ -223,6 +225,9 @@ export function promptDue(i: Item, on: string): "week" | "due" | null {
   return null;
 }
 
+export async function setReportRecipients(reviewId: string, emails: string[]) {
+  check((await db().rpc("set_risk_report_recipients", { p_review: reviewId, p_emails: emails })).error);
+}
 export function mailto(to: string[], subject: string, body: string, cc: string[] = []) {
   return `mailto:${to.map(encodeURIComponent).join(",")}?${cc.length ? `cc=${cc.map(encodeURIComponent).join(",")}&` : ""}subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
