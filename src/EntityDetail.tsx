@@ -11,7 +11,7 @@ import {
   type FieldKey,
   type FieldState,
 } from "./checks";
-import { addOfficeholder, addOwner, createEntity, setPrompt, updateEntity } from "./data";
+import { addOfficeholder, addOwner, ceaseOfficeholder, createEntity, renamePerson, setPrompt, updateEntity } from "./data";
 import { FORM_LABELS, type Entity, type EntityForm, type GroupData } from "./types";
 
 type Props = {
@@ -105,6 +105,8 @@ export default function EntityDetail({ organisationId, entity, data, canEdit, re
   const [pct, setPct] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
 
   const active: FieldKey | null = chosen ?? queue.find((k) => !passed.includes(k)) ?? null;
   const others = data.entities.filter((e) => e.id !== entity.id);
@@ -115,6 +117,7 @@ export default function EntityDetail({ organisationId, entity, data, canEdit, re
     setPct("");
     setError(null);
     setChosen(null);
+    setRenaming(null);
   }
 
   async function run(action: () => Promise<void>) {
@@ -130,6 +133,26 @@ export default function EntityDetail({ organisationId, entity, data, canEdit, re
       setBusy(false);
     }
   }
+
+  /** Like run, but stays on the same question so several people can be changed in a row */
+  async function keep(action: () => Promise<void>) {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      await reload();
+      setRenaming(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const holders =
+    active === "directors" || active === "secretary"
+      ? data.officeholdings.filter((o) => o.entity_id === entity.id && !o.ceased_on && (active === "directors" ? ["director", "chair"] : ["secretary"]).includes(o.role))
+      : [];
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -274,8 +297,53 @@ export default function EntityDetail({ organisationId, entity, data, canEdit, re
 
       {canEdit && active && (
         <form className="card form prompt" onSubmit={save}>
-          <label htmlFor="answer" className="prompt-question">
-            {question(entity, active)}
+          {holders.length > 0 && (
+            <>
+              <p className="prompt-question">{active === "directors" ? "Directors" : "Company secretary"} of {entity.name}</p>
+              <ul className="plain rows">
+                {holders.map((o) => (
+                  <li key={o.id} className="row spread">
+                    {renaming === o.id ? (
+                      <span className="row">
+                        <input aria-label="Corrected name" value={newName} onChange={(e) => setNewName(e.target.value)} />
+                        <button type="button" className="quiet" disabled={busy || newName.trim().length < 2} onClick={() => void keep(() => renamePerson(o.person.id, newName))}>
+                          Save name
+                        </button>
+                        <button type="button" className="link-dark" onClick={() => setRenaming(null)}>
+                          Cancel
+                        </button>
+                      </span>
+                    ) : (
+                      <>
+                        <span>
+                          {o.person.full_name}
+                          {o.role === "chair" ? <span className="muted"> · chair</span> : null}
+                        </span>
+                        <span className="row">
+                          <button type="button" className="link-dark" aria-label={`Correct the name of ${o.person.full_name}`} onClick={() => { setRenaming(o.id); setNewName(o.person.full_name); }}>
+                            Correct name
+                          </button>
+                          <button
+                            type="button"
+                            className="link-dark"
+                            disabled={busy}
+                            aria-label={`Remove ${o.person.full_name}`}
+                            onClick={() => {
+                              if (window.confirm(`Remove ${o.person.full_name} as ${active === "directors" ? "a director" : "company secretary"} of ${entity.name} from today? The past appointment stays on record. To replace them, remove them and add the new person below.`)) void keep(() => ceaseOfficeholder(o.id));
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </span>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <label htmlFor="answer" className={holders.length > 0 ? undefined : "prompt-question"}>
+            {holders.length > 0 ? (active === "directors" ? "Add a director" : "Add a company secretary") : question(entity, active)}
           </label>
           {active === "is_listed" ? (
             <div className="row">
@@ -291,8 +359,13 @@ export default function EntityDetail({ organisationId, entity, data, canEdit, re
               {fields}
               <div className="row">
                 <button type="submit" disabled={busy}>
-                  {busy ? "Saving…" : "Save"}
+                  {busy ? "Saving…" : holders.length > 0 ? "Add" : "Save"}
                 </button>
+                {holders.length > 0 && (
+                  <button type="button" className="quiet" onClick={resetInputs}>
+                    Done
+                  </button>
+                )}
                 {active === "secretary" && (
                   <button type="button" className="quiet" disabled={busy} onClick={() => void markNotApplicable(active)}>
                     It doesn't have one
@@ -306,9 +379,11 @@ export default function EntityDetail({ organisationId, entity, data, canEdit, re
               </div>
             </>
           )}
-          <button type="button" className="link-dark" disabled={busy} onClick={() => void skip(active)}>
-            Skip for now
-          </button>
+          {holders.length === 0 && (
+            <button type="button" className="link-dark" disabled={busy} onClick={() => void skip(active)}>
+              Skip for now
+            </button>
+          )}
           {error && (
             <p className="error" role="alert">
               {error}
@@ -348,7 +423,7 @@ export default function EntityDetail({ organisationId, entity, data, canEdit, re
                 >
                   {states[key] !== "complete"
                     ? "Answer"
-                    : key === "directors" || key === "secretary" || key === "parent"
+                    : key === "parent"
                       ? "Add another"
                       : "Change"}
                 </button>

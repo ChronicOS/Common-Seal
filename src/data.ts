@@ -71,6 +71,19 @@ export async function addOfficeholder(
   fail(error);
 }
 
+/** The person stops holding the office from today. The record is kept as history. */
+export async function ceaseOfficeholder(officeholdingId: string): Promise<void> {
+  const d = new Date();
+  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  // Appointed today and removed today (a mistake being undone) is still valid: ceased_on may equal appointed_on
+  fail((await client().from("officeholdings").update({ ceased_on: today }).eq("id", officeholdingId)).error);
+}
+
+/** Correct a person's name (a spelling fix, not a change of person). */
+export async function renamePerson(personId: string, fullName: string): Promise<void> {
+  fail((await client().from("people").update({ full_name: fullName.trim() }).eq("id", personId)).error);
+}
+
 export async function addOwner(
   organisationId: string,
   childId: string,
