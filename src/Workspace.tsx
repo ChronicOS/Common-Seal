@@ -42,33 +42,36 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 type Tab =
   | "overview" | "foryou" | "report" | "modernslavery" | "oldregister" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
   | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "expenses" | "speakup" | "people";
-const TABS: { id: Tab; label: string; group?: string }[] = [
-  { id: "overview", label: "Overview", group: "Board" },
+const SECTIONS = ["Board", "Risk and compliance", "Contracts and third parties", "Conduct"] as const;
+const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = [
   { id: "foryou", label: "For you" },
-  { id: "report", label: "Board report" },
-  { id: "meetings", label: "Meetings" },
-  { id: "register", label: "Risk Register", group: "Risk and compliance" },
-  { id: "oldregister", label: "(Old Register)" },
-  { id: "policies", label: "Policies" },
-  { id: "modernslavery", label: "Modern slavery" },
-  { id: "training", label: "Training" },
-  { id: "workflows", label: "Workflows" },
-  { id: "horizon", label: "Horizon" },
-  { id: "contracts", label: "Contracts", group: "Contracts and third parties" },
-  { id: "intercompany", label: "Intercompany" },
-  { id: "parties", label: "Third parties" },
-  { id: "authority", label: "Authority" },
-  { id: "declarations", label: "Declarations", group: "Conduct" },
-  { id: "expenses", label: "Expenses" },
-  { id: "speakup", label: "Speak up" },
-  { id: "people", label: "People", group: "Setup" },
+  { id: "overview", label: "Overview", section: "Board" },
+  { id: "report", label: "Board report", section: "Board" },
+  { id: "meetings", label: "Meetings", section: "Board" },
+  { id: "people", label: "People", section: "Board" },
+  { id: "register", label: "Risk Register", section: "Risk and compliance" },
+  { id: "oldregister", label: "(Old Register)", section: "Risk and compliance" },
+  { id: "policies", label: "Policies", section: "Risk and compliance" },
+  { id: "modernslavery", label: "Modern slavery", section: "Risk and compliance" },
+  { id: "training", label: "Training", section: "Risk and compliance" },
+  { id: "workflows", label: "Workflows", section: "Risk and compliance" },
+  { id: "horizon", label: "Horizon", section: "Risk and compliance" },
+  { id: "contracts", label: "Contracts", section: "Contracts and third parties" },
+  { id: "intercompany", label: "Intercompany", section: "Contracts and third parties" },
+  { id: "parties", label: "Third parties", section: "Contracts and third parties" },
+  { id: "authority", label: "Authority", section: "Contracts and third parties" },
+  { id: "declarations", label: "Declarations", section: "Conduct" },
+  { id: "expenses", label: "Expenses", section: "Conduct" },
+  { id: "speakup", label: "Investigations", section: "Conduct" },
 ];
 
-export default function Workspace({ membership, userId, userName }: { membership: Membership; userId: string; userName: string }) {
+export default function Workspace({ membership, userId, userName, onPassword }: { membership: Membership; userId: string; userName: string; onPassword: () => void }) {
   const { organisation, role } = membership;
   const canEdit = has(role, ...RECORDS_ROLES);
 
   const [tab, setTab] = useState<Tab>("overview");
+  // Sections the person has opened by clicking; the section holding the current tab is always open
+  const [openSections, setOpenSections] = useState<string[]>([]);
   // Speak up is never shown to others: being seen there could identify a reporter or a handler
   const others = usePresence(organisation.id, userId, userName, tab === "speakup" ? null : tab);
   const [data, setData] = useState<GroupData | null>(null);
@@ -143,6 +146,27 @@ export default function Workspace({ membership, userId, userName }: { membership
     setContractId(null);
   };
 
+  const dot = (list: typeof others) =>
+    list.length > 0 && <span className={people(list).every((o) => o.idle) ? "presence-dot idle" : "presence-dot"} role="img" aria-label={`${labelled(list)} ${people(list).length === 1 ? "is" : "are"} here`} title={labelled(list)} />;
+  const item = (t: (typeof TABS)[number]) => {
+    const here = t.id === "speakup" ? [] : others.filter((o) => o.tab === t.id);
+    return (
+      <Fragment key={t.id}>
+        <button type="button" className={tab === t.id ? "tab on" : "tab"} aria-current={tab === t.id ? "page" : undefined} onClick={() => go(t.id)}>
+          {t.label}
+          {t.id === "foryou" && inbox && inbox.length > 0 && <span className="nav-count">{inbox.length}</span>}
+          {dot(here)}
+        </button>
+        {tab === t.id && here.length > 0 && (
+          <span className="presence-here">
+            {people(here).every((o) => o.idle)
+              ? `${nameList(people(here).map((o) => o.name))} ${people(here).length === 1 ? "has" : "have"} this tab open but ${people(here).length === 1 ? "has" : "have"} been inactive for 15 minutes or more`
+              : `${labelled(here)} ${people(here).length === 1 ? "is" : "are"} also working on this tab`}
+          </span>
+        )}
+      </Fragment>
+    );
+  };
   const nav = (
     <nav className="side-nav" aria-label="Sections">
       {others.length > 0 && (
@@ -151,31 +175,37 @@ export default function Workspace({ membership, userId, userName }: { membership
           Also online: {labelled(others)}
         </p>
       )}
-      {TABS.map((t) => {
-        const here = t.id === "speakup" ? [] : others.filter((o) => o.tab === t.id);
+      <div className="nav-section solo">{item(TABS.find((t) => t.id === "foryou")!)}</div>
+      {SECTIONS.map((section) => {
+        const items = TABS.filter((t) => t.section === section);
+        const current = items.some((t) => t.id === tab);
+        const isOpen = current || openSections.includes(section);
+        const inside = others.filter((o) => o.tab !== "speakup" && items.some((t) => t.id === o.tab));
         return (
-        <Fragment key={t.id}>
-          {t.group && <span className="nav-group">{t.group}</span>}
-          <button
-            type="button"
-            className={tab === t.id ? "tab on" : "tab"}
-            aria-current={tab === t.id ? "page" : undefined}
-            onClick={() => go(t.id)}
-          >
-            {t.label}
-            {t.id === "foryou" && inbox && inbox.length > 0 && <span className="nav-count">{inbox.length}</span>}
-            {here.length > 0 && <span className={people(here).every((o) => o.idle) ? "presence-dot idle" : "presence-dot"} role="img" aria-label={`${labelled(here)} ${people(here).length === 1 ? "is" : "are"} on this tab`} title={labelled(here)} />}
-          </button>
-          {tab === t.id && here.length > 0 && (
-            <span className="presence-here">
-              {people(here).every((o) => o.idle)
-                ? `${nameList(people(here).map((o) => o.name))} ${people(here).length === 1 ? "has" : "have"} this tab open but ${people(here).length === 1 ? "has" : "have"} been inactive for 15 minutes or more`
-                : `${labelled(here)} ${people(here).length === 1 ? "is" : "are"} also working on this tab`}
-            </span>
-          )}
-        </Fragment>
+          <div key={section} className={isOpen ? "nav-section open" : "nav-section"}>
+            <button
+              type="button"
+              className={current ? "nav-head on" : "nav-head"}
+              aria-expanded={isOpen}
+              onClick={() => setOpenSections((list) => (list.includes(section) ? list.filter((x) => x !== section) : [...list, section]))}
+            >
+              {section}
+              {!isOpen && dot(inside)}
+            </button>
+            <div className="nav-items">{items.map(item)}</div>
+          </div>
         );
       })}
+      <div className={openSections.includes("Settings") ? "nav-section open" : "nav-section"}>
+        <button type="button" className="nav-head" aria-expanded={openSections.includes("Settings")} onClick={() => setOpenSections((list) => (list.includes("Settings") ? list.filter((x) => x !== "Settings") : [...list, "Settings"]))}>
+          Settings
+        </button>
+        <div className="nav-items">
+          <button type="button" className="tab" onClick={onPassword}>
+            Password
+          </button>
+        </div>
+      </div>
     </nav>
   );
 

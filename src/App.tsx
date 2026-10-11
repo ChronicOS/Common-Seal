@@ -40,9 +40,11 @@ function Shell({ children, wide, email, onSignOut, onPassword }: ShellProps) {
         {email && (
           <span className="account">
             <span className="account-email">{email}</span>
-            <button type="button" className="link" onClick={onPassword}>
-              Password
-            </button>
+            {onPassword && (
+              <button type="button" className="link" onClick={onPassword}>
+                Password
+              </button>
+            )}
             <button type="button" className="link" onClick={onSignOut}>
               Sign out
             </button>
@@ -339,7 +341,7 @@ export default function App() {
             </select>
           </div>
         )}
-        <Workspace key={current.organisation.id} membership={current} userId={session.user.id} userName={session.user.email ?? "Someone"} />
+        <Workspace key={current.organisation.id} membership={current} userId={session.user.id} userName={session.user.email ?? "Someone"} onPassword={() => setShowPassword(true)} />
       </>
     );
   }
@@ -349,7 +351,8 @@ export default function App() {
       wide={Boolean(current) && !showPassword}
       email={session.user.email}
       onSignOut={() => void client.auth.signOut()}
-      onPassword={() => setShowPassword(true)}
+      // Inside an organisation, Password lives under Settings in the side menu
+      onPassword={current ? undefined : () => setShowPassword(true)}
     >
       {body}
     </Shell>

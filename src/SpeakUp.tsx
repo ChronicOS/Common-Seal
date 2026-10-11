@@ -339,7 +339,7 @@ export default function SpeakUp({ organisationId, role }: Props) {
   return (
     <>
       <p className="eyebrow">Confidential</p>
-      <h1>Speak up</h1>
+      <h1>Investigations</h1>
       <p className="lead">Raise a concern about something that is wrong, or looks wrong. You do not need proof.</p>
       {errorBlock}
 

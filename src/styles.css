@@ -1421,3 +1421,87 @@ details.category[open] summary {
   background: transparent;
   border: 2px solid #8a938f;
 }
+
+/* Navigation: main sections in the larger type, their pages in the smaller, shown on click or hover */
+.nav-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-section.solo {
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.nav-section.solo button.tab {
+  font-size: 17px;
+  color: var(--ink);
+}
+
+button.nav-head {
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 700;
+  text-align: left;
+  border-radius: 0 6px 6px 0;
+}
+
+button.nav-head:hover {
+  background: var(--card);
+}
+
+button.nav-head::after {
+  content: "▸";
+  float: right;
+  color: var(--soft);
+  font-weight: 400;
+}
+
+.nav-section.open > button.nav-head::after,
+.nav-section:hover > button.nav-head::after,
+.nav-section:focus-within > button.nav-head::after {
+  content: "▾";
+}
+
+.nav-items {
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 10px;
+  margin-bottom: 6px;
+}
+
+.nav-section.open > .nav-items,
+.nav-section:hover > .nav-items,
+.nav-section:focus-within > .nav-items {
+  display: flex;
+}
+
+.nav-items button.tab {
+  padding: 7px 12px;
+  font-size: 14px;
+}
+
+@media (max-width: 800px) {
+  /* The sideways strip shows every page; section headings are dropped */
+  .nav-section,
+  .nav-items {
+    display: contents;
+  }
+
+  button.nav-head,
+  .side-nav .presence,
+  .side-nav .presence-here {
+    display: none;
+  }
+
+  .nav-section.solo button.tab,
+  .nav-items button.tab {
+    font-size: inherit;
+  }
+}
