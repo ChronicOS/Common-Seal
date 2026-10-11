@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { formatDay, inviteMember, loadInvitations, loadMembers, revokeInvitation, setMemberRoles, type Invitation, type Member } from "./board";
 import { has, roleLabel, roleLabels, roleList, ROLES } from "./roles";
 
-/** Tick boxes for one or more roles. Only an owner can hand out the owner role. */
+/** Tick boxes for one or more roles. */
 function RolePicker({ idPrefix, value, onChange, canGrantOwner }: { idPrefix: string; value: string[]; onChange: (roles: string[]) => void; canGrantOwner: boolean }) {
   return (
     <fieldset className="plain-fieldset">
@@ -25,7 +25,6 @@ function RolePicker({ idPrefix, value, onChange, canGrantOwner }: { idPrefix: st
 
 export default function Members({ organisationId, role }: { organisationId: string; role: string }) {
   const canInvite = has(role, "owner", "admin");
-  const isOwner = has(role, "owner");
   const [members, setMembers] = useState<Member[] | null>(null);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [mode, setMode] = useState<"invite" | "assign">("invite");
@@ -174,7 +173,7 @@ export default function Members({ organisationId, role }: { organisationId: stri
               <p className="muted">For someone who is not yet in this organisation.</p>
               <label htmlFor="member-email">Email</label>
               <input id="member-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-              <RolePicker idPrefix="inv" value={inviteRoles} onChange={setInviteRoles} canGrantOwner={isOwner} />
+              <RolePicker idPrefix="inv" value={inviteRoles} onChange={setInviteRoles} canGrantOwner />
               <button type="submit" disabled={busy || inviteRoles.length === 0}>
                 {busy ? "Inviting…" : "Invite"}
               </button>
@@ -195,7 +194,7 @@ export default function Members({ organisationId, role }: { organisationId: stri
               </select>
               {chosen && (
                 <>
-                  <RolePicker idPrefix="asg" value={assignRoles} onChange={setAssignRoles} canGrantOwner={isOwner} />
+                  <RolePicker idPrefix="asg" value={assignRoles} onChange={setAssignRoles} canGrantOwner />
                   <div className="row">
                     <button type="button" disabled={busy || assignRoles.length === 0} onClick={() => void act(() => setMemberRoles(organisationId, chosen.user_id, assignRoles).then(() => setDone(`Roles saved for ${chosen.name}.`)))}>
                       {busy ? "Saving…" : chosen.is_active ? "Save roles" : "Restore access with these roles"}
