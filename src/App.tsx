@@ -339,7 +339,7 @@ export default function App() {
             </select>
           </div>
         )}
-        <Workspace key={current.organisation.id} membership={current} userId={session.user.id} />
+        <Workspace key={current.organisation.id} membership={current} userId={session.user.id} userName={session.user.email ?? "Someone"} />
       </>
     );
   }

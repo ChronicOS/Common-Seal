@@ -18,6 +18,13 @@ checks (check_name, ok, detail) as (
          case when to_regclass('public.' || e.marker) is null then 'Table ' || e.marker || ' is missing' else '' end
   from expected e
   union all
+  select 'Migration 0029 has been run',
+         exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'app' and p.proname = 'presence_org'), ''
+  union all
+  select 'Presence is limited to members of the organisation',
+         to_regclass('realtime.messages') is null
+         or (select count(*) from pg_policies where schemaname = 'realtime' and tablename = 'messages' and policyname like 'common_seal_presence_%') = 2, ''
+  union all
   select 'Migration 0028 has been run',
          exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'risk_reviews' and column_name = 'send_to'), ''
   union all

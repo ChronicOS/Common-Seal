@@ -1,3 +1,4 @@
+import { nameList, usePresence } from "./presence";
 import { has, roleLabels } from "./roles";
 import { Fragment, useCallback, useEffect, useState, type FormEvent } from "react";
 import Authority from "./Authority";
@@ -63,11 +64,13 @@ const TABS: { id: Tab; label: string; group?: string }[] = [
   { id: "people", label: "People", group: "Setup" },
 ];
 
-export default function Workspace({ membership, userId }: { membership: Membership; userId: string }) {
+export default function Workspace({ membership, userId, userName }: { membership: Membership; userId: string; userName: string }) {
   const { organisation, role } = membership;
   const canEdit = has(role, ...RECORDS_ROLES);
 
   const [tab, setTab] = useState<Tab>("overview");
+  // Speak up is never shown to others: being seen there could identify a reporter or a handler
+  const others = usePresence(organisation.id, userId, userName, tab === "speakup" ? null : tab);
   const [data, setData] = useState<GroupData | null>(null);
   const [assurance, setAssurance] = useState<AssuranceSummary | null>(null);
   const [riskSummary, setRiskSummary] = useState<RiskSummary | null>(null);
@@ -142,7 +145,15 @@ export default function Workspace({ membership, userId }: { membership: Membersh
 
   const nav = (
     <nav className="side-nav" aria-label="Sections">
-      {TABS.map((t) => (
+      {others.length > 0 && (
+        <p className="presence" role="status">
+          <span className="presence-dot" aria-hidden="true" />
+          Also online: {nameList(others.map((o) => o.name))}
+        </p>
+      )}
+      {TABS.map((t) => {
+        const here = t.id === "speakup" ? [] : others.filter((o) => o.tab === t.id);
+        return (
         <Fragment key={t.id}>
           {t.group && <span className="nav-group">{t.group}</span>}
           <button
@@ -153,9 +164,16 @@ export default function Workspace({ membership, userId }: { membership: Membersh
           >
             {t.label}
             {t.id === "foryou" && inbox && inbox.length > 0 && <span className="nav-count">{inbox.length}</span>}
+            {here.length > 0 && <span className="presence-dot" role="img" aria-label={`${nameList(here.map((o) => o.name))} ${here.length === 1 ? "is" : "are"} on this tab`} title={nameList(here.map((o) => o.name))} />}
           </button>
+          {tab === t.id && here.length > 0 && (
+            <span className="presence-here">
+              {nameList(here.map((o) => o.name))} {new Set(here.map((o) => o.name)).size === 1 ? "is" : "are"} also working on this tab
+            </span>
+          )}
         </Fragment>
-      ))}
+        );
+      })}
     </nav>
   );
 
