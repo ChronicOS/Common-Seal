@@ -40,6 +40,7 @@ export type SurveyFacts = {
   priorAudits: number | null;
   prior: { sent: number; answered: number; high: number; concerns: number } | null;
   migrant: { yes: number; total: number } | null;
+  workers: number | null;
   sections: string[];
   /** One row per yes/no question. "favourable" counts the answers that raise no flag. */
   results: QuestionResult[];
@@ -112,23 +113,29 @@ export async function loadFacts(organisationId: string, s: Statement): Promise<M
     client.from("training_assignments").select("module_id, completed_at").eq("organisation_id", organisationId).not("completed_at", "is", null),
     client.from("policies").select("id, title, is_retired").eq("organisation_id", organisationId),
     client.from("policy_versions").select("policy_id").eq("organisation_id", organisationId).eq("status", "approved"),
-    client.from("ms_campaigns").select("id, name, audits_conducted, survey_year").eq("organisation_id", organisationId).eq("statement_id", s.id).limit(1),
+    client.from("ms_campaigns").select("id, name, audits_conducted, survey_year, sector_pack").eq("organisation_id", organisationId).eq("statement_id", s.id).limit(1),
   ]);
   let survey: SurveyFacts | null = null;
-  const campaign = ((campaigns.data ?? []) as { id: string; name: string; audits_conducted: number | null; survey_year: number }[])[0];
+  const campaign = ((campaigns.data ?? []) as { id: string; name: string; audits_conducted: number | null; survey_year: number; sector_pack?: string | null }[])[0];
   if (campaign) {
     type R = { submitted_at: string | null; risk_level: string | null; countries: string[] | null; answers: Record<string, { a: string }> | null };
     const [recipients, concerns, questions, ratings, priorCampaigns] = await Promise.all([
       client.from("ms_recipients").select("submitted_at, risk_level, countries, answers").eq("campaign_id", campaign.id),
       client.from("ms_concerns").select("status").eq("campaign_id", campaign.id),
-      client.from("ms_questions").select("code, section, prompt, kind, adverse, position").order("position"),
+      client.from("ms_questions").select("*").order("position"),
       client.from("ms_country_ratings").select("country, rating, source").eq("organisation_id", organisationId),
       client.from("ms_campaigns").select("id, audits_conducted").eq("organisation_id", organisationId).eq("survey_year", campaign.survey_year - 1).limit(1),
     ]);
     const rs = (recipients.data ?? []) as R[];
     const done = rs.filter((r) => r.submitted_at);
     const ks = (concerns.data ?? []) as { status: string }[];
-    const qs = ((questions.data ?? []) as { code: string; section: string; prompt: string; kind: string; adverse: string | null }[]).filter((q) => q.kind === "yesno");
+    // Questions asked in this survey: the core set plus its sector pack. One that has since been switched off still shows if it was answered.
+    const qs = ((questions.data ?? []) as { code: string; section: string; prompt: string; kind: string; adverse: string | null; is_active?: boolean; sector?: string | null }[]).filter(
+      (q) =>
+        q.kind === "yesno" &&
+        (!q.sector || q.sector === campaign.sector_pack) &&
+        (q.is_active !== false || (recipients.data ?? []).some((r) => (r as R).answers?.[q.code])),
+    );
     const cr = (ratings.data ?? []) as { country: string; rating: string; source: string | null }[];
     const named = [...new Set(done.flatMap((r) => r.countries ?? []))].sort();
     const results: QuestionResult[] = qs.map((q) => {
@@ -164,6 +171,7 @@ export async function loadFacts(organisationId: string, s: Statement): Promise<M
       priorAudits: priorCampaign?.audits_conducted ?? null,
       prior,
       migrant: migrant ? { yes: migrant.yes, total: migrant.total } : null,
+      workers: done.some((r) => r.answers?.workforce_size) ? done.reduce((sum, r) => sum + (Number(r.answers?.workforce_size?.a) || 0), 0) : null,
       sections: [...new Set(qs.map((q) => q.section))],
       results,
     };

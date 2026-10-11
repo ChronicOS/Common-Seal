@@ -32,6 +32,10 @@ export function draftPart(n: number, s: Statement, entities: Entity[], reviews: 
   const name = entity?.name ?? "the reporting entity";
   const covered = s.is_joint ? entities.filter((e) => s.covered_entity_ids.includes(e.id)) : [];
   const v = facts?.survey ?? null;
+  const yesShare = (code: string) => {
+    const r = v?.results.find((x) => x.code === code);
+    return r && r.total > 0 ? pct(r.yes, r.total) : null;
+  };
   const share = (code: string) => {
     const r = v?.results.find((x) => x.code === code);
     return r ? pct(r.favourable, r.total) : null;
@@ -59,7 +63,7 @@ export function draftPart(n: number, s: Statement, entities: Entity[], reviews: 
         "[Describe what the Group does, the countries it operates in, and how many people it employs and where.]",
         "# Supply chains",
         v
-          ? `[Describe the main categories of goods and services the Group buys.] In this period we surveyed ${plural(v.sent, "third party", "third parties")}. Those that responded told us their manufacturing facilities are located in: ${v.countries.join(", ") || "[none stated]"}.`
+          ? `[Describe the main categories of goods and services the Group buys.] In this period we surveyed ${plural(v.sent, "third party", "third parties")}. Those that responded told us their manufacturing facilities are located in: ${v.countries.join(", ") || "[none stated]"}${v.workers ? `, and that together they have about ${v.workers.toLocaleString("en-AU")} workers` : ""}.`
           : "[Describe the main categories of goods and services the Group buys, and the countries they come from.]",
       ].join("\n\n");
 
@@ -73,6 +77,10 @@ export function draftPart(n: number, s: Statement, entities: Entity[], reviews: 
         const signals = [
           share("under_18") ? `${share("under_18")} stated that they do not employ anyone under the age of 18` : "",
           v.migrant ? `${pct(v.migrant.yes, v.migrant.total)} employ migrant workers` : "",
+          yesShare("labour_hire") ? `${yesShare("labour_hire")} use labour hire companies or recruitment agents` : "",
+          share("worker_debts") ? `${share("worker_debts")} reported no worker debts or withheld wages` : "",
+          share("free_movement") ? `${share("free_movement")} confirmed workers are free to leave the workplace and their accommodation` : "",
+          share("young_hazardous") ? `${share("young_hazardous")} have no workers under 18 doing hazardous work` : "",
           share("retain_documents") ? `${share("retain_documents")} do not retain workers' identity documents` : "",
           share("recruitment_fees") ? `${share("recruitment_fees")} do not charge workers to secure a job` : "",
         ].filter(Boolean);
@@ -93,7 +101,7 @@ export function draftPart(n: number, s: Statement, entities: Entity[], reviews: 
         `${facts && facts.policies.length ? `The following policies were in force during the period: ${facts.policies.join(", ")}.` : "[List the policies that set your standards, such as a Supplier Code of Conduct.]"}${share("policy") ? ` ${share("policy")} of respondents have a published policy of their own covering these topics.` : ""}`,
         "# Supplier due diligence",
         v
-          ? `We sent our modern slavery questionnaire to ${plural(v.sent, "third party", "third parties")} and ${v.answered} (${pct(v.answered, v.sent)}) responded. The questionnaire covers employment, pay, working hours, fair treatment, community, policies and training, record keeping and the respondent's own supply chain.${facts && facts.ddCases > 0 ? ` We also opened ${plural(facts.ddCases, "due diligence case", "due diligence cases")} on third parties.` : ""}`
+          ? `We sent our modern slavery questionnaire to ${plural(v.sent, "third party", "third parties")} and ${v.answered} (${pct(v.answered, v.sent)}) responded. The questionnaire covers what the third party supplies, recruitment and freedom of movement, children and young workers, pay, working hours, fair treatment, policies and training, and the respondent's own supply chain.${facts && facts.ddCases > 0 ? ` We also opened ${plural(facts.ddCases, "due diligence case", "due diligence cases")} on third parties.` : ""}`
           : `${facts && facts.ddCases > 0 ? `We opened ${plural(facts.ddCases, "due diligence case", "due diligence cases")} on third parties in the period.` : "[Describe your due diligence on new and existing suppliers.]"}`,
         "# Contract terms",
         `[Describe the modern slavery obligations and audit rights in your supplier contracts.]${share("supplier_terms") ? ` ${share("supplier_terms")} of respondents impose modern slavery obligations on their own suppliers by contract.` : ""}`,
@@ -130,7 +138,10 @@ export function draftPart(n: number, s: Statement, entities: Entity[], reviews: 
         ["voluntary", "confirmed all workers are working voluntarily and are free to leave after reasonable notice"],
         ["minimum_wage", "pay at least the minimum wage required by local law"],
         ["retain_documents", "do not retain workers' identity documents"],
+        ["free_movement", "confirmed workers are free to leave the workplace and their accommodation"],
+        ["worker_debts", "reported no worker debts or withheld wages"],
         ["grievance", "have a grievance mechanism for workers"],
+        ["response_process", "have a process for responding to suspected modern slavery"],
       ]
         .map(([code, text]) => (share(code) ? `- ${share(code)} of respondents ${text}` : ""))
         .filter(Boolean);

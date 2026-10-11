@@ -70,14 +70,18 @@ export default function Questionnaire({ token }: { token: string }) {
   }
 
   const yesno = q.questions.filter((x) => x.kind === "yesno");
-  const set = (code: string, patch: Partial<Answer>) => setAnswers({ ...answers, [code]: { ...(answers[code] ?? { a: "" as "yes" }), ...patch } });
+  const written = q.questions.filter((x) => x.kind === "text" || x.kind === "number");
+  const numberOf = (code: string) => q.questions.findIndex((x) => x.code === code) + 1;
+  const set = (code: string, patch: Partial<Answer>) => setAnswers({ ...answers, [code]: { ...(answers[code] ?? { a: "" }), ...patch } });
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const missing = yesno.findIndex((x) => answers[x.code]?.a !== "yes" && answers[x.code]?.a !== "no");
-    if (missing >= 0) {
-      setError(`Please answer every question. Question ${missing + 1} has no answer.`);
-      document.getElementById(`qbox-${yesno[missing].code}`)?.scrollIntoView({ block: "center" });
+    const missing =
+      yesno.find((x) => answers[x.code]?.a !== "yes" && answers[x.code]?.a !== "no") ??
+      written.find((x) => (x.kind === "number" ? !/^[0-9]{1,9}$/.test((answers[x.code]?.a ?? "").trim()) : (answers[x.code]?.a ?? "").trim().length < 2));
+    if (missing) {
+      setError(`Please answer every question. Question ${numberOf(missing.code)} ${missing.kind === "number" ? "needs a whole number" : "has no answer"}.`);
+      document.getElementById(`qbox-${missing.code}`)?.scrollIntoView({ block: "center" });
       return;
     }
     const noDetail = yesno.find((x) => x.detail_on && answers[x.code].a === x.detail_on && !(answers[x.code].d ?? "").trim());
@@ -104,15 +108,14 @@ export default function Questionnaire({ token }: { token: string }) {
     }
   }
 
-  let number = 0;
   let lastSection = "";
   return shell(
     <>
       <p className="eyebrow">{q.organisation}</p>
       <h1>Modern slavery questionnaire</h1>
       <p className="lead">
-        For {q.supplier}. Please answer by {day(q.deadline)}. Answer for your own organisation; it takes about 15 minutes and must be
-        completed in one sitting.
+        For {q.supplier}. Please answer by {day(q.deadline)}. Answer for your own organisation; it takes about 30 minutes and must be
+        completed in one sitting. There are no wrong answers: please answer openly.
       </p>
       <form className="form" onSubmit={submit} noValidate>
         <section className="card form">
@@ -133,15 +136,34 @@ export default function Questionnaire({ token }: { token: string }) {
               <div key={x.code}>
                 {heading}
                 <div className="card form" id={`qbox-${x.code}`}>
-                  <label htmlFor="q-countries">{x.prompt}</label>
+                  <label htmlFor="q-countries">
+                    {numberOf(x.code)}. {x.prompt}
+                  </label>
                   <textarea id="q-countries" rows={2} placeholder="For example: Australia, India" value={countries} onChange={(e) => setCountries(e.target.value)} />
                   <span className="muted">Separate countries with commas.</span>
                 </div>
               </div>
             );
           }
-          number += 1;
+          const number = numberOf(x.code);
           const a = answers[x.code];
+          if (x.kind === "text" || x.kind === "number") {
+            return (
+              <div key={x.code}>
+                {heading}
+                <div className="card form" id={`qbox-${x.code}`}>
+                  <label htmlFor={`qt-${x.code}`}>
+                    {number}. {x.prompt}
+                  </label>
+                  {x.kind === "number" ? (
+                    <input id={`qt-${x.code}`} className="short-wide" inputMode="numeric" value={a?.a ?? ""} onChange={(e) => set(x.code, { a: e.target.value.trim() })} />
+                  ) : (
+                    <textarea id={`qt-${x.code}`} rows={2} value={a?.a ?? ""} onChange={(e) => set(x.code, { a: e.target.value })} />
+                  )}
+                </div>
+              </div>
+            );
+          }
           return (
             <div key={x.code}>
               {heading}

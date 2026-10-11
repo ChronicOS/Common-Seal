@@ -10,6 +10,7 @@ import {
   emailDue,
   importCountryRatings,
   loadSurveys,
+  SECTOR_PACKS,
   markSent,
   rateCampaign,
   removeRecipient,
@@ -99,6 +100,7 @@ export default function MsSurvey({ organisationId, organisationName, role, state
   const [deadline, setDeadline] = useState(() => plusDays(today(), 28));
   const [sender, setSender] = useState("");
   const [statementId, setStatementId] = useState("");
+  const [sectorPack, setSectorPack] = useState("");
 
   const [supplierId, setSupplierId] = useState("");
   const [contact, setContact] = useState("");
@@ -206,6 +208,7 @@ export default function MsSurvey({ organisationId, organisationName, role, state
                   chaser2: plusDays(today(), gap * 2),
                   sender,
                   statementId: statementId || null,
+                  sectorPack: sectorPack || null,
                 });
               }).then((ok) => ok && setOpenId(id));
             }}
@@ -223,6 +226,13 @@ export default function MsSurvey({ organisationId, organisationName, role, state
             </div>
             <label htmlFor="sv-sender">Emails are sent from (optional)</label>
             <input id="sv-sender" type="email" placeholder="e.g. modernslavery@yourcompany.com" value={sender} onChange={(e) => setSender(e.target.value)} />
+            <label htmlFor="sv-pack">Extra sector questions (optional)</label>
+            <select id="sv-pack" value={sectorPack} onChange={(e) => setSectorPack(e.target.value)}>
+              <option value="">Core questions only</option>
+              {SECTOR_PACKS.map((x) => (
+                <option key={x}>{x}</option>
+              ))}
+            </select>
             <label htmlFor="sv-statement">Feeds the statement (optional)</label>
             <select id="sv-statement" value={statementId} onChange={(e) => setStatementId(e.target.value)}>
               <option value="">Not linked yet</option>
@@ -282,6 +292,7 @@ export default function MsSurvey({ organisationId, organisationName, role, state
         <span className={open && c.deadline < today() ? "chip chip-alert" : "chip"}>{!open ? "Closed" : c.deadline < today() ? "Past deadline" : "Open"}</span> Responses due{" "}
         {formatDay(c.deadline)}
         {c.sender_email ? ` · emails from ${c.sender_email}` : ""}
+        {c.sector_pack ? ` · includes ${c.sector_pack} questions` : ""}
       </p>
       {messages}
       {!canManage && <p className="card">Supplier answers are visible to legal, compliance and the company secretary.</p>}
@@ -450,10 +461,17 @@ export default function MsSurvey({ organisationId, organisationName, role, state
                 </p>
                 <ol className="answer-list">
                   {data.questions
-                    .filter((q) => q.kind === "yesno")
+                    .filter((q) => q.kind !== "countries" && viewing.answers![q.code])
                     .map((q) => {
                       const a = viewing.answers![q.code];
                       const flagged = q.adverse !== null && a?.a === q.adverse;
+                      if (q.kind !== "yesno") {
+                        return (
+                          <li key={q.code}>
+                            {q.prompt.replace(/\{organisation\}/g, organisationName)} <strong>{a.a}</strong>
+                          </li>
+                        );
+                      }
                       return (
                         <li key={q.code}>
                           {q.prompt.replace(/\{organisation\}/g, organisationName)}{" "}

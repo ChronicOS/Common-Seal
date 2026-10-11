@@ -1,7 +1,7 @@
 import { supabase } from "./supabase";
 
 export type RiskLevel = "low" | "medium" | "high";
-export type Question = { code: string; position: number; section: string; prompt: string; kind: "yesno" | "countries"; adverse: "yes" | "no" | null; serious: boolean; detail_prompt: string | null; detail_on: "yes" | "no" | null; wording_to_confirm: boolean };
+export type Question = { code: string; position: number; section: string; prompt: string; kind: "yesno" | "countries" | "text" | "number"; adverse: "yes" | "no" | null; serious: boolean; detail_prompt: string | null; detail_on: "yes" | "no" | null; wording_to_confirm: boolean; is_active: boolean; sector: string | null };
 export type Campaign = {
   id: string;
   name: string;
@@ -11,6 +11,7 @@ export type Campaign = {
   chaser1_on: string | null;
   chaser2_on: string | null;
   sender_email: string | null;
+  sector_pack: string | null;
   relevant_policies: string | null;
   query_name: string | null;
   query_title: string | null;
@@ -27,7 +28,9 @@ export type Campaign = {
   status: "open" | "closed";
   closed_at: string | null;
 };
-export type Answer = { a: "yes" | "no"; d?: string };
+/** a is "yes" or "no" for a yes/no question, otherwise the written answer or number. */
+export type Answer = { a: string; d?: string };
+export const SECTOR_PACKS = ["Pharmaceuticals and consumer health"];
 export type Recipient = {
   id: string;
   campaign_id: string;
@@ -148,7 +151,7 @@ export async function loadSurveys(organisationId: string): Promise<SurveyData> {
   };
 }
 
-export async function createCampaign(organisationId: string, c: { name: string; year: number; deadline: string; chaser1: string | null; chaser2: string | null; sender: string; statementId: string | null }) {
+export async function createCampaign(organisationId: string, c: { name: string; year: number; deadline: string; chaser1: string | null; chaser2: string | null; sender: string; statementId: string | null; sectorPack: string | null }) {
   const { data, error } = await db()
     .from("ms_campaigns")
     .insert({
@@ -160,6 +163,7 @@ export async function createCampaign(organisationId: string, c: { name: string; 
       chaser2_on: c.chaser2,
       sender_email: c.sender.trim() || null,
       statement_id: c.statementId,
+      sector_pack: c.sectorPack,
       ...DEFAULT_TEMPLATES,
     })
     .select("id")

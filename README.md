@@ -51,5 +51,6 @@ The Supabase project must be in Sydney (`ap-southeast-2`). Netlify serves only t
   - `0019_hardening.sql` – removes default permissions on internal functions.
   - `0020_ms_supplier_survey.sql` – modern slavery supplier survey: questionnaire by personal link, risk rating, concerns for Legal; joint statements and publication.
   - `0021_ms_report_template.sql` – modern slavery report template: commitment, looking ahead and a questionnaire results appendix.
+  - `0022_ms_questions_v2.sql` – revised questionnaire after the Commonwealth guidance review, with an optional pharmaceuticals and consumer health pack.
 
 After running migrations, run `supabase/checks/health_check.sql` in the SQL editor. It only reads, and every row should say `pass`.
