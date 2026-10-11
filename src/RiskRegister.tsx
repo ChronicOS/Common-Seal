@@ -18,6 +18,7 @@ import {
   markRequestSent,
   promptDue,
   removeContact,
+  replaceContact,
   removeOwner,
   requestEmailDue,
   respondLink,
@@ -45,17 +46,17 @@ type View = { kind: "home" } | { kind: "confirm"; mode: "run" | "schedule" } | {
 
 const MANAGE_ROLES = ["owner", "admin", "secretary", "legal", "compliance"];
 
-function ContactForm({ fixedRole, busy, onAdd, onCancel }: { fixedRole: Contact["role"]; busy: boolean; onAdd: (k: { role: Contact["role"]; name: string; title: string; email: string }) => void; onCancel: () => void }) {
-  const [name, setName] = useState("");
-  const [title, setTitle] = useState("");
-  const [email, setEmail] = useState("");
+function ContactForm({ fixedRole, busy, initial, onAdd, onCancel }: { fixedRole: Contact["role"]; busy: boolean; initial?: Contact; onAdd: (k: { role: Contact["role"]; name: string; title: string; email: string }) => void; onCancel: () => void }) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [email, setEmail] = useState(initial?.email ?? "");
   return (
     <div className="row review">
       <input aria-label="Name" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
       <input aria-label="Title" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
       <input aria-label="Email" type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
       <button type="button" className="quiet" disabled={busy || name.trim().length < 2 || !/.+@.+\..+/.test(email)} onClick={() => onAdd({ role: fixedRole, name, title, email })}>
-        Add
+        {initial ? "Save" : "Add"}
       </button>
       <button type="button" className="link-dark" onClick={onCancel}>
         Cancel
@@ -654,19 +655,28 @@ export default function RiskRegister({ organisationId, organisationName, role, u
     return (
       <td>
         {list.length === 0 && adding !== key && <span className={roleName === "responsible" ? "warning-text" : "muted"}>{roleName === "responsible" ? "Nobody yet" : "No manager"}</span>}
-        {list.map((k) => (
+        {list.map((k) =>
+          adding === `edit:${k.id}` ? (
+            <ContactForm key={k.id} fixedRole={roleName} initial={k} busy={busy} onAdd={(v) => void run(() => replaceContact(organisationId, c.id, k.id, v)).then((ok) => ok && setAdding(null))} onCancel={() => setAdding(null)} />
+          ) : (
           <span key={k.id} className="person">
             <span title={k.email}>
               {k.name}
               {k.title ? <span className="muted">, {k.title}</span> : null}
             </span>
             {canRun && (
-              <button type="button" className="link-dark small" disabled={busy} aria-label={`Remove ${k.name}`} onClick={() => void run(() => removeContact(k.id))}>
-                Remove
-              </button>
+              <>
+                <button type="button" className="link-dark small" disabled={busy} aria-label={`Edit or replace ${k.name}`} onClick={() => setAdding(`edit:${k.id}`)}>
+                  Edit or replace
+                </button>
+                <button type="button" className="link-dark small" disabled={busy} aria-label={`Remove ${k.name}`} onClick={() => void run(() => removeContact(k.id))}>
+                  Remove
+                </button>
+              </>
             )}
           </span>
-        ))}
+          ),
+        )}
         {canRun &&
           (adding === key ? (
             <ContactForm fixedRole={roleName} busy={busy} onAdd={(k) => void run(() => addContact(organisationId, c.id, k)).then((ok) => ok && setAdding(null))} onCancel={() => setAdding(null)} />
@@ -717,6 +727,18 @@ export default function RiskRegister({ organisationId, organisationName, role, u
                 <span>
                   {memberName(owner.user_id)} <span className="chip">Responsible</span>
                 </span>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    className="link-dark small"
+                    disabled={busy}
+                    onClick={() => {
+                      if (window.confirm("Remove the person responsible for the report? To replace them instead, choose a member below and press \"Make responsible instead\". Reviews in progress keep running, but nobody can finalise until someone is named.")) void run(() => removeOwner(organisationId, owner.user_id));
+                    }}
+                  >
+                    Remove
+                  </button>
+                )}
               </li>
             )}
             {backups.map((b) => (

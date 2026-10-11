@@ -131,6 +131,11 @@ export async function addContact(organisationId: string, categoryId: string, k: 
     (await db().from("risk_contacts").insert({ organisation_id: organisationId, category_id: categoryId, role: k.role, name: k.name.trim(), title: k.title.trim() || null, email: k.email.trim() })).error,
   );
 }
+/** Edit or replace a person: the new details go in first, then the old entry comes out, so the category is never left empty. */
+export async function replaceContact(organisationId: string, categoryId: string, oldId: string, k: { role: Contact["role"]; name: string; title: string; email: string }) {
+  await addContact(organisationId, categoryId, k);
+  await removeContact(oldId);
+}
 export async function removeContact(id: string) {
   check((await db().from("risk_contacts").delete().eq("id", id)).error);
 }
