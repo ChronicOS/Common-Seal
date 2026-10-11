@@ -3,7 +3,6 @@ import { formatDay } from "./board";
 import {
   approveStatement,
   createStatement,
-  CRITERIA,
   loadFacts,
   loadModernSlavery,
   publishStatement,
@@ -20,6 +19,7 @@ import {
 } from "./modernslavery";
 import Attachments from "./Attachments";
 import MsSurvey from "./MsSurvey";
+import { draftPart, MANDATORY, parseReport, REPORT_PARTS } from "./msreport";
 import { today } from "./training";
 import type { Entity } from "./types";
 
@@ -28,60 +28,17 @@ type Props = { organisationId: string; organisationName: string; role: string; e
 const MANAGE_ROLES = ["owner", "admin", "secretary", "legal", "compliance"];
 const RISK: Record<SupplierReview["risk"], string> = { low: "Low risk", medium: "Medium risk", high: "High risk" };
 
-/** First-draft wording built from what the platform already holds. The writer edits it. */
-function suggest(n: number, s: Statement, entities: Entity[], reviews: SupplierReview[], suppliers: MsData["suppliers"], facts: MsFacts | null): string {
-  const entity = entities.find((e) => e.id === s.reporting_entity_id);
-  const others = entities.filter((e) => e.id !== s.reporting_entity_id).map((e) => e.name);
-  const count = (r: SupplierReview["risk"]) => reviews.filter((x) => x.risk === r).length;
-  const high = reviews.filter((r) => r.risk === "high").map((r) => suppliers.find((x) => x.id === r.counterparty_id)?.name ?? "a supplier");
-  switch (n) {
-    case 1:
-      return `This statement is made by ${entity?.name ?? "the reporting entity"}${entity?.acn ? ` (ACN ${entity.acn})` : ""} for the reporting period ${formatDay(s.period_start)} to ${formatDay(s.period_end)}.`;
-    case 2:
-      return `${entity?.name ?? "The entity"} ${others.length ? `owns or controls ${others.length} other ${others.length === 1 ? "entity" : "entities"}: ${others.join(", ")}.` : "does not own or control any other entity."} [Describe what the group does, where it operates, how many people it employs, and the main goods and services it buys and from where.]`;
-    case 3:
-      if (facts?.survey && facts.survey.answered > 0) {
-        const v = facts.survey;
-        return `We surveyed ${v.sent} third ${v.sent === 1 ? "party" : "parties"} in the period and ${v.answered} responded. We assessed each response for modern slavery risk using our annual spend with the third party and a country risk rating: ${v.high} rated high risk, ${v.medium} medium and ${v.low} low${v.unrated ? `, with ${v.unrated} not yet rated` : ""}. Their manufacturing facilities are located in ${v.countries.join(", ")}. ${v.concerns} ${v.concerns === 1 ? "response" : "responses"} raised a concern that was escalated to Legal. [Describe the risks in your own operations, and the sectors and countries that carry the most risk.]`;
-      }
-      return reviews.length
-        ? `We reviewed ${reviews.length} ${reviews.length === 1 ? "supplier" : "suppliers"} in the period: ${count("high")} rated high risk, ${count("medium")} medium and ${count("low")} low.${high.length ? ` The high-risk ratings relate to ${high.join(", ")}.` : ""} [Describe the risks in your own operations, and the sectors and countries that carry the most risk in your supply chain.]`
-        : "[No supplier reviews are recorded for this period. Describe the risks in your operations and supply chain, and how you identified them.]";
-    case 4: {
-      const v = facts?.survey;
-      const parts = [
-        v ? `sent our modern slavery questionnaire to ${v.sent} third ${v.sent === 1 ? "party" : "parties"} and received ${v.answered} ${v.answered === 1 ? "response" : "responses"}` : "",
-        v && v.concerns > 0 ? `escalated ${v.concerns} ${v.concerns === 1 ? "concern" : "concerns"} to Legal, of which ${v.resolved} ${v.resolved === 1 ? "has" : "have"} been decided` : "",
-        v && v.audits != null ? `carried out ${v.audits} third-party ${v.audits === 1 ? "audit" : "audits"}` : "",
-        facts && facts.ddCases > 0 ? `opened ${facts.ddCases} due diligence ${facts.ddCases === 1 ? "case" : "cases"} on third parties` : "",
-        reviews.length ? `completed ${reviews.length} supplier risk ${reviews.length === 1 ? "review" : "reviews"}` : "",
-        facts && facts.trainingDone > 0 ? `recorded ${facts.trainingDone} ${facts.trainingDone === 1 ? "completion" : "completions"} of modern slavery training` : "",
-        facts && facts.policies.length ? `kept these policies in force: ${facts.policies.join(", ")}` : "",
-      ].filter(Boolean);
-      const actions = reviews.filter((r) => r.actions).map((r) => `${suppliers.find((x) => x.id === r.counterparty_id)?.name ?? "A supplier"}: ${r.actions}`);
-      return `${parts.length ? `In the period we ${parts.join("; ")}.` : "[Describe the due diligence, training and contract steps taken in the period.]"}${actions.length ? ` Actions agreed with suppliers: ${actions.join(" ")}` : ""} [Describe any remediation.]`;
-    }
-    case 5:
-      if (facts?.survey) return `We track the response rate to our annual questionnaire (${facts.survey.answered} of ${facts.survey.sent} this period), the number of third parties in each risk rating, and the concerns escalated to Legal and how they were decided, and compare each with the prior year. [Describe reporting to the board and any other measures.]`;
-      return "[Describe how you check that these actions work, for example tracking supplier ratings from year to year, reviewing reports raised through the speak-up channel, and reporting to the board.]";
-    case 6:
-      return others.length
-        ? `[Describe how ${others.join(", ")} ${others.length === 1 ? "was" : "were"} consulted, for example through shared policies, common directors or review of this statement in draft.]`
-        : `${entity?.name ?? "The entity"} does not own or control any other entity, so no consultation was required.`;
-    default:
-      return "There is no other relevant information.";
-  }
-}
-
 function Editor({
-  statement,
+  heading,
+  closing,
   initial,
   canEdit,
   busy,
   draftFor,
   onSave,
 }: {
-  statement: Statement;
+  heading: React.ReactNode;
+  closing: React.ReactNode;
   initial: Record<number, string>;
   canEdit: boolean;
   busy: boolean;
@@ -90,42 +47,121 @@ function Editor({
 }) {
   const [contents, setContents] = useState(initial);
   const set = (n: number, v: string) => setContents({ ...contents, [n]: v });
-  const done = CRITERIA.filter((c) => (contents[c.n] ?? "").trim().length >= 20).length;
+  const done = MANDATORY.filter((n) => (contents[n] ?? "").trim().length >= 20).length;
+  const [reading, setReading] = useState(!canEdit);
+
+  if (reading) {
+    return (
+      <section className="block report">
+        <div className="row no-print">
+          {canEdit && (
+            <button type="button" className="quiet" onClick={() => setReading(false)}>
+              Back to editing
+            </button>
+          )}
+          <button type="button" className="quiet" onClick={() => window.print()}>
+            Print or save as PDF
+          </button>
+        </div>
+        {heading}
+        {REPORT_PARTS.filter((part) => part.n !== 9 && ((contents[part.n] ?? "").trim() || MANDATORY.includes(part.n))).map((part) => (
+          <div key={part.n} className="report-part">
+            <h2>{part.title}</h2>
+            {(contents[part.n] ?? "").trim() ? <ReportText content={contents[part.n]} /> : <p className="muted">Not yet written.</p>}
+          </div>
+        ))}
+        {closing}
+        {(contents[9] ?? "").trim() && (
+          <div className="report-part">
+            <h2>Appendix: questionnaire results</h2>
+            <ReportText content={contents[9]} />
+          </div>
+        )}
+      </section>
+    );
+  }
+
   return (
     <section className="block">
-      <h2>The statement</h2>
+      <h2>The report</h2>
       <p className="muted">
-        {done} of 7 mandatory criteria addressed.{canEdit ? " Suggested wording comes from your own records and is a starting point; text in square brackets is for you to write." : ""}
+        {done} of 7 mandatory criteria addressed. Suggested wording is built from your own records, including the supplier survey linked to this
+        statement. Text in square brackets is for you to write. Start a line with "# " for a sub-heading or "- " for a bullet.
       </p>
-      {CRITERIA.map((c) => (
-        <div key={c.n} className="card form criterion">
-          <label htmlFor={`ms-${c.n}`}>
-            {c.n}. {c.title}
+      <div className="row">
+        <button
+          type="button"
+          className="quiet"
+          onClick={() => {
+            const next = { ...contents };
+            for (const part of REPORT_PARTS) if (!(next[part.n] ?? "").trim() || part.n === 9) next[part.n] = draftFor(part.n);
+            setContents(next);
+          }}
+        >
+          Build the report from our records
+        </button>
+        <button type="button" className="quiet" onClick={() => setReading(true)}>
+          Read as a report
+        </button>
+      </div>
+      <p className="muted">"Build" fills every empty part and refreshes the questionnaire results appendix. It does not overwrite what you have written.</p>
+      {REPORT_PARTS.map((part) => (
+        <div key={part.n} className="card form criterion">
+          <label htmlFor={`ms-${part.n}`}>
+            {part.title}
+            {part.criterion ? <span className="muted"> · {part.criterion}, mandatory</span> : <span className="muted"> · optional</span>}
           </label>
-          <span className="muted">{c.guide}</span>
-          {canEdit ? (
-            <>
-              <textarea id={`ms-${c.n}`} rows={5} value={contents[c.n] ?? ""} onChange={(e) => set(c.n, e.target.value)} />
-              <button type="button" className="link-dark" onClick={() => set(c.n, [contents[c.n]?.trim(), draftFor(c.n)].filter(Boolean).join("\n\n"))}>
-                Suggest wording from our records
-              </button>
-            </>
-          ) : (
-            <p className="pre-wrap">{contents[c.n] || "Not yet written."}</p>
-          )}
+          <span className="muted">{part.guide}</span>
+          <textarea id={`ms-${part.n}`} rows={part.n === 9 ? 6 : 7} value={contents[part.n] ?? ""} onChange={(e) => set(part.n, e.target.value)} />
+          <button type="button" className="link-dark" onClick={() => set(part.n, part.n === 9 ? draftFor(9) : [contents[part.n]?.trim(), draftFor(part.n)].filter(Boolean).join("\n\n"))}>
+            {part.n === 9 ? "Refresh from the survey" : "Suggest wording from our records"}
+          </button>
         </div>
       ))}
-      {canEdit && (
-        <button type="button" disabled={busy} onClick={() => onSave(contents)}>
-          Save the statement
-        </button>
-      )}
-      {statement.status !== "draft" && (
-        <button type="button" className="quiet no-print" onClick={() => window.print()}>
-          Print or save as PDF
-        </button>
-      )}
+      <button type="button" disabled={busy} onClick={() => onSave(contents)}>
+        Save the report
+      </button>
     </section>
+  );
+}
+
+/** Report text: sub-headings, paragraphs, bullets and simple tables. No images. */
+function ReportText({ content }: { content: string }) {
+  return (
+    <>
+      {parseReport(content).map((b, i) =>
+        b.kind === "heading" ? (
+          <h3 key={i}>{b.text}</h3>
+        ) : b.kind === "list" ? (
+          <ul key={i}>
+            {b.items.map((x, k) => (
+              <li key={k}>{x}</li>
+            ))}
+          </ul>
+        ) : b.kind === "table" ? (
+          <table key={i} className="report-table">
+            <thead>
+              <tr>
+                {b.rows[0].map((c, k) => (
+                  <th key={k} scope="col">
+                    {c}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {b.rows.slice(1).map((row, r) => (
+                <tr key={r}>
+                  {row.map((c, k) => (k === 0 ? <th key={k} scope="row">{c}</th> : <td key={k}>{c}</td>))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p key={i}>{b.text}</p>
+        ),
+      )}
+    </>
   );
 }
 
@@ -239,6 +275,7 @@ export default function ModernSlavery({ organisationId, organisationName, role, 
             ← Back to statements
           </button>
         </p>
+        <div className="no-print">
         <p className="eyebrow">Modern slavery statement</p>
         <h1>{entityName(open.reporting_entity_id)}</h1>
         <p className="lead">
@@ -254,6 +291,7 @@ export default function ModernSlavery({ organisationId, organisationName, role, 
             {open.lodged_on ? ` Lodged on the register on ${formatDay(open.lodged_on)}${open.is_joint ? " as a joint statement" : ""}${open.revenue_band ? `, revenue band ${open.revenue_band}` : ""}.` : ""}
           </p>
         )}
+        </div>
         {messages}
 
         <section className="block no-print">
@@ -392,12 +430,55 @@ export default function ModernSlavery({ organisationId, organisationName, role, 
 
         <Editor
           key={`${open.id}-${open.status}`}
-          statement={open}
+          heading={
+            <>
+              <p className="eyebrow">Modern Slavery Statement</p>
+              <h1>{entityName(open.reporting_entity_id)}</h1>
+              <p className="lead">
+                Reporting period {formatDay(open.period_start)} to {formatDay(open.period_end)}
+              </p>
+            </>
+          }
+          closing={
+            <>
+              <div className="report-part">
+                <h2>Approval</h2>
+                {open.approved_on ? (
+                  <p>
+                    This statement was approved by {open.approved_body} on {formatDay(open.approved_on)}
+                    {open.approval_method ? ` by ${open.approval_method === "meeting" ? "resolution at a board meeting" : "circular resolution"}` : ""}.
+                  </p>
+                ) : (
+                  <p className="muted">Not yet approved. The approving body, date and signatory appear here once approval is recorded.</p>
+                )}
+                {open.ceo_signed_by && (
+                  <p className="signature">
+                    {open.ceo_signed_by}
+                    <br />
+                    {open.signed_role}
+                  </p>
+                )}
+              </div>
+              {open.is_joint && (
+                <div className="report-part">
+                  <h2>Appendix: entities covered by this statement</h2>
+                  <ul>
+                    {[open.reporting_entity_id, ...open.covered_entity_ids].map((id) => (
+                      <li key={id}>
+                        {entityName(id)}
+                        {id === open.reporting_entity_id ? " (reporting entity)" : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          }
           initial={sections}
           canEdit={canEdit}
           busy={busy}
-          draftFor={(n) => suggest(n, open, entities, reviews, data.suppliers, facts)}
-          onSave={(contents) => void run(() => saveSections(organisationId, open.id, contents), "Statement saved.")}
+          draftFor={(n) => draftPart(n, open, entities, reviews, supplierName, facts)}
+          onSave={(contents) => void run(() => saveSections(organisationId, open.id, contents), "Report saved.")}
         />
 
         {canManage && open.status === "draft" && (

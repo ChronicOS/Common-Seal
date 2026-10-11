@@ -18,6 +18,9 @@ checks (check_name, ok, detail) as (
          case when to_regclass('public.' || e.marker) is null then 'Table ' || e.marker || ' is missing' else '' end
   from expected e
   union all
+  select 'Migration 0021 has been run',
+         exists (select 1 from pg_constraint c where c.conname = 'ms_sections_criterion_check' and pg_get_constraintdef(c.oid) like '%0%9%'), ''
+  union all
   select 'Migration 0010 has been run',
          exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'contracts' and column_name = 'counterparty_entity_id'), ''
   union all

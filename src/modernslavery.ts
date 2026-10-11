@@ -22,7 +22,28 @@ export type Statement = {
   revenue_band: string | null;
   register_account_holder: string | null;
 };
-export type SurveyFacts = { name: string; sent: number; answered: number; high: number; medium: number; low: number; unrated: number; concerns: number; resolved: number; countries: string[]; audits: number | null };
+export type QuestionResult = { code: string; section: string; prompt: string; yes: number; no: number; total: number; favourable: number };
+export type SurveyFacts = {
+  name: string;
+  sent: number;
+  answered: number;
+  high: number;
+  medium: number;
+  low: number;
+  unrated: number;
+  concerns: number;
+  resolved: number;
+  countries: string[];
+  highCountries: string[];
+  countrySource: string | null;
+  audits: number | null;
+  priorAudits: number | null;
+  prior: { sent: number; answered: number; high: number; concerns: number } | null;
+  migrant: { yes: number; total: number } | null;
+  sections: string[];
+  /** One row per yes/no question. "favourable" counts the answers that raise no flag. */
+  results: QuestionResult[];
+};
 export type Section = { statement_id: string; criterion: number; content: string };
 export type SupplierAnswers = {
   higher_risk_country?: boolean;
@@ -91,18 +112,41 @@ export async function loadFacts(organisationId: string, s: Statement): Promise<M
     client.from("training_assignments").select("module_id, completed_at").eq("organisation_id", organisationId).not("completed_at", "is", null),
     client.from("policies").select("id, title, is_retired").eq("organisation_id", organisationId),
     client.from("policy_versions").select("policy_id").eq("organisation_id", organisationId).eq("status", "approved"),
-    client.from("ms_campaigns").select("id, name, audits_conducted").eq("organisation_id", organisationId).eq("statement_id", s.id).limit(1),
+    client.from("ms_campaigns").select("id, name, audits_conducted, survey_year").eq("organisation_id", organisationId).eq("statement_id", s.id).limit(1),
   ]);
   let survey: SurveyFacts | null = null;
-  const campaign = ((campaigns.data ?? []) as { id: string; name: string; audits_conducted: number | null }[])[0];
+  const campaign = ((campaigns.data ?? []) as { id: string; name: string; audits_conducted: number | null; survey_year: number }[])[0];
   if (campaign) {
-    const [recipients, concerns] = await Promise.all([
-      client.from("ms_recipients").select("submitted_at, risk_level, countries").eq("campaign_id", campaign.id),
+    type R = { submitted_at: string | null; risk_level: string | null; countries: string[] | null; answers: Record<string, { a: string }> | null };
+    const [recipients, concerns, questions, ratings, priorCampaigns] = await Promise.all([
+      client.from("ms_recipients").select("submitted_at, risk_level, countries, answers").eq("campaign_id", campaign.id),
       client.from("ms_concerns").select("status").eq("campaign_id", campaign.id),
+      client.from("ms_questions").select("code, section, prompt, kind, adverse, position").order("position"),
+      client.from("ms_country_ratings").select("country, rating, source").eq("organisation_id", organisationId),
+      client.from("ms_campaigns").select("id, audits_conducted").eq("organisation_id", organisationId).eq("survey_year", campaign.survey_year - 1).limit(1),
     ]);
-    const rs = (recipients.data ?? []) as { submitted_at: string | null; risk_level: string | null; countries: string[] | null }[];
+    const rs = (recipients.data ?? []) as R[];
     const done = rs.filter((r) => r.submitted_at);
     const ks = (concerns.data ?? []) as { status: string }[];
+    const qs = ((questions.data ?? []) as { code: string; section: string; prompt: string; kind: string; adverse: string | null }[]).filter((q) => q.kind === "yesno");
+    const cr = (ratings.data ?? []) as { country: string; rating: string; source: string | null }[];
+    const named = [...new Set(done.flatMap((r) => r.countries ?? []))].sort();
+    const results: QuestionResult[] = qs.map((q) => {
+      const yes = done.filter((r) => r.answers?.[q.code]?.a === "yes").length;
+      const no = done.filter((r) => r.answers?.[q.code]?.a === "no").length;
+      return { code: q.code, section: q.section, prompt: q.prompt.replace(/(the )?\{organisation\}/g, "our"), yes, no, total: yes + no, favourable: q.adverse === "yes" ? no : q.adverse === "no" ? yes : yes };
+    });
+    const migrant = results.find((r) => r.code === "migrant_workers");
+    let prior: SurveyFacts["prior"] = null;
+    const priorCampaign = ((priorCampaigns.data ?? []) as { id: string; audits_conducted: number | null }[])[0];
+    if (priorCampaign) {
+      const [pr, pk] = await Promise.all([
+        client.from("ms_recipients").select("submitted_at, risk_level").eq("campaign_id", priorCampaign.id),
+        client.from("ms_concerns").select("id").eq("campaign_id", priorCampaign.id),
+      ]);
+      const prs = (pr.data ?? []) as { submitted_at: string | null; risk_level: string | null }[];
+      prior = { sent: prs.length, answered: prs.filter((r) => r.submitted_at).length, high: prs.filter((r) => r.risk_level === "high").length, concerns: (pk.data ?? []).length };
+    }
     survey = {
       name: campaign.name,
       sent: rs.length,
@@ -113,8 +157,15 @@ export async function loadFacts(organisationId: string, s: Statement): Promise<M
       unrated: done.filter((r) => !r.risk_level).length,
       concerns: ks.length,
       resolved: ks.filter((k) => k.status === "resolved").length,
-      countries: [...new Set(done.flatMap((r) => r.countries ?? []))].sort(),
+      countries: named,
+      highCountries: named.filter((n) => cr.some((k) => k.rating === "high" && k.country.trim().toLowerCase() === n.trim().toLowerCase())),
+      countrySource: cr.find((k) => k.source)?.source ?? null,
       audits: campaign.audits_conducted,
+      priorAudits: priorCampaign?.audits_conducted ?? null,
+      prior,
+      migrant: migrant ? { yes: migrant.yes, total: migrant.total } : null,
+      sections: [...new Set(qs.map((q) => q.section))],
+      results,
     };
   }
   const slavery = new Set(((modules.data ?? []) as { id: string; title: string }[]).filter((m) => /slavery/i.test(m.title)).map((m) => m.id));

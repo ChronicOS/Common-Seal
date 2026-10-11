@@ -1241,3 +1241,47 @@ h2.q-section {
 a.link-dark {
   color: var(--ink);
 }
+
+/* ---- Modern slavery report ---- */
+.report-part {
+  margin-top: 28px;
+}
+
+.report-part h3 {
+  margin: 18px 0 4px;
+  font-size: 17px;
+}
+
+.report-part p,
+.report-part li {
+  max-width: 70ch;
+  line-height: 1.6;
+}
+
+.signature {
+  margin-top: 28px;
+  font-weight: 600;
+}
+
+@media print {
+  .report-part {
+    break-inside: auto;
+  }
+
+  .report-part h2,
+  .report-part h3 {
+    break-after: avoid;
+  }
+}
+
+.report .report-table tbody th {
+  width: 56%;
+  font-weight: 400;
+}
+
+@media print {
+  .card.note,
+  p.error {
+    display: none;
+  }
+}
