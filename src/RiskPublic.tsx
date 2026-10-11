@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { openAction, openRequest, submitRequest, updateAction, type PublicAction, type PublicItem, type PublicRequest } from "./risk";
+import { deleteItemByLink, finishByLink, openAction, openRequest, saveItemByLink, updateAction, type PublicAction, type PublicRequest } from "./risk";
+import { blankRisk, RiskCard, RiskForm } from "./RiskParts";
 
 const day = (iso: string) => new Date(iso.length === 10 ? `${iso}T00:00:00` : iso).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
-const blank = (): PublicItem => ({ id: null, title: "", detail: "", action: "", actioner: "", actioner_email: "", due_on: "", is_closed: false, carried: false });
 
 function Shell({ children }: { children: ReactNode }) {
   return (
@@ -15,21 +15,35 @@ function Shell({ children }: { children: ReactNode }) {
   );
 }
 
-/** The page a responsible user sees from the link in their risk review email. No account needed. */
+/** The page a responsible user sees from the link in their risk review email. No account needed, and they can come back to it. */
 export function RiskRespond({ token }: { token: string }) {
   const [q, setQ] = useState<PublicRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [name, setName] = useState("");
-  const [items, setItems] = useState<PublicItem[]>([]);
+  const [name, setName] = useState(() => {
+    try {
+      return sessionStorage.getItem("cs-risk-name") ?? "";
+    } catch {
+      return "";
+    }
+  });
+  // Which form is open: a saved risk's id, "new", or none
+  const [editing, setEditing] = useState<string | null>(null);
   const [nothing, setNothing] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const reload = () =>
+    openRequest(token).then((data) => {
+      setQ(data);
+      return data;
+    });
 
   useEffect(() => {
     openRequest(token).then(
       (data) => {
         setQ(data);
-        setItems(data.items.map((i) => ({ ...i, detail: i.detail ?? "", actioner: i.actioner ?? "", actioner_email: i.actioner_email ?? "", due_on: i.due_on ?? "" })));
+        if (data.items.length === 0 && data.open) setEditing("new");
+        setName((n) => n || data.submitted_by || (data.people.length === 1 ? data.people[0] : ""));
       },
       (e) => setError(e instanceof Error ? e.message : "This link could not be opened."),
     );
@@ -49,17 +63,6 @@ export function RiskRespond({ token }: { token: string }) {
       </Shell>
     );
   }
-  if (done || q.submitted_at) {
-    return (
-      <Shell>
-        <p className="eyebrow">{q.organisation} · {q.review}</p>
-        <h1>Thank you</h1>
-        <p className="lead">
-          Your input on {q.category} risk has been received{q.submitted_at && !done ? ` (submitted ${day(q.submitted_at)})` : ""}. If you need to change it, reply to the email you were sent.
-        </p>
-      </Shell>
-    );
-  }
   if (!q.open) {
     return (
       <Shell>
@@ -70,53 +73,50 @@ export function RiskRespond({ token }: { token: string }) {
     );
   }
 
-  const set = (i: number, patch: Partial<PublicItem>) => setItems(items.map((x, n) => (n === i ? { ...x, ...patch } : x)));
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (name.trim().length < 2) return setError("Please choose or enter who is completing this.");
-    if (items.length === 0 && !nothing) return setError("Add at least one incident or update, or tick that there is nothing to report.");
-    const bad = items.findIndex((x) => x.title.trim().length < 3 || x.action.trim().length < 2);
-    if (bad >= 0) return setError(`Item ${bad + 1} needs both a description and an action, control or mitigation. "Continue to monitor" is fine.`);
-    const badEmail = items.findIndex((x) => x.actioner_email.trim() !== "" && !/.+@.+\..+/.test(x.actioner_email));
-    if (badEmail >= 0) return setError(`Item ${badEmail + 1}: the actioner's email does not look right.`);
+  async function act(work: () => Promise<void>, done?: string) {
+    if (name.trim().length < 2) {
+      setError("Please choose or enter who is completing this, at the top of the page.");
+      document.getElementById("rr-name")?.focus();
+      return false;
+    }
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
-      await submitRequest(token, name, nothing, items);
-      setDone(true);
-      window.scrollTo(0, 0);
+      sessionStorage.setItem("cs-risk-name", name.trim());
+    } catch {
+      // Remembering the name is a convenience only
+    }
+    try {
+      await work();
+      await reload();
+      if (done) setNotice(done);
+      return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Your input could not be sent. Please try again.");
+      setError(e instanceof Error ? e.message : "That could not be saved. Please try again.");
+      return false;
     } finally {
       setBusy(false);
     }
   }
 
+  const unanswered = q.items.filter((i) => i.owner_comment && !i.comment_resolved).length;
+
   return (
     <Shell>
       <p className="eyebrow">{q.organisation} · {q.review}</p>
-      <h1>{q.category} risk</h1>
+      <h1>{q.category}</h1>
       <p className="lead">
         Please respond by {day(q.respond_by)}. Your input goes into the risk report{q.forum ? ` for the ${q.forum}` : ""} on {day(q.forum_on)}.
       </p>
-      {q.query && (
+      {q.covers && <p className="muted">This category covers: {q.covers}.</p>}
+      {unanswered > 0 && (
         <p className="card warning">
-          <strong>A question for you:</strong> {q.query}
+          The report owner has commented on {unanswered} of your risks. Open each one, amend it, and tick the box to show the comment is resolved.
         </p>
       )}
-      <section className="card">
-        {q.covers && <p>This category covers: {q.covers}.</p>}
-        {q.examples && (
-          <>
-            <strong>Examples of what would be material</strong>
-            <p className="muted">{q.examples}</p>
-            <p className="muted">These are prompts only. Report anything you think the forum should know.</p>
-          </>
-        )}
-      </section>
 
-      <form className="form block" onSubmit={submit} noValidate>
+      <div className="form">
         <label htmlFor="rr-name">Who is completing this?</label>
         <input id="rr-name" list="rr-people" autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} />
         <datalist id="rr-people">
@@ -124,69 +124,84 @@ export function RiskRespond({ token }: { token: string }) {
             <option key={p} value={p} />
           ))}
         </datalist>
+      </div>
 
-        {items.some((x) => x.carried) && <p className="muted">Items marked "from the last review" were still open. Please update each one, or mark it resolved.</p>}
-        {items.map((x, i) => (
-          <fieldset key={i} className="card plain-fieldset question">
-            <legend>
-              Item {i + 1}
-              {x.carried ? " · from the last review" : ""}
-            </legend>
-            <label htmlFor={`ri-title-${i}`}>Incident or update</label>
-            <input id={`ri-title-${i}`} value={x.title} onChange={(e) => set(i, { title: e.target.value })} />
-            <label htmlFor={`ri-detail-${i}`}>Details (optional)</label>
-            <textarea id={`ri-detail-${i}`} rows={3} value={x.detail} onChange={(e) => set(i, { detail: e.target.value })} />
-            <label htmlFor={`ri-action-${i}`}>Action, control or mitigation</label>
-            <textarea id={`ri-action-${i}`} rows={2} placeholder='For example "Continue to monitor"' value={x.action} onChange={(e) => set(i, { action: e.target.value })} />
-            <div className="row">
-              <span className="field">
-                <label htmlFor={`ri-who-${i}`}>Who will action it</label>
-                <input id={`ri-who-${i}`} value={x.actioner} onChange={(e) => set(i, { actioner: e.target.value })} />
-              </span>
-              <span className="field">
-                <label htmlFor={`ri-email-${i}`}>Their email</label>
-                <input id={`ri-email-${i}`} type="email" value={x.actioner_email} onChange={(e) => set(i, { actioner_email: e.target.value })} />
-              </span>
-              <span className="field">
-                <label htmlFor={`ri-due-${i}`}>Due date</label>
-                <input id={`ri-due-${i}`} type="date" value={x.due_on} onChange={(e) => set(i, { due_on: e.target.value })} />
-              </span>
+      {notice && (
+        <p className="card note" role="status">
+          {notice}
+        </p>
+      )}
+      {error && (
+        <p className="error block" role="alert">
+          {error}
+        </p>
+      )}
+
+      <section className="block">
+        {q.items.map((i, n) =>
+          editing === i.id ? (
+            <div key={i.id} className="card">
+              <RiskForm
+                idPrefix={`r${n}`}
+                initial={{ title: i.title, action: i.action, due_on: i.due_on ?? "", actioner: i.actioner ?? "", actioner_email: i.actioner_email ?? "", is_closed: i.is_closed, comment_resolved: i.comment_resolved }}
+                examples={q.examples}
+                comment={i.owner_comment}
+                isSaved
+                busy={busy}
+                onSave={(v) => void act(() => saveItemByLink(token, name, i.id, v), "Saved.").then((ok) => ok && setEditing(null))}
+                onCancel={() => setEditing(null)}
+                onDelete={i.carried ? undefined : () => void act(() => deleteItemByLink(token, i.id), "Removed.").then((ok) => ok && setEditing(null))}
+              />
             </div>
-            <span className="muted">With an email and due date, the actioner is reminded a week before and on the day.</span>
-            <label className="check">
-              <input type="checkbox" checked={x.is_closed} onChange={(e) => set(i, { is_closed: e.target.checked })} /> This is resolved and can be closed
-            </label>
-            {!x.carried && (
-              <button type="button" className="link-dark" onClick={() => setItems(items.filter((_, n) => n !== i))}>
-                Remove this item
-              </button>
-            )}
-          </fieldset>
-        ))}
-        <button
-          type="button"
-          className="quiet"
-          onClick={() => {
-            setItems([...items, blank()]);
-            setNothing(false);
-          }}
-        >
-          Add an incident or update
-        </button>
-        {items.length === 0 && (
-          <label className="check">
-            <input type="checkbox" checked={nothing} onChange={(e) => setNothing(e.target.checked)} /> There is nothing to report for {q.category} this period
-          </label>
+          ) : (
+            <div key={i.id} className="card">
+              <RiskCard title={i.title} action={i.action} due_on={i.due_on} actioner={i.actioner} is_closed={i.is_closed} carried={i.carried} comment={i.owner_comment} commentResolved={i.comment_resolved} onEdit={() => setEditing(i.id)} />
+            </div>
+          ),
         )}
-        {error && (
-          <p className="error" role="alert">
-            {error}
+
+        {editing === "new" ? (
+          <div className="card">
+            <RiskForm
+              key={q.items.length}
+              idPrefix="rnew"
+              initial={blankRisk()}
+              examples={q.examples}
+              isSaved={false}
+              busy={busy}
+              onSave={(v) => void act(() => saveItemByLink(token, name, null, v), "Saved. You can come back to this page and edit it until the review closes.").then((ok) => ok && setEditing(null))}
+              onCancel={q.items.length > 0 ? () => setEditing(null) : undefined}
+            />
+          </div>
+        ) : (
+          <button type="button" className="quiet" onClick={() => setEditing("new")}>
+            {q.items.length === 0 ? "Add a Risk" : "Add another Risk"}
+          </button>
+        )}
+      </section>
+
+      <section className="card form">
+        <h2>When you have finished</h2>
+        {q.submitted_at ? (
+          <p>
+            Marked as finished on {day(q.submitted_at)}
+            {q.submitted_by ? ` by ${q.submitted_by}` : ""}. You can still add and edit risks until the review closes.
           </p>
+        ) : (
+          <>
+            <p className="muted">Reminders continue until you tell us you have finished.</p>
+            {q.items.length === 0 && (
+              <label className="check">
+                <input type="checkbox" checked={nothing} onChange={(e) => setNothing(e.target.checked)} /> There is nothing to report for {q.category} this period
+              </label>
+            )}
+            <button type="button" disabled={busy || (q.items.length === 0 && !nothing) || editing !== null} onClick={() => void act(() => finishByLink(token, name, q.items.length === 0), "Thank you. Your input has been sent to the report owner.")}>
+              Finished
+            </button>
+            {editing !== null && <span className="muted">Save or cancel the risk you are editing first.</span>}
+          </>
         )}
-        <button type="submit" disabled={busy}>
-          {busy ? "Sending…" : "Submit"}
-        </button>
-      </form>
+      </section>
     </Shell>
   );
 }

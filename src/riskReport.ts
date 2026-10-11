@@ -2,7 +2,7 @@ import type { Category, Contact, Item, Request, Review } from "./risk";
 
 const FONT = "Arial";
 const SIZE = 10;
-const HEADINGS = ["Incident or update", "Action, control or mitigation", "Actioner", "Due", "Status"];
+const HEADINGS = ["Risk", "Actions, controls, mitigations", "Actioner", "Due", "Status"];
 const COLUMNS = [4.6, 3.6, 1.5, 1.1, 1.5];
 const TABLE_TOP = 1.3;
 // Room for the table between its top and the footer, in inches
@@ -67,7 +67,7 @@ export async function downloadRiskReport(organisation: string, review: Review, c
     const texts = rows.map((i) => [
       `${i.title}${i.detail ? `\n${i.detail}` : ""}`,
       i.action,
-      i.actioner ?? "Not assigned",
+      i.actioner ?? (responsible.join(", ") || "Not assigned"),
       i.due_on ? day(i.due_on) : "No date",
       i.is_closed ? `Resolved${i.resolution ? `: ${i.resolution}` : ""}` : i.carried_from_id ? "Open, carried forward" : "Open",
     ]);

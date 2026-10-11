@@ -1339,3 +1339,49 @@ details.category[open] summary {
   margin: 0;
   font-size: 18px;
 }
+
+/* Risk Register: entry form, saved risks, people table */
+.risk-entry {
+  border-top: 1px solid var(--rule);
+  padding: 14px 0;
+}
+
+.risk-card h4 {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+
+.risk-card p {
+  margin: 0 0 6px;
+}
+
+.risk-form {
+  border-left: 3px solid var(--ink);
+  padding-left: 14px;
+  margin: 10px 0;
+}
+
+.risk-form textarea {
+  min-height: 110px;
+}
+
+.risk-form textarea::placeholder {
+  color: var(--soft);
+  opacity: 0.75;
+}
+
+.people-table td {
+  vertical-align: top;
+}
+
+.person {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.people-table td > span + button {
+  margin-left: 8px;
+}

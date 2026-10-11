@@ -18,6 +18,9 @@ checks (check_name, ok, detail) as (
          case when to_regclass('public.' || e.marker) is null then 'Table ' || e.marker || ' is missing' else '' end
   from expected e
   union all
+  select 'Migration 0024 has been run',
+         exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'risk_items' and column_name = 'owner_comment'), ''
+  union all
   select 'Migration 0022 has been run',
          exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'ms_questions' and column_name = 'is_active'), ''
   union all
@@ -48,14 +51,14 @@ checks (check_name, ok, detail) as (
          coalesce((select string_agg(distinct g.table_name, ', ') from information_schema.role_table_grants g
                    where g.grantee = 'authenticated' and g.table_schema = 'public' and g.privilege_type = 'TRUNCATE'), '')
   union all
-  -- The deliberate exceptions: six functions that each need the long code from a person's own link
+  -- The deliberate exceptions: eight functions that each need the long code from a person's own link
   select 'Visitors who are not signed in can run nothing except the personal-link pages',
          not exists (select 1 from pg_proc p where p.pronamespace in ('public'::regnamespace, 'app'::regnamespace)
-                       and p.proname not in ('ms_questionnaire', 'ms_submit_questionnaire', 'risk_request', 'risk_submit', 'risk_action', 'risk_action_update')
+                       and p.proname not in ('ms_questionnaire', 'ms_submit_questionnaire', 'risk_request', 'risk_save_item', 'risk_delete_item', 'risk_finish', 'risk_action', 'risk_action_update')
                        and p.prosecdef and has_function_privilege('anon', p.oid, 'execute')),
          coalesce((select string_agg(p.proname, ', ') from pg_proc p
                    where p.pronamespace in ('public'::regnamespace, 'app'::regnamespace)
-                     and p.proname not in ('ms_questionnaire', 'ms_submit_questionnaire', 'risk_request', 'risk_submit', 'risk_action', 'risk_action_update')
+                     and p.proname not in ('ms_questionnaire', 'ms_submit_questionnaire', 'risk_request', 'risk_save_item', 'risk_delete_item', 'risk_finish', 'risk_action', 'risk_action_update')
                      and p.prosecdef and has_function_privilege('anon', p.oid, 'execute')), '')
   union all
   select 'Every privileged function has a fixed search path',

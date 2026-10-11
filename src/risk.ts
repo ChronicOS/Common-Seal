@@ -49,7 +49,11 @@ export type Item = {
   entered_by: string | null;
   prompt_week_sent_at: string | null;
   prompt_due_sent_at: string | null;
+  owner_comment: string | null;
+  comment_resolved: boolean;
 };
+/** The fields of the entry form: Risk; Actions, Controls, Mitigations; Due date; and the optional actioner. */
+export type RiskValues = { title: string; action: string; due_on: string; actioner: string; actioner_email: string; is_closed: boolean; comment_resolved: boolean };
 export type ItemUpdate = { id: string; item_id: string; by_name: string; resolved: boolean; note: string; created_at: string };
 export type RiskData = {
   categories: Category[];
@@ -68,7 +72,7 @@ export const REVIEW_STATUS: Record<Review["status"], string> = { scheduled: "Sch
 export const EMAIL_NAME: Record<RequestEmail, string> = { request: "Request", reminder1: "First reminder", reminder2: "Second reminder", escalation: "Escalation to manager" };
 
 const ITEM_COLUMNS =
-  "id, review_id, category_id, position, title, detail, action, actioner, actioner_email, due_on, is_closed, resolution, carried_from_id, entered_by, prompt_week_sent_at, prompt_due_sent_at";
+  "id, review_id, category_id, position, title, detail, action, actioner, actioner_email, due_on, is_closed, resolution, carried_from_id, entered_by, prompt_week_sent_at, prompt_due_sent_at, owner_comment, comment_resolved";
 
 export const today = () => {
   const d = new Date();
@@ -159,21 +163,26 @@ export async function markRequestSent(id: string, kind: RequestEmail) {
   const column = kind === "request" ? "sent_at" : kind === "reminder1" ? "reminder1_sent_at" : kind === "reminder2" ? "reminder2_sent_at" : "escalated_at";
   check((await db().from("risk_requests").update({ [column]: new Date().toISOString() }).eq("id", id)).error);
 }
-export async function sendBack(requestId: string, query: string) {
-  check((await db().rpc("reopen_risk_request", { p_request: requestId, p_query: query })).error);
+export async function commentItem(itemId: string, comment: string) {
+  check((await db().rpc("comment_risk_item", { p_item: itemId, p_comment: comment })).error);
 }
-export async function saveItem(organisationId: string, reviewId: string, categoryId: string, i: Partial<Item> & { title: string; action: string }) {
+export async function setRequestFinished(requestId: string, finished: boolean) {
+  check((await db().rpc("set_risk_request_finished", { p_request: requestId, p_finished: finished })).error);
+}
+/** The report owner entering or editing a risk on someone's behalf. */
+export async function saveItem(organisationId: string, reviewId: string, categoryId: string, id: string | null, v: RiskValues, hasComment: boolean) {
   const row = {
-    title: i.title.trim(),
-    detail: i.detail?.trim() || null,
-    action: i.action.trim(),
-    actioner: i.actioner?.trim() || null,
-    actioner_email: i.actioner_email?.trim() || null,
-    due_on: i.due_on || null,
-    is_closed: Boolean(i.is_closed),
+    title: v.title.trim(),
+    action: v.action.trim(),
+    actioner: v.actioner.trim() || null,
+    actioner_email: v.actioner_email.trim() || null,
+    due_on: v.due_on || null,
+    is_closed: v.is_closed,
+    // The Risk box now holds everything; older rows kept a separate detail
+    detail: null,
   };
-  if (i.id) check((await db().from("risk_items").update(row).eq("id", i.id)).error);
-  else check((await db().from("risk_items").insert({ ...row, organisation_id: organisationId, review_id: reviewId, category_id: categoryId, position: 999, entered_by: "Report owner" })).error);
+  if (id) check((await db().from("risk_items").update(hasComment ? { ...row, comment_resolved: v.comment_resolved } : row).eq("id", id)).error);
+  else check((await db().from("risk_items").insert({ ...row, organisation_id: organisationId, review_id: reviewId, category_id: categoryId, position: 999, entered_by: "The report owner" })).error);
 }
 export async function deleteItem(id: string) {
   check((await db().from("risk_items").delete().eq("id", id)).error);
@@ -203,7 +212,7 @@ export function liveActions(data: RiskData): Item[] {
 }
 /** The prompt an actioner is due: a week before the due date, then on it. */
 export function promptDue(i: Item, on: string): "week" | "due" | null {
-  if (i.is_closed || !i.due_on || !i.actioner_email) return null;
+  if (i.is_closed || !i.due_on) return null;
   if (on >= i.due_on && !i.prompt_due_sent_at) return "due";
   if (on >= addDays(i.due_on, -7) && !i.prompt_week_sent_at && !i.prompt_due_sent_at) return "week";
   return null;
@@ -214,7 +223,18 @@ export function mailto(to: string[], subject: string, body: string, cc: string[]
 }
 
 // ---- Public pages: no sign-in ----
-export type PublicItem = { id: string | null; title: string; detail: string; action: string; actioner: string; actioner_email: string; due_on: string; is_closed: boolean; carried: boolean };
+export type PublicItem = {
+  id: string;
+  title: string;
+  action: string;
+  actioner: string | null;
+  actioner_email: string | null;
+  due_on: string | null;
+  is_closed: boolean;
+  carried: boolean;
+  owner_comment: string | null;
+  comment_resolved: boolean;
+};
 export type PublicRequest = {
   organisation: string;
   review: string;
@@ -223,21 +243,27 @@ export type PublicRequest = {
   respond_by: string;
   open: boolean;
   submitted_at: string | null;
+  submitted_by: string | null;
   nothing_to_report: boolean;
-  query: string | null;
   category: string;
   covers: string | null;
   examples: string | null;
   people: string[];
-  items: (Omit<PublicItem, "detail" | "actioner" | "actioner_email" | "due_on"> & { detail: string | null; actioner: string | null; actioner_email: string | null; due_on: string | null })[];
+  items: PublicItem[];
 };
 export async function openRequest(token: string): Promise<PublicRequest> {
   const { data, error } = await db().rpc("risk_request", { p_token: token });
   check(error);
   return data as PublicRequest;
 }
-export async function submitRequest(token: string, name: string, nothing: boolean, items: PublicItem[]) {
-  check((await db().rpc("risk_submit", { p_token: token, p_name: name, p_nothing: nothing, p_items: items.map((i) => ({ ...i, due_on: i.due_on || null })) })).error);
+export async function saveItemByLink(token: string, name: string, id: string | null, v: RiskValues) {
+  check((await db().rpc("risk_save_item", { p_token: token, p_name: name, p_item: { id, ...v, due_on: v.due_on || null } })).error);
+}
+export async function deleteItemByLink(token: string, id: string) {
+  check((await db().rpc("risk_delete_item", { p_token: token, p_item: id })).error);
+}
+export async function finishByLink(token: string, name: string, nothing: boolean) {
+  check((await db().rpc("risk_finish", { p_token: token, p_name: name, p_nothing: nothing })).error);
 }
 export type PublicAction = {
   organisation: string;
