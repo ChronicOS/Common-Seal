@@ -1507,3 +1507,13 @@ button.nav-head::after {
     font-size: inherit;
   }
 }
+
+/* The side menu stays in view and scrolls on its own when it is taller than the window */
+@media (min-width: 801px) {
+  .side-nav {
+    align-self: start;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
