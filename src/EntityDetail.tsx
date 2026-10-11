@@ -141,12 +141,26 @@ export default function EntityDetail({ organisationId, entity, data, canEdit, re
         return run(() => updateEntity(entity.id, { legal_form: value as EntityForm }));
       case "acn": {
         const acn = parseAcn(value);
-        if (!acn) return setError("That is not a valid ACN. It should be nine digits; check for a typing error.");
+        if (!acn) {
+          const n = value.replace(/\D/g, "").length;
+          return setError(
+            n !== 9
+              ? `An ACN has nine digits; that has ${n}.`
+              : "That has nine digits, but it is not a real ACN: the last digit is a check digit worked out from the first eight, and it does not match. Check for a typing error. For testing, 123 456 780 passes.",
+          );
+        }
         return run(() => updateEntity(entity.id, { acn }));
       }
       case "abn": {
         const abn = parseAbn(value);
-        if (!abn) return setError("That is not a valid ABN. It should be eleven digits; check for a typing error.");
+        if (!abn) {
+          const n = value.replace(/\D/g, "").length;
+          return setError(
+            n !== 11
+              ? `An ABN has eleven digits; that has ${n}.`
+              : "That has eleven digits, but it is not a real ABN: the digits must satisfy the tax office's built-in check, and these do not. Check for a typing error. For testing, 51 824 753 556 passes.",
+          );
+        }
         return run(() => updateEntity(entity.id, { abn }));
       }
       case "incorporated_on":
