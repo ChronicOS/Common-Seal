@@ -1416,3 +1416,8 @@ details.category[open] summary {
   color: var(--soft);
   overflow-wrap: anywhere;
 }
+
+.presence-dot.idle {
+  background: transparent;
+  border: 2px solid #8a938f;
+}

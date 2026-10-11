@@ -1,4 +1,4 @@
-import { nameList, usePresence } from "./presence";
+import { labelled, nameList, people, usePresence } from "./presence";
 import { has, roleLabels } from "./roles";
 import { Fragment, useCallback, useEffect, useState, type FormEvent } from "react";
 import Authority from "./Authority";
@@ -147,8 +147,8 @@ export default function Workspace({ membership, userId, userName }: { membership
     <nav className="side-nav" aria-label="Sections">
       {others.length > 0 && (
         <p className="presence" role="status">
-          <span className="presence-dot" aria-hidden="true" />
-          Also online: {nameList(others.map((o) => o.name))}
+          <span className={people(others).every((o) => o.idle) ? "presence-dot idle" : "presence-dot"} aria-hidden="true" />
+          Also online: {labelled(others)}
         </p>
       )}
       {TABS.map((t) => {
@@ -164,11 +164,13 @@ export default function Workspace({ membership, userId, userName }: { membership
           >
             {t.label}
             {t.id === "foryou" && inbox && inbox.length > 0 && <span className="nav-count">{inbox.length}</span>}
-            {here.length > 0 && <span className="presence-dot" role="img" aria-label={`${nameList(here.map((o) => o.name))} ${here.length === 1 ? "is" : "are"} on this tab`} title={nameList(here.map((o) => o.name))} />}
+            {here.length > 0 && <span className={people(here).every((o) => o.idle) ? "presence-dot idle" : "presence-dot"} role="img" aria-label={`${labelled(here)} ${people(here).length === 1 ? "is" : "are"} on this tab`} title={labelled(here)} />}
           </button>
           {tab === t.id && here.length > 0 && (
             <span className="presence-here">
-              {nameList(here.map((o) => o.name))} {new Set(here.map((o) => o.name)).size === 1 ? "is" : "are"} also working on this tab
+              {people(here).every((o) => o.idle)
+                ? `${nameList(people(here).map((o) => o.name))} ${people(here).length === 1 ? "has" : "have"} this tab open but ${people(here).length === 1 ? "has" : "have"} been inactive for 15 minutes or more`
+                : `${labelled(here)} ${people(here).length === 1 ? "is" : "are"} also working on this tab`}
             </span>
           )}
         </Fragment>
