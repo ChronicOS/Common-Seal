@@ -3,7 +3,7 @@ import { supabase } from "./supabase";
 
 type Row = { id: string; document_id: string; created_at: string; file_name: string; size_bytes: number | null; sha256: string; storage_path: string };
 type Props = {
-  subjectTable: "expense_claims" | "contracts" | "policies" | "workflow_run_steps" | "register_entries" | "dd_cases";
+  subjectTable: "expense_claims" | "contracts" | "policies" | "workflow_run_steps" | "register_entries" | "dd_cases" | "ms_statements";
   subjectId: string;
   canAttach: boolean;
   label?: string;

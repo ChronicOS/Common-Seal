@@ -1152,3 +1152,92 @@ ol.steps > li.step-open {
     break-inside: avoid;
   }
 }
+
+/* ---- Supplier survey ---- */
+.dash {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px 48px;
+  margin-bottom: 20px;
+}
+
+.ring {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.ring-track {
+  fill: none;
+  stroke: var(--rule);
+  stroke-width: 14;
+}
+
+.ring-part {
+  fill: none;
+  stroke-width: 14;
+}
+
+.ring-number {
+  font-family: var(--serif);
+  font-size: 26px;
+  fill: var(--ink);
+}
+
+.ring-caption {
+  font-size: 10px;
+  fill: var(--soft);
+}
+
+.ring-part.tone-good { stroke: #2f6f5e; }
+.ring-part.tone-mid { stroke: #c8922a; }
+.ring-part.tone-bad { stroke: #8f2f1b; }
+.ring-part.tone-none { stroke: #a9a596; }
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.swatch.tone-good { background: #2f6f5e; }
+.swatch.tone-mid { background: #c8922a; }
+.swatch.tone-bad { background: #8f2f1b; }
+.swatch.tone-none { background: #a9a596; }
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.small {
+  font-size: 14px;
+}
+
+.answer-list li {
+  margin-bottom: 8px;
+}
+
+ul.columns {
+  columns: 3 180px;
+  padding-left: 18px;
+}
+
+label.check.indent {
+  margin-left: 30px;
+}
+
+h2.q-section {
+  margin: 28px 0 8px;
+}
+
+a.link-dark {
+  color: var(--ink);
+}

@@ -271,7 +271,7 @@ export default function Workspace({ membership, userId }: { membership: Membersh
       <div className="workspace">
         {nav}
         <div className="workspace-main">
-        <ModernSlavery organisationId={organisation.id} role={role} entities={data?.entities ?? []} />
+        <ModernSlavery organisationId={organisation.id} organisationName={organisation.name} role={role} entities={data?.entities ?? []} />
         </div>
       </div>
     );

@@ -48,5 +48,7 @@ The Supabase project must be in Sydney (`ap-southeast-2`). Netlify serves only t
   - `0016_attachments.sql` – evidence files attached to records, with a fingerprint for each file.
   - `0017_modern_slavery.sql` – modern slavery statement against the seven criteria, supplier reviews, approval and lodgement.
   - `0018_attestations.sql` – attestation rounds: accountable people confirm or raise exceptions.
+  - `0019_hardening.sql` – removes default permissions on internal functions.
+  - `0020_ms_supplier_survey.sql` – modern slavery supplier survey: questionnaire by personal link, risk rating, concerns for Legal; joint statements and publication.
 
 After running migrations, run `supabase/checks/health_check.sql` in the SQL editor. It only reads, and every row should say `pass`.

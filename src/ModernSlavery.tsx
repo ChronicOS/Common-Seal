@@ -6,7 +6,8 @@ import {
   CRITERIA,
   loadFacts,
   loadModernSlavery,
-  lodgeStatement,
+  publishStatement,
+  setStatementScope,
   MS_STATUS,
   saveReview,
   saveSections,
@@ -17,10 +18,12 @@ import {
   type SupplierAnswers,
   type SupplierReview,
 } from "./modernslavery";
+import Attachments from "./Attachments";
+import MsSurvey from "./MsSurvey";
 import { today } from "./training";
 import type { Entity } from "./types";
 
-type Props = { organisationId: string; role: string; entities: Entity[] };
+type Props = { organisationId: string; organisationName: string; role: string; entities: Entity[] };
 
 const MANAGE_ROLES = ["owner", "admin", "secretary", "legal", "compliance"];
 const RISK: Record<SupplierReview["risk"], string> = { low: "Low risk", medium: "Medium risk", high: "High risk" };
@@ -37,11 +40,19 @@ function suggest(n: number, s: Statement, entities: Entity[], reviews: SupplierR
     case 2:
       return `${entity?.name ?? "The entity"} ${others.length ? `owns or controls ${others.length} other ${others.length === 1 ? "entity" : "entities"}: ${others.join(", ")}.` : "does not own or control any other entity."} [Describe what the group does, where it operates, how many people it employs, and the main goods and services it buys and from where.]`;
     case 3:
+      if (facts?.survey && facts.survey.answered > 0) {
+        const v = facts.survey;
+        return `We surveyed ${v.sent} third ${v.sent === 1 ? "party" : "parties"} in the period and ${v.answered} responded. We assessed each response for modern slavery risk using our annual spend with the third party and a country risk rating: ${v.high} rated high risk, ${v.medium} medium and ${v.low} low${v.unrated ? `, with ${v.unrated} not yet rated` : ""}. Their manufacturing facilities are located in ${v.countries.join(", ")}. ${v.concerns} ${v.concerns === 1 ? "response" : "responses"} raised a concern that was escalated to Legal. [Describe the risks in your own operations, and the sectors and countries that carry the most risk.]`;
+      }
       return reviews.length
         ? `We reviewed ${reviews.length} ${reviews.length === 1 ? "supplier" : "suppliers"} in the period: ${count("high")} rated high risk, ${count("medium")} medium and ${count("low")} low.${high.length ? ` The high-risk ratings relate to ${high.join(", ")}.` : ""} [Describe the risks in your own operations, and the sectors and countries that carry the most risk in your supply chain.]`
         : "[No supplier reviews are recorded for this period. Describe the risks in your operations and supply chain, and how you identified them.]";
     case 4: {
+      const v = facts?.survey;
       const parts = [
+        v ? `sent our modern slavery questionnaire to ${v.sent} third ${v.sent === 1 ? "party" : "parties"} and received ${v.answered} ${v.answered === 1 ? "response" : "responses"}` : "",
+        v && v.concerns > 0 ? `escalated ${v.concerns} ${v.concerns === 1 ? "concern" : "concerns"} to Legal, of which ${v.resolved} ${v.resolved === 1 ? "has" : "have"} been decided` : "",
+        v && v.audits != null ? `carried out ${v.audits} third-party ${v.audits === 1 ? "audit" : "audits"}` : "",
         facts && facts.ddCases > 0 ? `opened ${facts.ddCases} due diligence ${facts.ddCases === 1 ? "case" : "cases"} on third parties` : "",
         reviews.length ? `completed ${reviews.length} supplier risk ${reviews.length === 1 ? "review" : "reviews"}` : "",
         facts && facts.trainingDone > 0 ? `recorded ${facts.trainingDone} ${facts.trainingDone === 1 ? "completion" : "completions"} of modern slavery training` : "",
@@ -51,6 +62,7 @@ function suggest(n: number, s: Statement, entities: Entity[], reviews: SupplierR
       return `${parts.length ? `In the period we ${parts.join("; ")}.` : "[Describe the due diligence, training and contract steps taken in the period.]"}${actions.length ? ` Actions agreed with suppliers: ${actions.join(" ")}` : ""} [Describe any remediation.]`;
     }
     case 5:
+      if (facts?.survey) return `We track the response rate to our annual questionnaire (${facts.survey.answered} of ${facts.survey.sent} this period), the number of third parties in each risk rating, and the concerns escalated to Legal and how they were decided, and compare each with the prior year. [Describe reporting to the board and any other measures.]`;
       return "[Describe how you check that these actions work, for example tracking supplier ratings from year to year, reviewing reports raised through the speak-up channel, and reporting to the board.]";
     case 6:
       return others.length
@@ -117,7 +129,7 @@ function Editor({
   );
 }
 
-export default function ModernSlavery({ organisationId, role, entities }: Props) {
+export default function ModernSlavery({ organisationId, organisationName, role, entities }: Props) {
   const canManage = MANAGE_ROLES.includes(role);
 
   const [data, setData] = useState<MsData | null>(null);
@@ -137,9 +149,15 @@ export default function ModernSlavery({ organisationId, role, entities }: Props)
 
   const [body, setBody] = useState("");
   const [approvedOn, setApprovedOn] = useState(today);
-  const [signedBy, setSignedBy] = useState("");
-  const [signedRole, setSignedRole] = useState("Director");
+  const [method, setMethod] = useState("meeting");
+  const [ceo, setCeo] = useState("");
+  const [websiteOn, setWebsiteOn] = useState(today);
+  const [websiteUrl, setWebsiteUrl] = useState("");
   const [lodgedOn, setLodgedOn] = useState(today);
+  const [band, setBand] = useState("");
+  const [holder, setHolder] = useState("");
+  const [onWebsite, setOnWebsite] = useState(false);
+  const [surveyOpen, setSurveyOpen] = useState(false);
 
   const reload = useCallback(async () => {
     setData(await loadModernSlavery(organisationId));
@@ -229,14 +247,74 @@ export default function ModernSlavery({ organisationId, role, entities }: Props)
         </p>
         {open.approved_on && (
           <p className="card">
-            Approved by {open.approved_body} on {formatDay(open.approved_on)}. Signed by {open.signed_by}, {open.signed_role}.
-            {open.lodged_on ? ` Lodged on ${formatDay(open.lodged_on)}.` : ""}
+            Approved by {open.approved_body} on {formatDay(open.approved_on)}
+            {open.approval_method ? ` by ${open.approval_method === "meeting" ? "board meeting" : "circular resolution"}` : ""}. Signed by {open.ceo_signed_by ?? open.signed_by},{" "}
+            {open.signed_role}.
+            {open.website_published_on ? ` Published on the website on ${formatDay(open.website_published_on)}${open.website_url ? ` (${open.website_url})` : ""}.` : ""}
+            {open.lodged_on ? ` Lodged on the register on ${formatDay(open.lodged_on)}${open.is_joint ? " as a joint statement" : ""}${open.revenue_band ? `, revenue band ${open.revenue_band}` : ""}.` : ""}
           </p>
         )}
         {messages}
 
         <section className="block no-print">
+          <h2>Scope and report content</h2>
+          {open.is_joint && (
+            <p>
+              Joint statement covering {entityName(open.reporting_entity_id)} and {open.covered_entity_ids.map(entityName).join(", ")}.
+            </p>
+          )}
+          {canEdit ? (
+            <div className="card form">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={open.is_joint}
+                  disabled={busy || entities.length < 2}
+                  onChange={(e) =>
+                    void run(() =>
+                      setStatementScope(open.id, e.target.checked, e.target.checked ? entities.filter((x) => x.id !== open.reporting_entity_id).map((x) => x.id) : [], open.product_info_checked),
+                    )
+                  }
+                />{" "}
+                This is a joint statement covering other group entities
+              </label>
+              {open.is_joint &&
+                entities
+                  .filter((x) => x.id !== open.reporting_entity_id)
+                  .map((x) => (
+                    <label key={x.id} className="check indent">
+                      <input
+                        type="checkbox"
+                        checked={open.covered_entity_ids.includes(x.id)}
+                        disabled={busy}
+                        onChange={(e) =>
+                          void run(() =>
+                            setStatementScope(open.id, true, e.target.checked ? [...open.covered_entity_ids, x.id] : open.covered_entity_ids.filter((id) => id !== x.id), open.product_info_checked),
+                          )
+                        }
+                      />{" "}
+                      {x.name}
+                    </label>
+                  ))}
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={open.product_info_checked}
+                  disabled={busy}
+                  onChange={(e) => void run(() => setStatementScope(open.id, open.is_joint, open.covered_entity_ids, e.target.checked))}
+                />{" "}
+                Product information, imagery and pack shots in the report are up to date
+              </label>
+              <Attachments subjectTable="ms_statements" subjectId={open.id} canAttach={canEdit} label="Report, imagery and pack shots" />
+            </div>
+          ) : (
+            <Attachments subjectTable="ms_statements" subjectId={open.id} canAttach={false} label="Report, imagery and pack shots" />
+          )}
+        </section>
+
+        <section className="block no-print">
           <h2>Supplier reviews</h2>
+          <p className="muted">Quick internal reviews. Answers from suppliers themselves are in the supplier survey.</p>
           {reviews.length === 0 ? (
             <p className="muted">No suppliers reviewed for this period.</p>
           ) : (
@@ -328,29 +406,32 @@ export default function ModernSlavery({ organisationId, role, entities }: Props)
             onSubmit={(e) => {
               e.preventDefault();
               if (window.confirm("Record approval? The statement and supplier reviews can no longer be changed.")) {
-                void run(() => approveStatement(open.id, body, approvedOn, signedBy, signedRole), "Approval recorded. The statement is now fixed.");
+                void run(() => approveStatement(open.id, body, approvedOn, method, ceo), "Approval recorded. The statement is now fixed.");
               }
             }}
           >
-            <h2>Record approval</h2>
+            <h2>Record board approval</h2>
             <p className="muted">
-              The statement must be approved by the entity's principal governing body, usually the board, and signed by a
-              responsible member such as a director. Save the statement first.
+              The final report is signed off by the board, at a meeting or by circular resolution, and carries the signature of the CEO or Managing
+              Director. Save the statement first.
             </p>
             <label htmlFor="ms-body">Approved by</label>
             <input id="ms-body" placeholder={`e.g. Board of ${entityName(open.reporting_entity_id)}`} value={body} onChange={(e) => setBody(e.target.value)} />
             <div className="row">
               <span className="field">
+                <label htmlFor="ms-method">How</label>
+                <select id="ms-method" value={method} onChange={(e) => setMethod(e.target.value)}>
+                  <option value="meeting">Board meeting</option>
+                  <option value="circular">Circular resolution (by email)</option>
+                </select>
+              </span>
+              <span className="field">
                 <label htmlFor="ms-on">On</label>
                 <input id="ms-on" type="date" max={today()} value={approvedOn} onChange={(e) => setApprovedOn(e.target.value)} />
               </span>
               <span className="field">
-                <label htmlFor="ms-signed">Signed by</label>
-                <input id="ms-signed" value={signedBy} onChange={(e) => setSignedBy(e.target.value)} />
-              </span>
-              <span className="field">
-                <label htmlFor="ms-role">Their role</label>
-                <input id="ms-role" value={signedRole} onChange={(e) => setSignedRole(e.target.value)} />
+                <label htmlFor="ms-ceo">CEO or Managing Director who signed</label>
+                <input id="ms-ceo" value={ceo} onChange={(e) => setCeo(e.target.value)} />
               </span>
             </div>
             <button type="submit" disabled={busy}>
@@ -363,15 +444,59 @@ export default function ModernSlavery({ organisationId, role, entities }: Props)
             className="card form no-print"
             onSubmit={(e) => {
               e.preventDefault();
-              void run(() => lodgeStatement(open.id, lodgedOn), "Lodgement recorded.");
+              if (!onWebsite) return setError("Tick the box to confirm the report is on the entity's website.");
+              void run(() => publishStatement(open.id, { websiteOn, websiteUrl, registerOn: lodgedOn, revenueBand: band, accountHolder: holder }), "Publication recorded.");
             }}
           >
-            <h2>Record lodgement</h2>
-            <p className="muted">Lodge the statement on the government's modern slavery statements register, then record the date here.</p>
-            <label htmlFor="ms-lodged">Lodged on</label>
-            <input id="ms-lodged" type="date" className="short-wide" max={today()} value={lodgedOn} onChange={(e) => setLodgedOn(e.target.value)} />
+            <h2>Record publication</h2>
+            <p>
+              Due by <strong>{formatDay(open.due_on)}</strong>. The report must be published in two places.
+            </p>
+            <label className="check">
+              <input type="checkbox" checked={onWebsite} onChange={(e) => setOnWebsite(e.target.checked)} /> The report is published on the entity's website
+            </label>
+            <div className="row">
+              <span className="field">
+                <label htmlFor="ms-web-on">Website date</label>
+                <input id="ms-web-on" type="date" max={today()} value={websiteOn} onChange={(e) => setWebsiteOn(e.target.value)} />
+              </span>
+              <span className="field grow">
+                <label htmlFor="ms-web-url">Web address (optional)</label>
+                <input id="ms-web-url" type="url" value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} />
+              </span>
+            </div>
+            <h3>Australian Modern Slavery Register</h3>
+            <ul>
+              <li>
+                Lodge at{" "}
+                <a href="https://modernslaveryregister.gov.au/" target="_blank" rel="noreferrer">
+                  modernslaveryregister.gov.au
+                </a>
+                , signing in with the entity's register account.
+              </li>
+              <li>The register sends a passcode by SMS to the account holder's mobile, so they need to be available.</li>
+              <li>
+                {open.is_joint ? "Specify that this is a joint statement" : "This is recorded as a single-entity statement"}, enter {entityName(open.reporting_entity_id)} as the reporting
+                entity name, and select the band of annual consolidated revenue.
+              </li>
+            </ul>
+            <div className="row">
+              <span className="field">
+                <label htmlFor="ms-lodged">Lodged on the register</label>
+                <input id="ms-lodged" type="date" max={today()} value={lodgedOn} onChange={(e) => setLodgedOn(e.target.value)} />
+              </span>
+              <span className="field">
+                <label htmlFor="ms-band">Revenue band selected</label>
+                <input id="ms-band" placeholder="As shown on the register" value={band} onChange={(e) => setBand(e.target.value)} />
+              </span>
+              <span className="field">
+                <label htmlFor="ms-holder">Register account holder</label>
+                <input id="ms-holder" placeholder="Name of the person" value={holder} onChange={(e) => setHolder(e.target.value)} />
+              </span>
+            </div>
+            <p className="muted">The register password is not stored here. Keep it in your password manager.</p>
             <button type="submit" disabled={busy}>
-              Record lodgement
+              Record publication
             </button>
           </form>
         )}
@@ -379,13 +504,31 @@ export default function ModernSlavery({ organisationId, role, entities }: Props)
     );
   }
 
+  const survey = (
+    <MsSurvey
+      organisationId={organisationId}
+      organisationName={organisationName}
+      role={role}
+      statements={data.statements.map((x) => ({ id: x.id, label: `${entityName(x.reporting_entity_id)}, period to ${formatDay(x.period_end)}` }))}
+      onOpenChange={setSurveyOpen}
+    />
+  );
+  // The survey stays in the same place in the page whether or not one is open, so it keeps its state
   return (
     <>
-      <p className="eyebrow">Annual reporting</p>
-      <h1>Modern slavery</h1>
-      <p className="lead">One statement for each reporting period, written against the seven mandatory criteria and approved by the board.</p>
-      {messages}
+      {!surveyOpen && (
+        <>
+          <p className="eyebrow">Annual reporting</p>
+          <h1>Modern slavery</h1>
+          <p className="lead">Survey your third parties, assess the risk, then write, approve and publish the statement.</p>
+          {messages}
+        </>
+      )}
+      {survey}
+      {!surveyOpen && (
+        <>
       <section className="block">
+        <h2>Statements</h2>
         {data.statements.length === 0 ? (
           <p className="muted">No statements yet.</p>
         ) : (
@@ -448,6 +591,8 @@ export default function ModernSlavery({ organisationId, role, entities }: Props)
             Start
           </button>
         </form>
+      )}
+        </>
       )}
     </>
   );

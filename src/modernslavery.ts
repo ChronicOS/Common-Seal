@@ -12,7 +12,17 @@ export type Statement = {
   signed_by: string | null;
   signed_role: string | null;
   lodged_on: string | null;
+  is_joint: boolean;
+  covered_entity_ids: string[];
+  product_info_checked: boolean;
+  approval_method: "meeting" | "circular" | null;
+  ceo_signed_by: string | null;
+  website_published_on: string | null;
+  website_url: string | null;
+  revenue_band: string | null;
+  register_account_holder: string | null;
 };
+export type SurveyFacts = { name: string; sent: number; answered: number; high: number; medium: number; low: number; unrated: number; concerns: number; resolved: number; countries: string[]; audits: number | null };
 export type Section = { statement_id: string; criterion: number; content: string };
 export type SupplierAnswers = {
   higher_risk_country?: boolean;
@@ -24,7 +34,7 @@ export type SupplierAnswers = {
 };
 export type SupplierReview = { id: string; statement_id: string; counterparty_id: string; answers: SupplierAnswers; risk: "low" | "medium" | "high"; actions: string | null };
 export type MsData = { statements: Statement[]; sections: Section[]; reviews: SupplierReview[]; suppliers: { id: string; name: string }[] };
-export type MsFacts = { ddCases: number; trainingDone: number; policies: string[] };
+export type MsFacts = { ddCases: number; trainingDone: number; policies: string[]; survey: SurveyFacts | null };
 
 /** The seven mandatory criteria for a statement. */
 export const CRITERIA: { n: number; title: string; guide: string }[] = [
@@ -44,7 +54,7 @@ export const SUPPLIER_QUESTIONS: { key: keyof SupplierAnswers; label: string }[]
   { key: "audits_suppliers", label: "Checks or audits its own suppliers" },
   { key: "known_incident", label: "Has a known incident or credible allegation" },
 ];
-export const MS_STATUS: Record<Statement["status"], string> = { draft: "Draft", approved: "Approved, to be lodged", lodged: "Lodged" };
+export const MS_STATUS: Record<Statement["status"], string> = { draft: "Draft", approved: "Approved, to be published", lodged: "Published and lodged" };
 
 function db() {
   if (!supabase) throw new Error("The site is not connected to its database.");
@@ -75,13 +85,38 @@ export async function loadModernSlavery(organisationId: string): Promise<MsData>
 /** Figures from the rest of the platform, used to suggest wording. Any that cannot be read count as zero. */
 export async function loadFacts(organisationId: string, s: Statement): Promise<MsFacts> {
   const client = db();
-  const [cases, modules, assignments, policies, versions] = await Promise.all([
+  const [cases, modules, assignments, policies, versions, campaigns] = await Promise.all([
     client.from("dd_cases").select("id, created_at").eq("organisation_id", organisationId).gte("created_at", s.period_start).lte("created_at", `${s.period_end}T23:59:59`),
     client.from("training_modules").select("id, title").eq("organisation_id", organisationId),
     client.from("training_assignments").select("module_id, completed_at").eq("organisation_id", organisationId).not("completed_at", "is", null),
     client.from("policies").select("id, title, is_retired").eq("organisation_id", organisationId),
     client.from("policy_versions").select("policy_id").eq("organisation_id", organisationId).eq("status", "approved"),
+    client.from("ms_campaigns").select("id, name, audits_conducted").eq("organisation_id", organisationId).eq("statement_id", s.id).limit(1),
   ]);
+  let survey: SurveyFacts | null = null;
+  const campaign = ((campaigns.data ?? []) as { id: string; name: string; audits_conducted: number | null }[])[0];
+  if (campaign) {
+    const [recipients, concerns] = await Promise.all([
+      client.from("ms_recipients").select("submitted_at, risk_level, countries").eq("campaign_id", campaign.id),
+      client.from("ms_concerns").select("status").eq("campaign_id", campaign.id),
+    ]);
+    const rs = (recipients.data ?? []) as { submitted_at: string | null; risk_level: string | null; countries: string[] | null }[];
+    const done = rs.filter((r) => r.submitted_at);
+    const ks = (concerns.data ?? []) as { status: string }[];
+    survey = {
+      name: campaign.name,
+      sent: rs.length,
+      answered: done.length,
+      high: done.filter((r) => r.risk_level === "high").length,
+      medium: done.filter((r) => r.risk_level === "medium").length,
+      low: done.filter((r) => r.risk_level === "low").length,
+      unrated: done.filter((r) => !r.risk_level).length,
+      concerns: ks.length,
+      resolved: ks.filter((k) => k.status === "resolved").length,
+      countries: [...new Set(done.flatMap((r) => r.countries ?? []))].sort(),
+      audits: campaign.audits_conducted,
+    };
+  }
   const slavery = new Set(((modules.data ?? []) as { id: string; title: string }[]).filter((m) => /slavery/i.test(m.title)).map((m) => m.id));
   const inForce = new Set(((versions.data ?? []) as { policy_id: string }[]).map((v) => v.policy_id));
   return {
@@ -92,6 +127,7 @@ export async function loadFacts(organisationId: string, s: Statement): Promise<M
     policies: ((policies.data ?? []) as { id: string; title: string; is_retired: boolean }[])
       .filter((p) => !p.is_retired && inForce.has(p.id) && /slavery|supplier|speak|whistle|procure/i.test(p.title))
       .map((p) => p.title),
+    survey,
   };
 }
 
@@ -120,11 +156,25 @@ export async function saveReview(organisationId: string, statementId: string, co
     ).error,
   );
 }
-export async function approveStatement(id: string, body: string, on: string, signedBy: string, signedRole: string) {
-  check((await db().rpc("approve_ms_statement", { p_statement: id, p_body: body, p_approved_on: on, p_signed_by: signedBy, p_signed_role: signedRole })).error);
+export async function setStatementScope(id: string, joint: boolean, covered: string[], productChecked: boolean) {
+  check((await db().rpc("set_ms_statement_scope", { p_statement: id, p_joint: joint, p_covered: covered, p_product_checked: productChecked })).error);
 }
-export async function lodgeStatement(id: string, on: string) {
-  check((await db().rpc("lodge_ms_statement", { p_statement: id, p_lodged_on: on })).error);
+export async function approveStatement(id: string, body: string, on: string, method: string, ceo: string) {
+  check((await db().rpc("approve_ms_statement", { p_statement: id, p_body: body, p_approved_on: on, p_method: method, p_ceo: ceo })).error);
+}
+export async function publishStatement(id: string, p: { websiteOn: string; websiteUrl: string; registerOn: string; revenueBand: string; accountHolder: string }) {
+  check(
+    (
+      await db().rpc("publish_ms_statement", {
+        p_statement: id,
+        p_website_on: p.websiteOn,
+        p_website_url: p.websiteUrl,
+        p_register_on: p.registerOn,
+        p_revenue_band: p.revenueBand,
+        p_account_holder: p.accountHolder,
+      })
+    ).error,
+  );
 }
 
 export type MsSummary = { latest: Statement | null };
