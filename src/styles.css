@@ -1515,5 +1515,7 @@ button.nav-head::after {
     max-height: calc(100vh - 48px);
     overflow-y: auto;
     overscroll-behavior: contain;
+    /* Room to bring the last item fully into view, even before the page has scrolled past the header */
+    padding-bottom: 160px;
   }
 }
