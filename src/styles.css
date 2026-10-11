@@ -1455,6 +1455,12 @@ button.nav-head:hover {
   background: var(--card);
 }
 
+/* The section holding the page you are on */
+button.nav-head.on {
+  border-left: 3px solid var(--wax);
+  padding-left: 9px;
+}
+
 button.nav-head::after {
   content: "▸";
   float: right;
@@ -1462,9 +1468,7 @@ button.nav-head::after {
   font-weight: 400;
 }
 
-.nav-section.open > button.nav-head::after,
-.nav-section:hover > button.nav-head::after,
-.nav-section:focus-within > button.nav-head::after {
+.nav-section.open > button.nav-head::after {
   content: "▾";
 }
 
@@ -1476,9 +1480,7 @@ button.nav-head::after {
   margin-bottom: 6px;
 }
 
-.nav-section.open > .nav-items,
-.nav-section:hover > .nav-items,
-.nav-section:focus-within > .nav-items {
+.nav-section.open > .nav-items {
   display: flex;
 }
 

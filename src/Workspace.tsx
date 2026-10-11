@@ -70,7 +70,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
   const canEdit = has(role, ...RECORDS_ROLES);
 
   const [tab, setTab] = useState<Tab>("overview");
-  // Sections the person has opened by clicking; the section holding the current tab is always open
+  // Sections the person has opened by clicking. All start closed; the one holding the current page is marked.
   const [openSections, setOpenSections] = useState<string[]>([]);
   // Speak up is never shown to others: being seen there could identify a reporter or a handler
   const others = usePresence(organisation.id, userId, userName, tab === "speakup" ? null : tab);
@@ -179,7 +179,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
       {SECTIONS.map((section) => {
         const items = TABS.filter((t) => t.section === section);
         const current = items.some((t) => t.id === tab);
-        const isOpen = current || openSections.includes(section);
+        const isOpen = openSections.includes(section);
         const inside = others.filter((o) => o.tab !== "speakup" && items.some((t) => t.id === o.tab));
         return (
           <div key={section} className={isOpen ? "nav-section open" : "nav-section"}>
