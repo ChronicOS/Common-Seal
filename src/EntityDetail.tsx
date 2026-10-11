@@ -36,7 +36,7 @@ function officerNames(data: GroupData, entityId: string, roles: string[]) {
     .map((o) => o.person.full_name);
 }
 
-function displayValue(data: GroupData, entity: Entity, key: FieldKey, state: FieldState): string {
+export function displayValue(data: GroupData, entity: Entity, key: FieldKey, state: FieldState): string {
   if (state === "open") return "Not yet provided";
   if (state === "skipped") return "Skipped for now";
   if (state === "not_applicable") {

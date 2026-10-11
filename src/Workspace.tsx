@@ -23,6 +23,7 @@ import { loadTrainingSummary, today, type TrainingSummary } from "./training";
 import { formatDay, loadAssurance, type AssuranceSummary } from "./board";
 import { CHECKIN_KEY, dueCheckIns, progress } from "./checks";
 import { createEntity, loadGroup, setPrompt } from "./data";
+import CompanyInfo from "./CompanyInfo";
 import EntityDetail from "./EntityDetail";
 import Intercompany from "./Intercompany";
 import GroupChart from "./GroupChart";
@@ -40,12 +41,13 @@ const BOARD_WRITE_ROLES = ["owner", "admin", "secretary"];
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Tab =
-  | "overview" | "foryou" | "report" | "modernslavery" | "oldregister" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
+  | "overview" | "company" | "foryou" | "report" | "modernslavery" | "oldregister" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
   | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "expenses" | "speakup" | "people";
 const SECTIONS = ["Board", "Risk and compliance", "Contracts and third parties", "Conduct"] as const;
 const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = [
   { id: "foryou", label: "For you" },
   { id: "overview", label: "Overview", section: "Board" },
+  { id: "company", label: "Company Info", section: "Board" },
   { id: "report", label: "Board report", section: "Board" },
   { id: "meetings", label: "Meetings", section: "Board" },
   { id: "people", label: "People", section: "Board" },
@@ -217,6 +219,17 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
     );
   }
   if (!data) return <p className="lead">Loading…</p>;
+
+  if (tab === "company" && !entityId) {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+          <CompanyInfo data={data} canEdit={canEdit} onOpen={openEntity} />
+        </div>
+      </div>
+    );
+  }
 
   if (tab === "people") {
     return (

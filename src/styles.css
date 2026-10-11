@@ -1519,3 +1519,26 @@ button.nav-head::after {
     padding-bottom: 160px;
   }
 }
+
+/* Company Info */
+.card.company {
+  margin-bottom: 20px;
+  scroll-margin-top: 24px;
+}
+
+.card.company h2 {
+  margin: 0;
+}
+
+.card.company h3 {
+  margin: 20px 0 6px;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--soft);
+}
+
+.detail-list.compact > div {
+  grid-template-columns: minmax(120px, 200px) 1fr;
+  padding: 9px 0;
+}
