@@ -188,7 +188,8 @@ function CommentBox({ item, busy, onSave, onCancel }: { item: Item; busy: boolea
 
 export default function RiskRegister({ organisationId, organisationName, role, userId }: Props) {
   const canManage = MANAGE_ROLES.includes(role);
-  const isAdmin = role === "owner" || role === "admin";
+  // Whoever manages the register can name the report owner
+  const isAdmin = MANAGE_ROLES.includes(role);
 
   const [data, setData] = useState<RiskData | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -507,7 +508,9 @@ export default function RiskRegister({ organisationId, organisationName, role, u
                                   : "Not sent"}
                     </span>
                   </div>
-                  <p className="muted">Responsible: {responsible.map((k) => k.name).join(", ") || "nobody"}</p>
+                  <p className="muted">
+                    {c.covers ? `Covers: ${c.covers}. ` : ""}Responsible: {responsible.map((k) => k.name).join(", ") || "nobody"}
+                  </p>
                   {items.length === 0 && editing !== `new-${c.id}` && (
                     <p className={q.submitted_at ? "muted" : "warning-text"}>{q.submitted_at ? "Nothing to report this period." : "No risks saved yet. This is not the same as nothing to report."}</p>
                   )}
@@ -731,7 +734,8 @@ export default function RiskRegister({ organisationId, organisationName, role, u
           </ul>
           {isAdmin ? (
             <div className="row">
-              <select aria-label="Member" value={ownerPick} onChange={(e) => setOwnerPick(e.target.value)}>
+              <label htmlFor="rk-owner" className="grow">Add the report owner or a backup</label>
+              <select id="rk-owner" aria-label="Member" value={ownerPick} onChange={(e) => setOwnerPick(e.target.value)}>
                 <option value="">Choose a member…</option>
                 {members
                   .filter((m) => m.is_active)
@@ -749,7 +753,7 @@ export default function RiskRegister({ organisationId, organisationName, role, u
               </button>
             </div>
           ) : (
-            !owner && <p className="muted">An owner or administrator of the organisation names this person. They must be a member of Common Seal.</p>
+            !owner && <p className="muted">An owner, administrator, secretary, legal or compliance member names this person. Your role here is {role}.</p>
           )}
         </div>
 
@@ -767,12 +771,6 @@ export default function RiskRegister({ organisationId, organisationName, role, u
                 <tr key={c.id}>
                   <th scope="row">
                     {c.name}
-                    {c.covers && (
-                      <>
-                        <br />
-                        <span className="muted small">{c.covers}</span>
-                      </>
-                    )}
                   </th>
                   {canRun || data.contacts.length > 0 ? (
                     <>
