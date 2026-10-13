@@ -23,6 +23,7 @@ import { loadTrainingSummary, today, type TrainingSummary } from "./training";
 import { formatDay, loadAssurance, type AssuranceSummary } from "./board";
 import { CHECKIN_KEY, dueCheckIns, progress } from "./checks";
 import { createEntity, loadGroup, setPrompt } from "./data";
+import Authorities from "./Authorities";
 import CompanyInfo from "./CompanyInfo";
 import EntityDetail from "./EntityDetail";
 import Intercompany from "./Intercompany";
@@ -41,13 +42,14 @@ const BOARD_WRITE_ROLES = ["owner", "admin", "secretary"];
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Tab =
-  | "overview" | "company" | "foryou" | "report" | "modernslavery" | "oldregister" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
+  | "overview" | "company" | "authorities" | "foryou" | "report" | "modernslavery" | "oldregister" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
   | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "expenses" | "speakup" | "people";
 const SECTIONS = ["Board", "Risk and compliance", "Contracts and third parties", "Conduct"] as const;
 const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = [
   { id: "foryou", label: "For you" },
   { id: "overview", label: "Overview" },
   { id: "company", label: "Company Info", section: "Board" },
+  { id: "authorities", label: "Authorities", section: "Board" },
   { id: "report", label: "Board report", section: "Board" },
   { id: "meetings", label: "Meetings", section: "Board" },
   { id: "people", label: "People", section: "Board" },
@@ -61,7 +63,7 @@ const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = 
   { id: "contracts", label: "Contracts", section: "Contracts and third parties" },
   { id: "intercompany", label: "Intercompany", section: "Contracts and third parties" },
   { id: "parties", label: "Third parties", section: "Contracts and third parties" },
-  { id: "authority", label: "Authority", section: "Contracts and third parties" },
+  { id: "authority", label: "(Old Authority)", section: "Contracts and third parties" },
   { id: "declarations", label: "Declarations", section: "Conduct" },
   { id: "expenses", label: "Expenses", section: "Conduct" },
   { id: "speakup", label: "Investigations", section: "Conduct" },
@@ -220,6 +222,17 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
     );
   }
   if (!data) return <p className="lead">Loading…</p>;
+
+  if (tab === "authorities") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+          <Authorities organisationId={organisation.id} entities={data.entities} canEdit={canEdit} />
+        </div>
+      </div>
+    );
+  }
 
   if (tab === "company" && !entityId) {
     return (

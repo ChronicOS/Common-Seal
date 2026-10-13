@@ -1543,3 +1543,59 @@ button.nav-head::after {
   grid-template-columns: minmax(120px, 200px) 1fr;
   padding: 9px 0;
 }
+
+/* Authorities */
+.block-gap {
+  margin-bottom: 20px;
+}
+
+.card.authority {
+  margin-bottom: 20px;
+}
+
+.card.authority h2 {
+  margin: 0;
+}
+
+.heading-input {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 600;
+  min-width: 0;
+  flex: 1;
+}
+
+.auth-table th[scope="colgroup"] {
+  text-align: center;
+  border-bottom: 1px solid var(--rule);
+}
+
+.auth-table tbody th {
+  min-width: 190px;
+}
+
+.auth-table select {
+  min-width: 150px;
+  padding: 6px 8px;
+  font-size: 14px;
+}
+
+.band-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  margin-top: 6px;
+  font-weight: 400;
+}
+
+input.amount {
+  width: 130px;
+  padding: 6px 8px;
+  font-size: 14px;
+}
+
+.board-cell {
+  font-weight: 600;
+  color: var(--wax);
+}

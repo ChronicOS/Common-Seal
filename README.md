@@ -60,3 +60,4 @@ After running migrations, run `supabase/checks/health_check.sql` in the SQL edit
   - `0027_admin_manages_owners.sql` – an administrator can change or remove anyone, including an owner; there must always be at least one owner.
   - `0028_risk_report_send_to.sql` – who the risk report is sent to (the report owner by default, with others added).
   - `0029_presence.sql` – who else is online and on which tab; limits the live channel to members of the organisation.
+  - `0030_authorities.sql` – Authorities: Financial Approval Matrix and Signing Delegation, versioned, locked, with changes ratified by board resolution.
