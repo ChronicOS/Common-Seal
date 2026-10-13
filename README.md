@@ -61,3 +61,4 @@ After running migrations, run `supabase/checks/health_check.sql` in the SQL edit
   - `0028_risk_report_send_to.sql` – who the risk report is sent to (the report owner by default, with others added).
   - `0029_presence.sql` – who else is online and on which tab; limits the live channel to members of the organisation.
   - `0030_authorities.sql` – Authorities: Financial Approval Matrix and Signing Delegation, versioned, locked, with changes ratified by board resolution.
+  - `0031_signing_groups.sql` – Signing Delegation as per-company signatory groups: who signs, what they can sign, minimum signatures.

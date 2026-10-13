@@ -228,7 +228,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
       <div className="workspace">
         {nav}
         <div className="workspace-main">
-          <Authorities organisationId={organisation.id} entities={data.entities} canEdit={canEdit} />
+          <Authorities organisationId={organisation.id} entities={data.entities} group={data} canEdit={canEdit} />
         </div>
       </div>
     );

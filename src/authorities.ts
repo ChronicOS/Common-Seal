@@ -44,6 +44,32 @@ export type Cell = {
 };
 export type Position = { id: string; title: string; is_active: boolean };
 export type Holding = { id: string; position_id: string; starts_on: string; ends_on: string | null; is_acting: boolean; person: { id: string; full_name: string } };
+export type SignGroup = {
+  id: string;
+  version_id: string;
+  entity_id: string;
+  name: string;
+  position: number;
+  includes_directors: boolean;
+  includes_secretary: boolean;
+  requirements: string[];
+  stipulations: string | null;
+  copied_from: string | null;
+};
+export type SignMember = { id: string; version_id: string; group_id: string; position_id: string | null; person_id: string | null };
+export type SignScope = { id: string; version_id: string; group_id: string; position: number; text: string; up_to: number | null; within_financial: boolean; copied_from: string | null };
+
+/** Minimum signatures: any one of the chosen combinations is enough */
+export const REQUIREMENTS: { value: string; label: string }[] = [
+  { value: "two_directors", label: "Two directors" },
+  { value: "director_and_secretary", label: "One director and the company secretary" },
+  { value: "sole_director", label: "The sole director (where the company has only one)" },
+  { value: "director_and_member", label: "One director and one authorised signatory in this group" },
+  { value: "two_members", label: "Any two authorised signatories in this group" },
+  { value: "one_member", label: "Any one authorised signatory in this group" },
+];
+export const requirementLabel = (v: string) => REQUIREMENTS.find((r) => r.value === v)?.label ?? v;
+
 export type Meeting = { id: string; title: string; scheduled_at: string; status: string; body: { name: string; kind: string } | null };
 
 export type AuthData = {
@@ -56,6 +82,9 @@ export type AuthData = {
   holdings: Holding[];
   meetings: Meeting[];
   people: { id: string; full_name: string }[];
+  groups: SignGroup[];
+  members: SignMember[];
+  scopes: SignScope[];
 };
 
 export const KIND_LABEL: Record<Kind, string> = { financial: "Financial Approval Matrix", signing: "Signing Delegation" };
@@ -80,13 +109,14 @@ const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 export async function loadAuthorities(organisationId: string): Promise<AuthData> {
   const client = db();
   check((await client.rpc("ensure_authorities", { p_org: organisationId })).error);
+  check((await client.rpc("ensure_signing_groups", { p_org: organisationId })).error);
   const versions = await client.from("auth_versions").select("*").eq("organisation_id", organisationId).order("number");
   check(versions.error);
   const all = (versions.data ?? []) as Version[];
   // Only the versions on screen are loaded in full: in force, and any open change
   const live = all.filter((v) => ["in_force", "draft", "proposed"].includes(v.status)).map((v) => v.id);
   const ids = live.length ? live : ["00000000-0000-0000-0000-000000000000"];
-  const [functions, verticals, bands, cells, positions, holdings, meetings, people] = await Promise.all([
+  const [functions, verticals, bands, cells, positions, holdings, meetings, people, groups, members, scopes] = await Promise.all([
     client.from("auth_functions").select("id, version_id, name, position, copied_from").in("version_id", ids).order("position"),
     client.from("auth_verticals").select("id, version_id, name, description, position, copied_from").in("version_id", ids).order("position"),
     client.from("auth_bands").select("id, version_id, vertical_id, entity_id, position, up_to, currency, board, copied_from").in("version_id", ids).order("position"),
@@ -101,8 +131,11 @@ export async function loadAuthorities(organisationId: string): Promise<AuthData>
       .gte("scheduled_at", new Date(Date.now() - 86_400_000).toISOString())
       .order("scheduled_at"),
     client.from("people").select("id, full_name").eq("organisation_id", organisationId).order("full_name"),
+    client.from("sign_groups").select("*").in("version_id", ids).order("position"),
+    client.from("sign_group_members").select("id, version_id, group_id, position_id, person_id").in("version_id", ids),
+    client.from("sign_group_scopes").select("id, version_id, group_id, position, text, up_to, within_financial, copied_from").in("version_id", ids).order("position"),
   ]);
-  check(functions.error ?? verticals.error ?? bands.error ?? cells.error ?? positions.error ?? holdings.error ?? meetings.error ?? people.error);
+  check(functions.error ?? verticals.error ?? bands.error ?? cells.error ?? positions.error ?? holdings.error ?? meetings.error ?? people.error ?? groups.error ?? members.error ?? scopes.error);
   return {
     versions: all,
     functions: (functions.data ?? []) as Fn[],
@@ -113,6 +146,9 @@ export async function loadAuthorities(organisationId: string): Promise<AuthData>
     holdings: (holdings.data ?? []) as unknown as Holding[],
     meetings: (meetings.data ?? []) as unknown as Meeting[],
     people: (people.data ?? []) as { id: string; full_name: string }[],
+    groups: (groups.data ?? []) as SignGroup[],
+    members: (members.data ?? []) as SignMember[],
+    scopes: ((scopes.data ?? []) as SignScope[]).map((x) => ({ ...x, up_to: num(x.up_to) })),
   };
 }
 
@@ -232,6 +268,90 @@ export async function varyForCompany(organisationId: string, versionId: string, 
 }
 export async function removeVariation(bandIds: string[]) {
   if (bandIds.length) check((await db().from("auth_bands").delete().in("id", bandIds)).error);
+}
+
+// ---- Signatory groups (Signing Delegation) ----
+export async function addGroup(organisationId: string, versionId: string, entityId: string, name: string, position: number) {
+  check((await db().from("sign_groups").insert({ organisation_id: organisationId, version_id: versionId, entity_id: entityId, name: name.trim(), position })).error);
+}
+export async function updateGroup(id: string, patch: Partial<Pick<SignGroup, "name" | "includes_directors" | "includes_secretary" | "requirements" | "stipulations">>) {
+  check((await db().from("sign_groups").update(patch).eq("id", id)).error);
+}
+export async function removeGroup(id: string) {
+  check((await db().from("sign_groups").delete().eq("id", id)).error);
+}
+export async function addMember(organisationId: string, versionId: string, groupId: string, who: { positionId?: string; personName?: string; personId?: string }) {
+  const client = db();
+  let personId = who.personId ?? null;
+  if (!who.positionId && !personId) {
+    const created = await client.from("people").insert({ organisation_id: organisationId, full_name: (who.personName ?? "").trim() }).select("id").single();
+    check(created.error);
+    personId = created.data!.id as string;
+  }
+  check((await client.from("sign_group_members").insert({ organisation_id: organisationId, version_id: versionId, group_id: groupId, position_id: who.positionId ?? null, person_id: who.positionId ? null : personId })).error);
+}
+export async function removeMember(id: string) {
+  check((await db().from("sign_group_members").delete().eq("id", id)).error);
+}
+export async function addScope(organisationId: string, versionId: string, groupId: string, text: string, position: number) {
+  check((await db().from("sign_group_scopes").insert({ organisation_id: organisationId, version_id: versionId, group_id: groupId, text: text.trim(), position })).error);
+}
+export async function updateScope(id: string, patch: Partial<Pick<SignScope, "text" | "up_to" | "within_financial">>) {
+  check((await db().from("sign_group_scopes").update(patch).eq("id", id)).error);
+}
+export async function removeScope(id: string) {
+  check((await db().from("sign_group_scopes").delete().eq("id", id)).error);
+}
+/** Copies another company's groups into this one, in the same draft */
+export async function copyGroups(organisationId: string, versionId: string, toEntity: string, from: SignGroup[], members: SignMember[], scopes: SignScope[], startAt: number) {
+  const client = db();
+  for (const [n, g] of from.entries()) {
+    const created = await client
+      .from("sign_groups")
+      .insert({ organisation_id: organisationId, version_id: versionId, entity_id: toEntity, name: g.name, position: startAt + n, includes_directors: g.includes_directors, includes_secretary: g.includes_secretary, requirements: g.requirements, stipulations: g.stipulations })
+      .select("id")
+      .single();
+    check(created.error);
+    const id = created.data!.id as string;
+    const m = members.filter((x) => x.group_id === g.id).map((x) => ({ organisation_id: organisationId, version_id: versionId, group_id: id, position_id: x.position_id, person_id: x.person_id }));
+    if (m.length) check((await client.from("sign_group_members").insert(m)).error);
+    const sc = scopes.filter((x) => x.group_id === g.id).map((x) => ({ organisation_id: organisationId, version_id: versionId, group_id: id, position: x.position, text: x.text, up_to: x.up_to, within_financial: x.within_financial }));
+    if (sc.length) check((await client.from("sign_group_scopes").insert(sc)).error);
+  }
+}
+
+/** Plain-English differences in the signatory groups between a change and the version in force */
+export function describeSigningChanges(data: AuthData, draft: Version, base: Version, entityName: (id: string) => string): string[] {
+  const out: string[] = [];
+  const pos = (id: string | null) => (id ? data.positions.find((p) => p.id === id)?.title ?? "a removed position" : "");
+  const person = (id: string | null) => (id ? data.people.find((p) => p.id === id)?.full_name ?? "a person" : "");
+  const who = (m: SignMember) => pos(m.position_id) || person(m.person_id);
+  const dG = data.groups.filter((g) => g.version_id === draft.id), bG = data.groups.filter((g) => g.version_id === base.id);
+  for (const g of dG) {
+    const at = `${entityName(g.entity_id)}, ${g.name}`;
+    const was = bG.find((x) => x.id === g.copied_from);
+    if (!was) {
+      out.push(`${entityName(g.entity_id)}: new signatory group ${g.name}`);
+      continue;
+    }
+    if (was.name !== g.name) out.push(`${entityName(g.entity_id)}: group ${was.name} renamed ${g.name}`);
+    if (was.includes_directors !== g.includes_directors) out.push(`${at}: directors ${g.includes_directors ? "added to" : "removed from"} the group`);
+    if (was.includes_secretary !== g.includes_secretary) out.push(`${at}: company secretary ${g.includes_secretary ? "added to" : "removed from"} the group`);
+    if ([...was.requirements].sort().join() !== [...g.requirements].sort().join()) out.push(`${at}: minimum signatures now ${g.requirements.map(requirementLabel).join("; or ") || "not set"}`);
+    if ((was.stipulations ?? "") !== (g.stipulations ?? "")) out.push(`${at}: stipulations now "${g.stipulations ?? ""}"`);
+    const dm = data.members.filter((m) => m.group_id === g.id).map(who), bm = data.members.filter((m) => m.group_id === was.id).map(who);
+    for (const x of dm.filter((x) => !bm.includes(x))) out.push(`${at}: ${x} added as a signatory`);
+    for (const x of bm.filter((x) => !dm.includes(x))) out.push(`${at}: ${x} removed as a signatory`);
+    const ds = data.scopes.filter((x) => x.group_id === g.id), bs = data.scopes.filter((x) => x.group_id === was.id);
+    for (const sc of ds) {
+      const old = bs.find((x) => x.id === sc.copied_from);
+      if (!old) out.push(`${at}: can now sign "${sc.text}"`);
+      else if (old.text !== sc.text || old.up_to !== sc.up_to || old.within_financial !== sc.within_financial) out.push(`${at}: "${old.text}" changed to "${sc.text}"`);
+    }
+    for (const sc of bs) if (!ds.some((x) => x.copied_from === sc.id)) out.push(`${at}: can no longer sign "${sc.text}"`);
+  }
+  for (const g of bG) if (!dG.some((x) => x.copied_from === g.id)) out.push(`${entityName(g.entity_id)}: signatory group ${g.name} removed`);
+  return out;
 }
 
 // ---- Positions and who holds them ----

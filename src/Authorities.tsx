@@ -1,6 +1,18 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import {
   addBand,
+  addGroup,
+  addMember,
+  addScope,
+  copyGroups,
+  removeGroup,
+  removeMember,
+  removeScope,
+  REQUIREMENTS,
+  requirementLabel,
+  updateGroup,
+  updateScope,
+  type SignGroup,
   addFunction,
   addPosition,
   addVertical,
@@ -9,11 +21,13 @@ import {
   bandsFor,
   currentHolders,
   describeChanges,
+  describeSigningChanges,
   endHolding,
   gaps,
   KIND_LABEL,
   loadAuthorities,
   lockAuthority,
+  money,
   proposeChange,
   removeBand,
   removeFunction,
@@ -33,9 +47,9 @@ import {
   type Kind,
   type Version,
 } from "./authorities";
-import type { Entity } from "./types";
+import type { Entity, GroupData } from "./types";
 
-type Props = { organisationId: string; entities: Entity[]; canEdit: boolean };
+type Props = { organisationId: string; entities: Entity[]; group: GroupData; canEdit: boolean };
 type View = Kind | "positions";
 
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
@@ -65,7 +79,275 @@ function AmountOnBlur({ value, label, onSave }: { value: number | null; label: s
   );
 }
 
-export default function Authorities({ organisationId, entities, canEdit }: Props) {
+const GROUP_SUGGESTIONS = ["Managing Director", "Chief Operating Officer", "Country Managers", "Quality", "Medical", "Regulatory", "Finance"];
+
+type GroupsProps = {
+  organisationId: string;
+  data: AuthData;
+  version: Version;
+  editable: boolean;
+  entities: Entity[];
+  group: GroupData;
+  busy: boolean;
+  run: (work: () => Promise<unknown>, done?: string) => Promise<boolean>;
+};
+
+/** Signing Delegation: for each company, signatory groups, what each can sign, and the minimum signatures. */
+function SigningGroups({ organisationId, data, version, editable, entities, group, busy, run }: GroupsProps) {
+  const live = entities.filter((e) => e.status !== "deregistered");
+  const [entityId, setEntityId] = useState(live[0]?.id ?? "");
+  const [newGroup, setNewGroup] = useState("");
+  const [copyFrom, setCopyFrom] = useState("");
+  const [adding, setAdding] = useState<Record<string, string>>({});
+  const [scopeText, setScopeText] = useState<Record<string, string>>({});
+  const officers = (roles: string[]) => group.officeholdings.filter((o) => o.entity_id === entityId && !o.ceased_on && roles.includes(o.role)).map((o) => o.person.full_name);
+  const groups = data.groups.filter((g) => g.version_id === version.id && g.entity_id === entityId).sort((a, b) => a.position - b.position);
+  const others = live.filter((e) => e.id !== entityId && data.groups.some((g) => g.version_id === version.id && g.entity_id === e.id));
+  const directors = officers(["director", "chair"]);
+  const secretaries = officers(["secretary"]);
+  const label = (m: { position_id: string | null; person_id: string | null }) => {
+    if (m.position_id) {
+      const holders = currentHolders(data, m.position_id).map((h) => h.person.full_name);
+      return { text: data.positions.find((p) => p.id === m.position_id)?.title ?? "Unknown position", sub: holders.length ? holders.join(", ") : "Vacant", vacant: holders.length === 0 };
+    }
+    return { text: data.people.find((p) => p.id === m.person_id)?.full_name ?? "Unknown person", sub: "named person", vacant: false };
+  };
+
+  if (live.length === 0) return <p className="muted">Add a company first (Overview or Company Info).</p>;
+
+  return (
+    <>
+      <div className="row block">
+        <span className="field">
+          <label htmlFor="sg-company">Company</label>
+          <select id="sg-company" value={entityId} onChange={(e) => setEntityId(e.target.value)}>
+            {live.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name}
+              </option>
+            ))}
+          </select>
+        </span>
+      </div>
+
+      {groups.length === 0 && <p className="warning-text">No signatory groups for this company yet.</p>}
+      {groups.map((g: SignGroup) => {
+        const members = data.members.filter((m) => m.group_id === g.id);
+        const scopes = data.scopes.filter((x) => x.group_id === g.id).sort((a, b) => a.position - b.position);
+        return (
+          <section key={g.id} className="card authority">
+            <div className="row spread">
+              {editable ? <TextOnBlur className="heading-input" value={g.name} label={`Rename ${g.name}`} onSave={(v) => void run(() => updateGroup(g.id, { name: v }))} /> : <h2>{g.name}</h2>}
+              {editable && (
+                <button type="button" className="link-dark small" disabled={busy} onClick={() => { if (window.confirm(`Remove the ${g.name} group?`)) void run(() => removeGroup(g.id)); }}>
+                  Remove group
+                </button>
+              )}
+            </div>
+
+            <h3>Signatories</h3>
+            <ul className="plain rows">
+              {(editable || g.includes_directors) && (
+                <li>
+                  {editable ? (
+                    <label className="check">
+                      <input type="checkbox" checked={g.includes_directors} disabled={busy} onChange={(e) => void run(() => updateGroup(g.id, { includes_directors: e.target.checked }))} /> Directors
+                      {g.includes_directors && <span className={directors.length ? "muted" : "warning-text"}>&nbsp;({directors.length ? directors.join(", ") : "none recorded for this company"})</span>}
+                    </label>
+                  ) : (
+                    <>
+                      <strong>Directors</strong>
+                      {g.includes_directors && <span className={directors.length ? "muted" : "warning-text"}> ({directors.length ? directors.join(", ") : "none recorded for this company"})</span>}
+                    </>
+                  )}
+                </li>
+              )}
+              {(editable || g.includes_secretary) && (
+                <li>
+                  {editable ? (
+                    <label className="check">
+                      <input type="checkbox" checked={g.includes_secretary} disabled={busy} onChange={(e) => void run(() => updateGroup(g.id, { includes_secretary: e.target.checked }))} /> Company Secretary
+                      {g.includes_secretary && <span className={secretaries.length ? "muted" : "warning-text"}>&nbsp;({secretaries.length ? secretaries.join(", ") : "none recorded for this company"})</span>}
+                    </label>
+                  ) : (
+                    <>
+                      <strong>Company Secretary</strong>
+                      {g.includes_secretary && <span className={secretaries.length ? "muted" : "warning-text"}> ({secretaries.length ? secretaries.join(", ") : "none recorded for this company"})</span>}
+                    </>
+                  )}
+                </li>
+              )}
+              {members.map((m) => {
+                const l = label(m);
+                return (
+                  <li key={m.id} className="row">
+                    <span>
+                      <strong>{l.text}</strong> <span className={l.vacant ? "warning-text" : "muted"}>({l.sub})</span>
+                    </span>
+                    {editable && (
+                      <button type="button" className="link-dark small" disabled={busy} aria-label={`Remove ${l.text} from ${g.name}`} onClick={() => void run(() => removeMember(m.id))}>
+                        Remove
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+            {editable && (
+              <div className="row">
+                <select aria-label={`Add an authorised signatory to ${g.name}`} value={adding[g.id] ?? ""} onChange={(e) => setAdding({ ...adding, [g.id]: e.target.value })}>
+                  <option value="">Add an authorised signatory…</option>
+                  <optgroup label="By position (preferred)">
+                    {data.positions.filter((p) => p.is_active && !members.some((m) => m.position_id === p.id)).map((p) => (
+                      <option key={p.id} value={`pos:${p.id}`}>
+                        {p.title}
+                        {currentHolders(data, p.id).length ? "" : " (vacant)"}
+                      </option>
+                    ))}
+                    <option value="newpos">A new position…</option>
+                  </optgroup>
+                  <option value="person">A named person…</option>
+                </select>
+                <button
+                  type="button"
+                  className="quiet"
+                  disabled={busy || !adding[g.id]}
+                  onClick={() => {
+                    const pick = adding[g.id];
+                    if (pick === "newpos") {
+                      const title = window.prompt("Name of the position (for example, Country Manager, New Zealand)");
+                      if (title && title.trim().length >= 2) void run(async () => { const id = await addPosition(organisationId, title); await addMember(organisationId, version.id, g.id, { positionId: id }); });
+                    } else if (pick === "person") {
+                      const name = window.prompt("Full name of the authorised signatory");
+                      if (name && name.trim().length >= 2) {
+                        const known = data.people.find((x) => x.full_name.toLowerCase() === name.trim().toLowerCase());
+                        void run(() => addMember(organisationId, version.id, g.id, known ? { personId: known.id } : { personName: name }));
+                      }
+                    } else void run(() => addMember(organisationId, version.id, g.id, { positionId: pick.slice(4) }));
+                    setAdding({ ...adding, [g.id]: "" });
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+            )}
+
+            <h3>Can sign</h3>
+            {scopes.length === 0 && <p className="warning-text">Nothing yet.</p>}
+            <ul className="plain rows">
+              {scopes.map((sc) => (
+                <li key={sc.id}>
+                  {editable ? (
+                    <div className="scope-edit">
+                      <TextOnBlur className="grow" value={sc.text} label="What this group can sign" onSave={(v) => void run(() => updateScope(sc.id, { text: v }))} />
+                      <label className="check small">
+                        <input type="checkbox" checked={sc.within_financial} disabled={busy} onChange={(e) => void run(() => updateScope(sc.id, { within_financial: e.target.checked }))} /> Up to the Financial Approval Matrix limits
+                      </label>
+                      <span className="row">
+                        <span className="small muted">Up to $</span>
+                        <AmountOnBlur value={sc.up_to} label="Upper amount (optional)" onSave={(v) => void run(() => updateScope(sc.id, { up_to: v }))} />
+                        {sc.up_to !== null && (
+                          <button type="button" className="link-dark small" onClick={() => void run(() => updateScope(sc.id, { up_to: null }))}>
+                            No amount cap
+                          </button>
+                        )}
+                      </span>
+                      <button type="button" className="link-dark small" disabled={busy} onClick={() => void run(() => removeScope(sc.id))}>
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <span>
+                      {sc.text}
+                      {sc.up_to !== null ? `, up to ${money(sc.up_to)}` : ""}
+                      {sc.within_financial ? ", within the Financial Approval Matrix limits" : ""}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {editable && (
+              <div className="row">
+                <input className="grow" aria-label={`Add what ${g.name} can sign`} placeholder='e.g. Any distribution agreement relating to the New Zealand market' value={scopeText[g.id] ?? ""} onChange={(e) => setScopeText({ ...scopeText, [g.id]: e.target.value })} />
+                <button type="button" className="quiet" disabled={busy || (scopeText[g.id] ?? "").trim().length < 3} onClick={() => void run(() => addScope(organisationId, version.id, g.id, scopeText[g.id], scopes.length + 1)).then((ok) => ok && setScopeText({ ...scopeText, [g.id]: "" }))}>
+                  Add
+                </button>
+              </div>
+            )}
+
+            <h3>Minimum signatures</h3>
+            {editable ? (
+              <fieldset className="plain-fieldset">
+                <legend className="muted small">Any one of the ticked combinations is enough</legend>
+                {REQUIREMENTS.map((r) => (
+                  <label key={r.value} className="check">
+                    <input
+                      type="checkbox"
+                      checked={g.requirements.includes(r.value)}
+                      disabled={busy}
+                      onChange={(e) => void run(() => updateGroup(g.id, { requirements: e.target.checked ? [...g.requirements, r.value] : g.requirements.filter((x) => x !== r.value) }))}
+                    />{" "}
+                    {r.label}
+                  </label>
+                ))}
+                <label htmlFor={`sg-stip-${g.id}`}>Other stipulations (optional)</label>
+                <TextOnBlur value={g.stipulations ?? ""} label="Other stipulations" onSave={(v) => void run(() => updateGroup(g.id, { stipulations: v }))} />
+              </fieldset>
+            ) : (
+              <p>
+                {g.requirements.length ? g.requirements.map(requirementLabel).join("; or ") : <span className="warning-text">Not set</span>}
+                {g.stipulations ? <><br /><span className="muted">{g.stipulations}</span></> : null}
+              </p>
+            )}
+          </section>
+        );
+      })}
+
+      {editable && (
+        <section className="card form">
+          <h2>Add a signatory group</h2>
+          <div className="row">
+            <input aria-label="New signatory group" list="sg-suggestions" placeholder="e.g. Managing Director, or Quality" value={newGroup} onChange={(e) => setNewGroup(e.target.value)} />
+            <datalist id="sg-suggestions">
+              {GROUP_SUGGESTIONS.map((x) => <option key={x} value={x} />)}
+            </datalist>
+            <button type="button" className="quiet" disabled={busy || newGroup.trim().length < 2} onClick={() => void run(() => addGroup(organisationId, version.id, entityId, newGroup, groups.length + 1)).then((ok) => ok && setNewGroup(""))}>
+              Add group
+            </button>
+          </div>
+          {others.length > 0 && (
+            <div className="row">
+              <select aria-label="Copy groups from another company" value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)}>
+                <option value="">Copy the groups of another company…</option>
+                {others.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="quiet"
+                disabled={busy || !copyFrom}
+                onClick={() =>
+                  void run(
+                    () => copyGroups(organisationId, version.id, entityId, data.groups.filter((g) => g.version_id === version.id && g.entity_id === copyFrom), data.members, data.scopes, groups.length + 1),
+                    "Copied. Check the directors, company secretary and authorised signatories are right for this company.",
+                  ).then((ok) => ok && setCopyFrom(""))
+                }
+              >
+                Copy
+              </button>
+            </div>
+          )}
+          <p className="muted">Directors and the company secretary come from the company's officeholders, so appointments and resignations flow through without a change here.</p>
+        </section>
+      )}
+    </>
+  );
+}
+
+export default function Authorities({ organisationId, entities, group, canEdit }: Props) {
   const [data, setData] = useState<AuthData | null>(null);
   const [view, setView] = useState<View>("financial");
   const [showing, setShowing] = useState<"open" | "in_force">("open");
@@ -138,7 +420,9 @@ export default function Authorities({ organisationId, entities, canEdit }: Props
   if (view === "positions") {
     // Counted in what is in force (or the draft, before anything is locked), not across versions
     const counted = (["financial", "signing"] as Kind[]).map((k) => (data.versions.find((v) => v.kind === k && v.status === "in_force") ?? data.versions.find((v) => v.kind === k && v.status === "draft"))?.id);
-    const used = (id: string) => data.cells.filter((c) => counted.includes(c.version_id) && (c.operational_position_id === id || c.finance_position_id === id)).length;
+    const used = (id: string) =>
+      data.cells.filter((c) => counted.includes(c.version_id) && (c.operational_position_id === id || c.finance_position_id === id)).length +
+      data.members.filter((m) => counted.includes(m.version_id) && m.position_id === id).length;
     return (
       <>
         {header}
@@ -235,7 +519,7 @@ export default function Authorities({ organisationId, entities, canEdit }: Props
   const shownFunctions = fnFilter ? functions.filter((f) => f.id === fnFilter) : functions;
   const verticals = data.verticals.filter((v) => v.version_id === shown.id).sort((a, b) => a.position - b.position);
   const cellsOf = (bandId: string) => data.cells.filter((c) => c.band_id === bandId);
-  const changes = open && inForce && isChange ? describeChanges(data, open, inForce, entityName) : [];
+  const changes = open && inForce && isChange ? (kind === "signing" ? describeSigningChanges : describeChanges)(data, open, inForce, entityName) : [];
   const meeting = (id: string | null) => data.meetings.find((m) => m.id === id);
   const boardMeetings = data.meetings.filter((m) => m.body?.kind === "board" && m.status === "scheduled");
   const columns = kind === "financial" ? ["Operational", "Finance"] : ["First signatory", "Second signatory (optional)"];
@@ -342,6 +626,10 @@ export default function Authorities({ organisationId, entities, canEdit }: Props
         </section>
       )}
 
+      {kind === "signing" ? (
+        <SigningGroups organisationId={organisationId} data={data} version={shown} editable={editable} entities={entities} group={group} busy={busy} run={run} />
+      ) : (
+        <>
       {/* Scope and filter */}
       <div className="row block">
         <span className="field">
@@ -437,7 +725,7 @@ export default function Authorities({ organisationId, entities, canEdit }: Props
                     </tr>
                   )}
                   <tr>
-                    {kind === "signing" && <th scope="col">Amount</th>}
+                    {(kind as Kind) === "signing" && <th scope="col">Amount</th>}
                     {(kind === "financial" ? shownFunctions : [null]).map((f) => (
                       <Fragment key={f?.id ?? "one"}>
                         <th scope="col">{columns[0]}</th>
@@ -503,6 +791,9 @@ export default function Authorities({ organisationId, entities, canEdit }: Props
             Add vertical
           </button>
         </div>
+      )}
+
+        </>
       )}
 
       {/* Lock or propose */}

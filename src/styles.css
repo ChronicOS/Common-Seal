@@ -1599,3 +1599,22 @@ input.amount {
   font-weight: 600;
   color: var(--wax);
 }
+
+.card.authority h3 {
+  margin: 18px 0 6px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--soft);
+}
+
+.scope-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
+}
+
+.scope-edit > input.grow {
+  flex: 1 1 100%;
+}
