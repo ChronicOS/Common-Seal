@@ -47,16 +47,16 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 type Tab =
   | "overview" | "company" | "authorities" | "insurance" | "foryou" | "report" | "modernslavery" | "oldregister" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
   | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "conflicts" | "expenses" | "speakup" | "people";
-const SECTIONS = ["Board", "Risk and compliance", "Contracts and third parties", "Conduct"] as const;
+const SECTIONS = ["Company", "Board", "Risk and compliance", "Contracts and third parties", "Conduct"] as const;
 const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = [
   { id: "foryou", label: "For you" },
   { id: "overview", label: "Overview" },
-  { id: "company", label: "Company Info", section: "Board" },
-  { id: "authorities", label: "Authorities", section: "Board" },
-  { id: "insurance", label: "Insurance", section: "Board" },
-  { id: "report", label: "Board report", section: "Board" },
+  { id: "company", label: "Company Info", section: "Company" },
+  { id: "authorities", label: "Authorities", section: "Company" },
+  { id: "insurance", label: "Insurance", section: "Company" },
+  { id: "people", label: "People", section: "Company" },
   { id: "meetings", label: "Meetings", section: "Board" },
-  { id: "people", label: "People", section: "Board" },
+  { id: "report", label: "Board report", section: "Board" },
   { id: "register", label: "Risk Register", section: "Risk and compliance" },
   { id: "oldregister", label: "(Old Register)", section: "Risk and compliance" },
   { id: "policies", label: "Policies", section: "Risk and compliance" },

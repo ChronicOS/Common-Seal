@@ -305,7 +305,7 @@ export const TEMPLATES: Template[] = [
     audience: "internal",
     kind: "policy",
     summary: "The principles behind the Financial Approval Matrix and Signing Delegation, and how they are changed.",
-    whyNeeded: "The board delegates authority to management; this policy records the rules for using those delegations. The detail lives under Board, Authorities.",
+    whyNeeded: "The board delegates authority to management; this policy records the rules for using those delegations. The detail lives under Company, Authorities.",
     content: build({
       purpose: "This policy sets the rules for using the authority the board delegates to management, so decisions are made at the right level.",
       who: "Directors and everyone who approves spending or signs documents for [Company Name] or its subsidiaries.",
