@@ -12,7 +12,10 @@ export type Gift = {
   public_official: boolean;
   status: "recorded" | "pending" | "approved" | "declined";
   decision_note: string | null;
+  type_id?: string | null;
 };
+export type GiftType = { id: string; name: string; kind: "gift" | "hospitality"; notifiable_from: number; position: number; is_active: boolean };
+export type GiftSetup = { responsible_user_id: string | null; types: GiftType[] };
 
 export type Conflict = {
   id: string;
@@ -46,7 +49,7 @@ export async function loadDeclarations(organisationId: string): Promise<{ gifts:
   const [gifts, conflicts] = await Promise.all([
     client
       .from("gift_entries")
-      .select("id, declared_by, staff_name, direction, other_party, description, value_amount, occurred_on, public_official, status, decision_note")
+      .select("*")
       .eq("organisation_id", organisationId)
       .order("occurred_on", { ascending: false }),
     client
@@ -62,9 +65,34 @@ export async function loadDeclarations(organisationId: string): Promise<{ gifts:
   };
 }
 
+/** The responsible person and the types of gift and hospitality, with their notifiable limits. Empty before migration 0034. */
+export async function loadGiftSetup(organisationId: string): Promise<GiftSetup | null> {
+  const client = db();
+  const ensured = await client.rpc("ensure_gift_types", { p_org: organisationId });
+  if (ensured.error) return null;
+  const [settings, types] = await Promise.all([
+    client.from("gift_settings").select("responsible_user_id").eq("organisation_id", organisationId).maybeSingle(),
+    client.from("gift_types").select("id, name, kind, notifiable_from, position, is_active").eq("organisation_id", organisationId).order("position"),
+  ]);
+  if (settings.error || types.error) return null;
+  return {
+    responsible_user_id: (settings.data?.responsible_user_id as string | null) ?? null,
+    types: ((types.data ?? []) as GiftType[]).map((t) => ({ ...t, notifiable_from: Number(t.notifiable_from) })),
+  };
+}
+export async function setGiftResponsible(organisationId: string, userId: string | null) {
+  check((await db().from("gift_settings").update({ responsible_user_id: userId }).eq("organisation_id", organisationId)).error);
+}
+export async function addGiftType(organisationId: string, t: { name: string; kind: GiftType["kind"]; notifiable_from: number; position: number }) {
+  check((await db().from("gift_types").insert({ organisation_id: organisationId, ...t, name: t.name.trim() })).error);
+}
+export async function updateGiftType(id: string, patch: Partial<Pick<GiftType, "name" | "notifiable_from" | "is_active">>) {
+  check((await db().from("gift_types").update(patch).eq("id", id)).error);
+}
+
 export async function declareGift(
   organisationId: string,
-  g: Pick<Gift, "staff_name" | "direction" | "other_party" | "description" | "value_amount" | "occurred_on" | "public_official">,
+  g: Pick<Gift, "staff_name" | "direction" | "other_party" | "description" | "value_amount" | "occurred_on" | "public_official"> & { type_id?: string | null },
 ): Promise<Gift["status"]> {
   const { data, error } = await db()
     .from("gift_entries")

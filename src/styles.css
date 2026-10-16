@@ -1682,3 +1682,51 @@ details.card.template summary .chip {
 .chip-inline {
   margin-left: 8px;
 }
+
+/* Policies: uploaded document beside the name */
+.policy-row {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.policy-row > .entity-row {
+  flex: 1;
+  min-width: 0;
+}
+
+button.doc-icon {
+  align-self: center;
+  flex: none;
+  width: 44px;
+  height: 52px;
+  padding: 0;
+  border: 1px solid var(--ink);
+  border-radius: 4px 12px 4px 4px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+button.doc-icon:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* Conflicts of interest */
+label.check.option-help {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.conflict-table td,
+.conflict-table th {
+  vertical-align: top;
+}
+
+label.check.option-help input {
+  vertical-align: -4px;
+  margin-right: 6px;
+}

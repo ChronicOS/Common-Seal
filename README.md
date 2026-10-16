@@ -64,3 +64,4 @@ After running migrations, run `supabase/checks/health_check.sql` in the SQL edit
   - `0031_signing_groups.sql` – Signing Delegation as per-company signatory groups: who signs, what they can sign, minimum signatures.
   - `0032_insurance.sql` – Insurance register: policies, certificates of currency, responsible person, reminders 3, 2 and 1 months before expiry, renewals kept as history.
   - `0033_policy_audience_templates.sql` – internal and external policies, codes of conduct, and the organisation's own policy templates.
+  - `0034_policy_uploads_conflicts.sql` – uploaded policy documents in force from a date; conflict of interest register (type and risk level); gifts and hospitality responsible person and notifiable limits by type.

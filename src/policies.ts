@@ -25,8 +25,13 @@ export type PolicyVersion = {
   approved_by: string | null;
   approved_at: string | null;
   effective_on: string | null;
+  /** Set by migration 0034: uploaded documents */
+  source?: "written" | "uploaded";
+  document_id?: string | null;
 };
-export type PolicyData = { policies: Policy[]; versions: PolicyVersion[] };
+/** The stored document behind an uploaded version */
+export type PolicyFile = { document_id: string; file_name: string; storage_path: string; uploaded_at: string };
+export type PolicyData = { policies: Policy[]; versions: PolicyVersion[]; files: PolicyFile[] };
 
 export const POLICY_CATEGORIES = ["Conduct", "Anti-bribery and corruption", "Privacy and data", "People", "Finance", "Governance", "Technology and AI", "Health and safety", "General"];
 
@@ -126,7 +131,19 @@ export async function loadPolicies(organisationId: string): Promise<PolicyData> 
     client.from("policy_versions").select("*").eq("organisation_id", organisationId).order("version_no", { ascending: false }),
   ]);
   check(policies.error ?? versions.error);
-  return { policies: (policies.data ?? []) as Policy[], versions: (versions.data ?? []) as PolicyVersion[] };
+  const list = (versions.data ?? []) as PolicyVersion[];
+  const docIds = [...new Set(list.flatMap((v) => (v.document_id ? [v.document_id] : [])))];
+  let files: PolicyFile[] = [];
+  if (docIds.length) {
+    const found = await client.from("document_versions").select("document_id, file_name, storage_path, created_at").in("document_id", docIds);
+    if (!found.error) files = (found.data ?? []).map((f) => ({ document_id: f.document_id as string, file_name: f.file_name as string, storage_path: f.storage_path as string, uploaded_at: f.created_at as string }));
+  }
+  return { policies: (policies.data ?? []) as Policy[], versions: list, files };
+}
+
+/** Records an uploaded document as the version in force from the date given */
+export async function recordUploadedPolicy(policyId: string, documentId: string, content: string, effectiveOn: string | null) {
+  check((await db().rpc("record_uploaded_policy", { p_policy: policyId, p_document: documentId, p_content: content, p_effective_on: effectiveOn || null })).error);
 }
 
 export async function createPolicy(

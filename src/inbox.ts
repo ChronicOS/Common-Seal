@@ -1,7 +1,7 @@
 import { loadInsurance, reminderDue, standing } from "./insurance";
 import { has } from "./roles";
 import { loadContracts } from "./contracts";
-import { loadDeclarations } from "./declarations";
+import { loadDeclarations, loadGiftSetup } from "./declarations";
 import { loadExpenses } from "./expenses";
 import { loadPolicies } from "./policies";
 import { loadSpeakUp } from "./speakup";
@@ -79,7 +79,8 @@ export async function loadInbox(organisationId: string, role: string, userId: st
       }
     }),
     safely(async () => {
-      if (!manage) return;
+      const setup = manage ? null : await loadGiftSetup(organisationId);
+      if (!manage && setup?.responsible_user_id !== userId) return;
       const d = await loadDeclarations(organisationId);
       for (const g of d.gifts.filter((x) => x.status === "pending" && x.declared_by !== userId)) add("declarations", "Gift or hospitality to decide", g.id, `${g.staff_name}: ${g.description}`, null);
     }),

@@ -14,7 +14,9 @@ import {
   removeOwnTemplate,
   saveOwnTemplate,
   savePolicyDraft,
+  recordUploadedPolicy,
   type OwnTemplate,
+  type PolicyFile,
   STANDARD_SECTIONS,
   updatePolicy,
   type Policy,
@@ -23,6 +25,8 @@ import {
 } from "./policies";
 import { createModule, today } from "./training";
 import { fillTemplate, TEMPLATES, type Audience, type Kind } from "./policyTemplates";
+import { readPolicyFile } from "./policyDoc";
+import { attachFile, downloadFile } from "./files";
 
 type Props = { organisationId: string; organisationName: string; role: string; userId: string };
 
@@ -145,6 +149,12 @@ export default function Policies({ organisationId, organisationName, role, userI
   const [startName, setStartName] = useState<string | null>(null);
   const [showLibrary, setShowLibrary] = useState(false);
   const [ownTemplates, setOwnTemplates] = useState<OwnTemplate[]>([]);
+  const [upload, setUpload] = useState<{ file: File; text: string; titleFound: boolean; dateFound: boolean } | null>(null);
+  const [upTitle, setUpTitle] = useState("");
+  const [upFrom, setUpFrom] = useState("");
+  const [upTarget, setUpTarget] = useState("");
+  const [reading, setReading] = useState(false);
+  const [dragging, setDragging] = useState(false);
 
   const reload = useCallback(async () => {
     const [policies, people, own] = await Promise.all([loadPolicies(organisationId), loadMembers(organisationId).catch(() => []), loadOwnTemplates(organisationId).catch(() => [])]);
@@ -195,6 +205,11 @@ export default function Policies({ organisationId, organisationName, role, userI
     if (!v) return "Draft, not yet approved";
     return overdue(p) ? "Review overdue" : `In force · version ${v.version_no}`;
   };
+  const fileOfPage0 = (policyId: string): PolicyFile | null => {
+    const v = inForce(policyId);
+    return v?.document_id ? data.files.find((x) => x.document_id === v.document_id) ?? null : null;
+  };
+  const downloadDoc = (f: PolicyFile) => void downloadFile(f.storage_path, f.file_name).catch((e) => setError(e instanceof Error ? e.message : "Could not download."));
   const messages = (
     <>
       {notice && (
@@ -217,6 +232,8 @@ export default function Policies({ organisationId, organisationName, role, userI
     const draft = versions.find((v) => v.status === "draft");
     const canWrite = !policy.is_retired && (canManage || policy.owner_user_id === userId);
     const shown = versions.find((v) => v.id === showVersion);
+    const fileOfPage = fileOfPage0(policy.id);
+    const download = downloadDoc;
     return (
       <>
         <p>
@@ -247,8 +264,15 @@ export default function Policies({ organisationId, organisationName, role, userI
         {approved ? (
           <section className="card">
             <p className="muted">
-              Version {approved.version_no}, in force from {formatDay(approved.effective_on ?? approved.approved_at!)}, approved by {nameOf(approved.approved_by)}
+              Version {approved.version_no}, in force from {formatDay(approved.effective_on ?? approved.approved_at!)}, {approved.source === "uploaded" ? "uploaded" : "approved"} by {nameOf(approved.approved_by)}
             </p>
+            {fileOfPage && (
+              <p>
+                <button type="button" className="quiet" onClick={() => download(fileOfPage)}>
+                  ⤓ Download the policy document ({fileOfPage.file_name})
+                </button>
+              </p>
+            )}
             <Wording content={approved.content} />
             <Attachments subjectTable="policies" subjectId={policy.id} canAttach={canWrite} label="Supporting documents" />
           </section>
@@ -451,10 +475,64 @@ export default function Policies({ organisationId, organisationName, role, userI
 
   const current = data.policies.filter((p) => !p.is_retired);
   const retired = data.policies.filter((p) => p.is_retired);
+  /** The stored document behind the version in force, if it was uploaded */
+  const fileOf = (policyId: string): (PolicyFile & { effective_on: string | null }) | null => {
+    const v = inForce(policyId);
+    const f = v?.document_id ? data.files.find((x) => x.document_id === v.document_id) : undefined;
+    return f && v ? { ...f, effective_on: v.effective_on } : null;
+  };
+  const download = (f: PolicyFile) => void downloadFile(f.storage_path, f.file_name).catch((e) => setError(e instanceof Error ? e.message : "Could not download."));
+
+  async function readUpload(file: File) {
+    setError(null);
+    setNotice(null);
+    if (file.size > 10 * 1024 * 1024) return setError("Files can be up to 10 MB.");
+    if (!/\.(docx|pdf)$/i.test(file.name)) return setError("Upload a Word document (.docx) or a PDF. Older .doc files: save as .docx first.");
+    setReading(true);
+    const d = await readPolicyFile(file);
+    setReading(false);
+    const title = (d.title ?? "").slice(0, 150);
+    setUpTitle(title);
+    setUpFrom(d.effectiveOn ?? "");
+    // Same name as a policy already here: offer it as the new version
+    const match = current.find((p) => title && p.title.toLowerCase() === title.toLowerCase());
+    setUpTarget(match?.id ?? "");
+    setUpload({ file, text: d.text, titleFound: Boolean(d.title), dateFound: Boolean(d.effectiveOn) });
+  }
+
+  async function saveUpload() {
+    if (!upload) return;
+    const target = upTarget;
+    if (!target) {
+      if (upTitle.trim().length < 3) return setError("Give the policy a name.");
+      if (!ownerId) return setError("Choose the owner. Every policy has a named owner.");
+    }
+    const n = Number(months);
+    if (!target && (!Number.isInteger(n) || n < 1 || n > 60)) return setError("Review every 1 to 60 months.");
+    const content = upload.text.trim().length >= 20 ? upload.text : `This policy is held as the uploaded document "${upload.file.name}". Download it to read it.`;
+    let id = target;
+    const ok = await run(async () => {
+      if (!id) id = await createPolicy(organisationId, { title: upTitle.trim(), category, ownerId, reviewMonths: n, content, audience, kind, appliesTo });
+      const doc = await attachFile("policies", id, upload.file);
+      await recordUploadedPolicy(id, doc, content, upFrom || null);
+    }, target ? "Uploaded as the new version in force." : "Policy added from the uploaded document, and in force.");
+    if (ok) {
+      setUpload(null);
+      setAppliesTo("");
+      setKind("policy");
+    }
+  }
   const internal = current.filter((p) => (p.audience ?? "internal") === "internal");
   const external = current.filter((p) => p.audience === "external");
-  const row = (p: Policy) => (
-    <li key={p.id}>
+  const row = (p: Policy) => {
+    const f = fileOf(p.id);
+    return (
+    <li key={p.id} className="policy-row">
+      {f && (
+        <button type="button" className="doc-icon" title={`Download ${f.file_name}`} aria-label={`Download ${p.title} (${f.file_name})`} onClick={() => download(f)}>
+          <span aria-hidden="true">{/\.pdf$/i.test(f.file_name) ? "PDF" : "DOC"}</span>
+        </button>
+      )}
       <button type="button" className="entity-row" onClick={() => setOpenId(p.id)}>
         <span>
           <span className="entity-name">{p.title}</span>
@@ -465,11 +543,21 @@ export default function Policies({ organisationId, organisationName, role, userI
             {p.applies_to ? ` · for ${p.applies_to}` : ""}
             {p.next_review_on && !p.is_retired ? ` · review due ${formatDay(p.next_review_on)}` : ""}
           </span>
+          {f && (
+            <>
+              <br />
+              <span className="muted small">
+                Uploaded {formatDay(f.uploaded_at)}
+                {f.effective_on ? ` · current from ${formatDay(f.effective_on)}` : ""}
+              </span>
+            </>
+          )}
         </span>
         <span className={overdue(p) && !p.is_retired ? "chip chip-alert" : "chip"}>{statusOf(p)}</span>
       </button>
     </li>
-  );
+    );
+  };
   const inUse = (name: string) => current.some((p) => p.title.toLowerCase() === name.replace(/ \(published\)$/, "").toLowerCase());
   const templateEntry = (t: { key: string; name: string; summary: string | null; whyNeeded?: string; appliesTo?: string; kind: Kind; content: string; own?: string }, use: () => void) => (
     <details key={t.key} className="card template">
@@ -552,6 +640,112 @@ export default function Policies({ organisationId, organisationName, role, userI
           </button>
         </p>
       )}
+      {canManage && !upload && (
+        <div
+          className={dragging ? "dropzone on block" : "dropzone block"}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            const f = e.dataTransfer.files[0];
+            if (f) void readUpload(f);
+          }}
+        >
+          <p>
+            <strong>{reading ? "Reading the document…" : "Drop an existing policy here"}</strong>
+          </p>
+          <p className="muted">Word (.docx) or PDF. The policy name and the date it is current from are read from the document for you to check. The document is kept as the version in force, ready to download.</p>
+          <label className="quiet-button">
+            <input id="policy-file" type="file" accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="visually-hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void readUpload(f); e.target.value = ""; }} />
+            Choose a file
+          </label>
+        </div>
+      )}
+      {canManage && upload && (
+        <section className="card form block">
+          <h2>Add the uploaded policy: {upload.file.name}</h2>
+          <p className={upload.titleFound ? "card note" : "card warning"} role="status">
+            {upload.titleFound ? "The name below was read from the document." : "No title was found in the document, so the file name is used."}{" "}
+            {upload.dateFound ? "So was the date it is current from." : "No effective or approval date was found: enter it, or leave it blank to use today."}{" "}
+            {upload.text.trim().length < 20 ? "The text could not be read (it may be a scan), so the policy will be the document only." : "Its text is kept so it can be read in Common Seal."}
+          </p>
+          <label htmlFor="up-target">This is</label>
+          <select id="up-target" value={upTarget} onChange={(e) => setUpTarget(e.target.value)}>
+            <option value="">A policy not yet in Common Seal</option>
+            {current.map((p) => (
+              <option key={p.id} value={p.id}>
+                A new version of: {p.title}
+              </option>
+            ))}
+          </select>
+          {!upTarget && (
+            <>
+              <label htmlFor="up-title">Policy name</label>
+              <input id="up-title" className={upload.titleFound ? "from-certificate" : undefined} value={upTitle} onChange={(e) => setUpTitle(e.target.value)} />
+              <fieldset className="plain-fieldset">
+                <legend>Who is it for?</legend>
+                <label className="check option-help">
+                  <input type="radio" name="up-audience" checked={audience === "internal"} onChange={() => setAudience("internal")} /> <strong>Internal policy</strong>
+                  <span className="muted"> · for people who work for the company</span>
+                </label>
+                <label className="check option-help">
+                  <input type="radio" name="up-audience" checked={audience === "external"} onChange={() => setAudience("external")} /> <strong>External policy</strong>
+                  <span className="muted"> · for suppliers, partners, customers or the public</span>
+                </label>
+              </fieldset>
+              <label className="check">
+                <input type="checkbox" checked={kind === "code"} onChange={(e) => setKind(e.target.checked ? "code" : "policy")} /> This is a code of conduct
+              </label>
+              {audience === "external" && (
+                <>
+                  <label htmlFor="up-applies">Who it applies to</label>
+                  <input id="up-applies" value={appliesTo} onChange={(e) => setAppliesTo(e.target.value)} />
+                </>
+              )}
+              <div className="row">
+                <span className="field">
+                  <label htmlFor="up-category">Category</label>
+                  <select id="up-category" value={category} onChange={(e) => setCategory(e.target.value)}>
+                    {POLICY_CATEGORIES.map((c) => (
+                      <option key={c}>{c}</option>
+                    ))}
+                  </select>
+                </span>
+                <span className="field">
+                  <label htmlFor="up-owner">Owner</label>
+                  <select id="up-owner" value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
+                    <option value="">Choose…</option>
+                    {active.map((m) => (
+                      <option key={m.user_id} value={m.user_id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </span>
+                <span className="field">
+                  <label htmlFor="up-months">Review every (months)</label>
+                  <input id="up-months" className="short" inputMode="numeric" value={months} onChange={(e) => setMonths(e.target.value)} />
+                </span>
+              </div>
+            </>
+          )}
+          <label htmlFor="up-from">Current from</label>
+          <input id="up-from" type="date" className={upload.dateFound ? "from-certificate" : undefined} value={upFrom} onChange={(e) => setUpFrom(e.target.value)} />
+          <p className="muted">Uploading records the document as approved and in force from this date (today if blank). The next review is due one review cycle after it.</p>
+          <div className="row">
+            <button type="button" disabled={busy} onClick={() => void saveUpload()}>
+              {busy ? "Saving…" : "Save the policy"}
+            </button>
+            <button type="button" className="quiet" onClick={() => setUpload(null)}>
+              Cancel
+            </button>
+          </div>
+        </section>
+      )}
       <section className="block">
         <h2>Internal policies</h2>
         {internal.length === 0 ? (
@@ -576,11 +770,11 @@ export default function Policies({ organisationId, organisationName, role, userI
           <h2>Add a policy</h2>
           <fieldset className="plain-fieldset">
             <legend>Who is it for?</legend>
-            <label className="check">
+            <label className="check option-help">
               <input type="radio" name="pn-audience" checked={audience === "internal"} onChange={() => setAudience("internal")} /> <strong>Internal policy</strong>
               <span className="muted"> · for people who work for the company, e.g. the Employee Code of Conduct</span>
             </label>
-            <label className="check">
+            <label className="check option-help">
               <input type="radio" name="pn-audience" checked={audience === "external"} onChange={() => setAudience("external")} /> <strong>External policy</strong>
               <span className="muted"> · for people outside the company, e.g. the Supplier Code of Conduct or the published privacy policy</span>
             </label>

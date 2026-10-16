@@ -25,6 +25,7 @@ import { CHECKIN_KEY, dueCheckIns, progress } from "./checks";
 import { createEntity, loadGroup, setPrompt } from "./data";
 import Authorities from "./Authorities";
 import CompanyInfo from "./CompanyInfo";
+import Conflicts from "./Conflicts";
 import Insurance from "./Insurance";
 import EntityDetail from "./EntityDetail";
 import Intercompany from "./Intercompany";
@@ -45,7 +46,7 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Tab =
   | "overview" | "company" | "authorities" | "insurance" | "foryou" | "report" | "modernslavery" | "oldregister" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
-  | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "expenses" | "speakup" | "people";
+  | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "conflicts" | "expenses" | "speakup" | "people";
 const SECTIONS = ["Board", "Risk and compliance", "Contracts and third parties", "Conduct"] as const;
 const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = [
   { id: "foryou", label: "For you" },
@@ -67,7 +68,8 @@ const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = 
   { id: "intercompany", label: "Intercompany", section: "Contracts and third parties" },
   { id: "parties", label: "Third parties", section: "Contracts and third parties" },
   { id: "authority", label: "(Old Authority)", section: "Contracts and third parties" },
-  { id: "declarations", label: "Declarations", section: "Conduct" },
+  { id: "declarations", label: "Gifts and hospitality", section: "Conduct" },
+  { id: "conflicts", label: "Conflicts of interest", section: "Conduct" },
   { id: "expenses", label: "Expenses", section: "Conduct" },
   { id: "speakup", label: "Investigations", section: "Conduct" },
 ];
@@ -227,6 +229,17 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
     );
   }
   if (!data) return <p className="lead">Loading…</p>;
+
+  if (tab === "conflicts") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+          <Conflicts organisationId={organisation.id} role={role} userId={userId} entities={data.entities} />
+        </div>
+      </div>
+    );
+  }
 
   if (tab === "insurance") {
     return (
@@ -409,7 +422,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
       <div className="workspace">
         {nav}
         <div className="workspace-main">
-        <Declarations organisationId={organisation.id} role={role} />
+        <Declarations organisationId={organisation.id} role={role} userId={userId} />
         </div>
       </div>
     );

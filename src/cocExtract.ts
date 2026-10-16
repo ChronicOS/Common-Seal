@@ -50,7 +50,7 @@ function toIso(m: RegExpExecArray): string | null {
   if (m[4]) return iso(Number(m[6]), MONTHS.indexOf(m[5].slice(0, 3).toLowerCase()) + 1, Number(m[4]));
   return iso(Number(m[7]), Number(m[8]), Number(m[9]));
 }
-function datesIn(text: string): string[] {
+export function datesIn(text: string): string[] {
   const out: string[] = [];
   DATE.lastIndex = 0;
   for (let m = DATE.exec(text); m; m = DATE.exec(text)) {
@@ -139,13 +139,13 @@ export function extractFromText(text: string): Extracted {
 }
 
 /** Reads the text of a PDF in the browser. Returns an empty string for a scanned PDF with no text in it. */
-export async function pdfText(file: File): Promise<string> {
+export async function pdfText(file: File, maxPages = 10): Promise<string> {
   const pdfjs = await import("pdfjs-dist");
   const worker = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default;
   pdfjs.GlobalWorkerOptions.workerSrc = worker;
   const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
   const pages: string[] = [];
-  for (let n = 1; n <= Math.min(doc.numPages, 10); n++) {
+  for (let n = 1; n <= Math.min(doc.numPages, maxPages); n++) {
     const content = await (await doc.getPage(n)).getTextContent();
     // Group the pieces into lines by their height on the page
     let lastY: number | null = null;
