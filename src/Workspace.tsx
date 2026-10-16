@@ -320,6 +320,29 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
     );
   }
 
+  const addEntityForm = (
+          <form className="card form" onSubmit={add}>
+            <label htmlFor="entity-name">Add an entity</label>
+            <div className="row">
+              <input
+                id="entity-name"
+                className="grow"
+                placeholder="Company name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+              <button type="submit" disabled={busy}>
+                {busy ? "Adding…" : "Add"}
+              </button>
+            </div>
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
+          </form>
+  );
+
   if (tab === "authorities") {
     return (
       <div className="workspace">
@@ -336,7 +359,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
       <div className="workspace">
         {nav}
         <div className="workspace-main">
-          <CompanyInfo data={data} canEdit={canEdit} onOpen={openEntity} />
+          <CompanyInfo data={data} canEdit={canEdit} onOpen={openEntity} addSlot={canEdit ? addEntityForm : null} />
         </div>
       </div>
     );
@@ -347,7 +370,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
       <div className="workspace">
         {nav}
         <div className="workspace-main">
-          <Ownership organisationId={organisation.id} group={data} canEdit={canEdit} onChanged={() => void reload()} />
+          <Ownership organisationId={organisation.id} group={data} canEdit={canEdit} onChanged={reload} />
         </div>
       </div>
     );
@@ -594,6 +617,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
       </div>
     );
   }
+
 
   async function add(event: FormEvent) {
     event.preventDefault();
@@ -861,28 +885,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
             </ul>
           </>
         )}
-        {canEdit && (
-          <form className="card form" onSubmit={add}>
-            <label htmlFor="entity-name">Add an entity</label>
-            <div className="row">
-              <input
-                id="entity-name"
-                className="grow"
-                placeholder="Company name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-              <button type="submit" disabled={busy}>
-                {busy ? "Adding…" : "Add"}
-              </button>
-            </div>
-            {error && (
-              <p className="error" role="alert">
-                {error}
-              </p>
-            )}
-          </form>
-        )}
+        {canEdit && data.entities.length === 0 && addEntityForm}
       </section>
       </div>
     </div>

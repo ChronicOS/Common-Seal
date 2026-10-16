@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import AddEntity from "./AddEntity";
 import Attachments from "./Attachments";
+import { createEntity } from "./data";
 import { today } from "./authorities";
 import { formatDay } from "./board";
 import {
-  ANTI_DILUTION_LABELS, blankClass, blankHolder, consentsMissing, CONVERTIBLE_LABELS, essDue, fmt, fullyDiluted, HOLDER_KINDS, issueFromInstrument, loadOwnership,
+  ANTI_DILUTION_LABELS, blankClass, FUNDING_LABELS, INSTRUMENT_LABELS, PLAN_TYPES, syncGroupChart, blankHolder, consentsMissing, CONVERTIBLE_LABELS, essDue, fmt, fullyDiluted, HOLDER_KINDS, issueFromInstrument, loadOwnership,
   money, MOVEMENT_LABELS, outstanding, PARTICIPATION_LABELS, pct, preferenceStack, recordConsent, recordMovement, registerAsAt, saveClass, saveConvertible, saveEss,
   saveGrant, saveHolder, saveMatter, savePlan, saveTerms, setStartupMode, updateMovementRecords, vestedBy, vestingSummary, voidMovement,
   type ClassValues, type Consent, type Convertible, type ConvertibleValues, type Grant, type GrantValues, type Holder, type HolderValues, type Matter, type MatterValues,
@@ -12,7 +14,7 @@ import {
 import type { GroupData } from "./types";
 
 type Sub = "register" | "history" | "classes" | "esop" | "convertibles" | "rights" | "diluted";
-type Props = { organisationId: string; group: GroupData | null; canEdit: boolean; onChanged: () => void };
+type Props = { organisationId: string; group: GroupData | null; canEdit: boolean; onChanged: () => void | Promise<void> };
 
 const day = (iso: string | null | undefined) => (iso ? formatDay(`${iso.slice(0, 10)}T12:00:00`) : "");
 
@@ -61,9 +63,16 @@ function ResolutionPick({ id, data, value, onChange }: { id: string; data: Owner
   );
 }
 
+let chosenEntity: string | null = null;
+
 export default function Ownership({ organisationId, group, canEdit, onChanged }: Props) {
   const entities = useMemo(() => (group?.entities ?? []).filter((e) => e.status !== "deregistered"), [group]);
-  const [entityId, setEntityId] = useState<string | null>(entities[0]?.id ?? null);
+  // Remembered for the visit, so the choice survives the page reloading or a trip to another tab
+  const [entityId, setEntityIdState] = useState<string | null>(() => (entities.some((e) => e.id === chosenEntity) ? chosenEntity : entities[0]?.id ?? null));
+  const setEntityId = (id: string | null) => {
+    chosenEntity = id;
+    setEntityIdState(id);
+  };
   const entity = entities.find((e) => e.id === entityId) ?? null;
   const startup = Boolean(entity?.startup_mode);
   const [sub, setSub] = useState<Sub>("register");
@@ -87,10 +96,11 @@ export default function Ownership({ organisationId, group, canEdit, onChanged }:
     void reload();
   }, [reload]);
   useEffect(() => {
-    if (!entityId && entities[0]) setEntityId(entities[0].id);
+    if (chosenEntity && chosenEntity !== entityId && entities.some((e) => e.id === chosenEntity)) setEntityIdState(chosenEntity);
+    else if ((!entityId || !entities.some((e) => e.id === entityId)) && entities[0] && !(chosenEntity && entityId === chosenEntity)) setEntityIdState(entities[0].id);
   }, [entities, entityId]);
   useEffect(() => {
-    if (!startup && ["esop", "convertibles", "rights", "diluted"].includes(sub)) setSub("register");
+    if (!startup && ["convertibles", "rights", "diluted"].includes(sub)) setSub("register");
   }, [startup, sub]);
 
   const run = async (work: () => Promise<unknown>, done?: string) => {
@@ -114,7 +124,8 @@ export default function Ownership({ organisationId, group, canEdit, onChanged }:
       <>
         <p className="eyebrow">Company</p>
         <h1>Ownership</h1>
-        <p className="muted">Add a company under Company Info first.</p>
+        <p className="muted">No companies yet. Add the first one.</p>
+        {canEdit && <AddEntity organisationId={organisationId} onAdded={async (e) => { await onChanged(); setEntityId(e.id); }} />}
       </>
     );
   }
@@ -127,18 +138,17 @@ export default function Ownership({ organisationId, group, canEdit, onChanged }:
         The register of members: who holds the shares, of which class, and what was paid. Every holding is worked out from the history of issues, transfers and other changes, so each number traces back to the event and the board approval behind it.
       </p>
       <div className="row wrap block-gap">
-        {entities.length > 1 && (
-          <span className="field">
-            <label htmlFor="own-entity">Company</label>
-            <select id="own-entity" value={entityId ?? ""} onChange={(e) => { setEntityId(e.target.value); setForm(null); }}>
-              {entities.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.name}
-                </option>
-              ))}
-            </select>
-          </span>
-        )}
+        <span className="field">
+          <label htmlFor="own-entity">Company</label>
+          <select id="own-entity" value={entityId ?? ""} onChange={(e) => { setEntityId(e.target.value); setForm(null); setSub("register"); }}>
+            {entities.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name}
+              </option>
+            ))}
+          </select>
+        </span>
+        {canEdit && <AddEntity organisationId={organisationId} onAdded={async (e) => { await onChanged(); setEntityId(e.id); setSub("register"); setNotice(`${e.name} added. Fill in its details under Company Info.`); }} />}
         <label className="check" title="Adds the ESOP, convertibles, investor rights, reserved matters and the fully diluted view">
           <input
             type="checkbox"
@@ -174,9 +184,9 @@ export default function Ownership({ organisationId, group, canEdit, onChanged }:
     { id: "register", label: "Register" },
     { id: "history", label: `History (${live.length})` },
     { id: "classes", label: `Share classes (${data.classes.length})` },
+    { id: "esop", label: "Incentive plans" },
     ...(startup
       ? ([
-          { id: "esop", label: "ESOP" },
           { id: "convertibles", label: "Convertibles" },
           { id: "rights", label: "Investor rights" },
           { id: "diluted", label: "Fully diluted" },
@@ -216,7 +226,15 @@ export default function Ownership({ organisationId, group, canEdit, onChanged }:
         ))}
       </span>
       {sub === "register" && <RegisterView data={data} entityId={entityId!} canEdit={canEdit} busy={busy} form={form} setForm={setForm} group={group}
-        onHolder={(id, v) => run(() => saveHolder(organisationId, entityId!, id, v), "Shareholder saved.")}
+        onHolder={(id, v, newGroupCompany) => run(async () => {
+          if (newGroupCompany) {
+            const e = await createEntity(organisationId, v.name);
+            v = { ...v, holder_entity_id: e.id };
+            await onChanged();
+          }
+          await saveHolder(organisationId, entityId!, id, v);
+        }, newGroupCompany ? `Shareholder saved, and ${v.name} added as a group company.` : "Shareholder saved.")}
+        onSyncChart={(parentId, pct, relId) => run(async () => { await syncGroupChart(organisationId, entityId!, parentId, pct, relId); await onChanged(); }, "Group chart updated.")}
         onMovement={(v) => run(() => recordMovement(organisationId, entityId!, v), "Recorded. The register has been updated.")} />}
       {sub === "history" && <HistoryView data={data} canEdit={canEdit} busy={busy} startup={startup} holderName={holderName} className={className}
         onUpdate={(id, patch, done) => run(() => updateMovementRecords(id, patch), done)}
@@ -247,9 +265,10 @@ export default function Ownership({ organisationId, group, canEdit, onChanged }:
 // ---------------------------------------------------------------------
 // Register
 // ---------------------------------------------------------------------
-function RegisterView({ data, entityId, canEdit, busy, form, setForm, group, onHolder, onMovement }: {
+function RegisterView({ data, entityId, canEdit, busy, form, setForm, group, onHolder, onMovement, onSyncChart }: {
   data: OwnershipData; entityId: string; canEdit: boolean; busy: boolean; form: string | null; setForm: (f: string | null) => void; group: GroupData | null;
-  onHolder: (id: string | null, v: HolderValues) => void; onMovement: (v: MovementValues) => void;
+  onHolder: (id: string | null, v: HolderValues, newGroupCompany: boolean) => void; onMovement: (v: MovementValues) => void;
+  onSyncChart: (parentId: string, pct: number, relId: string | null) => void;
 }) {
   const [asOf, setAsOf] = useState("");
   const [past, setPast] = useState<Position[] | null>(null);
@@ -268,7 +287,7 @@ function RegisterView({ data, entityId, canEdit, busy, form, setForm, group, onH
   const withoutShares = data.holders.filter((h) => !data.positions.some((p) => p.shareholder_id === h.id));
 
   if (form === "holder" || editing) {
-    return <HolderForm initial={editing ?? blankHolder()} group={group} busy={busy} onSave={(v) => onHolder(editing?.id ?? null, v)} onCancel={() => setForm(null)} />;
+    return <HolderForm initial={editing ?? blankHolder()} group={group} entityId={entityId} busy={busy} onSave={(v, add) => onHolder(editing?.id ?? null, v, add)} onCancel={() => setForm(null)} />;
   }
   if (form === "movement") return <MovementForm data={data} busy={busy} onSave={onMovement} onCancel={() => setForm(null)} />;
 
@@ -318,6 +337,7 @@ function RegisterView({ data, entityId, canEdit, busy, form, setForm, group, onH
                       ) : (
                         h?.name
                       )}
+                      {h?.holder_entity_id && !asOf && <GroupChartLine data={data} group={group} entityId={entityId} holder={h} canEdit={canEdit} busy={busy} onSync={onSyncChart} />}
                       {h && !h.is_beneficial && <span className="muted small"><br />Not beneficially held: for {h.held_for}</span>}
                       {h && !h.address && <span className="warning-text small"><br />No address recorded</span>}
                       {h?.address && <span className="muted small"><br />{h.address}</span>}
@@ -377,8 +397,9 @@ function RegisterView({ data, entityId, canEdit, busy, form, setForm, group, onH
   );
 }
 
-function HolderForm({ initial, group, busy, onSave, onCancel }: { initial: HolderValues; group: GroupData | null; busy: boolean; onSave: (v: HolderValues) => void; onCancel: () => void }) {
+function HolderForm({ initial, group, entityId, busy, onSave, onCancel }: { initial: HolderValues; group: GroupData | null; entityId: string; busy: boolean; onSave: (v: HolderValues, newGroupCompany: boolean) => void; onCancel: () => void }) {
   const [v, setV] = useState(initial);
+  const [addGroup, setAddGroup] = useState(false);
   const set = (p: Partial<HolderValues>) => setV({ ...v, ...p });
   const [missing, setMissing] = useState<string | null>(null);
   return (
@@ -401,18 +422,29 @@ function HolderForm({ initial, group, busy, onSave, onCancel }: { initial: Holde
         <Text id="h-email" label="Email (optional)" value={v.email} onChange={(x) => set({ email: x })} />
         {v.kind !== "individual" && <Text id="h-reg" label="ACN, ABN or registration" value={v.registration} onChange={(x) => set({ registration: x })} />}
       </div>
-      {v.kind === "company" && (group?.entities.length ?? 0) > 1 && (
+      {v.kind === "company" && (
         <Field id="h-group" label="Is this one of our group companies?">
-          <select id="h-group" value={v.holder_entity_id ?? ""} onChange={(e) => set({ holder_entity_id: e.target.value || null })}>
-            <option value="">No</option>
-            {group!.entities.map((e) => (
+          <select
+            id="h-group"
+            value={addGroup ? "__new" : v.holder_entity_id ?? ""}
+            onChange={(e) => {
+              const x = e.target.value;
+              setAddGroup(x === "__new");
+              const picked = group?.entities.find((g) => g.id === x);
+              set({ holder_entity_id: x && x !== "__new" ? x : null, ...(picked && !v.name.trim() ? { name: picked.name } : {}) });
+            }}
+          >
+            <option value="">No, an outside company</option>
+            {(group?.entities ?? []).filter((e) => e.id !== entityId).map((e) => (
               <option key={e.id} value={e.id}>
                 {e.name}
               </option>
             ))}
+            <option value="__new">Yes, and add it as a new group entity</option>
           </select>
         </Field>
       )}
+      {addGroup && <p className="muted small">{v.name.trim() ? `${v.name.trim()} will be added to the group under Company Info.` : "Type the company's name above; it will be added to the group under Company Info."}</p>}
       <fieldset className="plain-fieldset">
         <legend>Does the shareholder hold the shares for its own benefit?</legend>
         <div className="row">
@@ -430,7 +462,8 @@ function HolderForm({ initial, group, busy, onSave, onCancel }: { initial: Holde
         <button type="button" disabled={busy} onClick={() => {
           if (v.name.trim().length < 1) return setMissing("Give the shareholder's name.");
           if (!v.is_beneficial && !v.held_for?.trim()) return setMissing("Say who the shares are held for.");
-          onSave(v);
+          if (addGroup && v.name.trim().length < 2) return setMissing("Give the company's name.");
+          onSave(v, addGroup && v.kind === "company");
         }}>
           Save
         </button>
@@ -955,7 +988,7 @@ function EsopView({ data, canEdit, busy, form, setForm, today: t, onPlan, onGran
   onHolder: (v: HolderValues) => Promise<string>; onEss: (fy: number, existing: OwnershipData["ess"][number] | undefined, patch: { statements_given_on?: string | null; ato_lodged_on?: string | null }) => void;
   onConsent: (v: ConsentInput) => void;
 }) {
-  const [lapse, setLapse] = useState<{ id: string; n: number | null } | null>(null);
+  const [lapse, setLapse] = useState<{ id: string; n: number | null; kind: "lapse" | "settle" } | null>(null);
   const plan = (id: string) => data.plans.find((p) => p.id === id);
   if (form === "plan" || form?.startsWith("plan:")) {
     const p = form === "plan" ? undefined : plan(form.slice(5));
@@ -971,7 +1004,7 @@ function EsopView({ data, canEdit, busy, form, setForm, today: t, onPlan, onGran
     const v = vestedBy(g, t);
     const can = v == null ? outstanding(g) : Math.max(0, v - g.exercised - g.lapsed);
     return (
-      <IssueForm title={`Exercise: ${g.holder_name}`} data={data} defaultClass={plan(g.plan_id)?.class_id ?? null} defaultHolder={g.holder_name}
+      <IssueForm title={`${g.instrument === "share" ? "Issue shares" : "Exercise"}: ${g.holder_name}`} data={data} defaultClass={plan(g.plan_id)?.class_id ?? null} defaultHolder={g.holder_name}
         defaultShares={can || null} defaultPrice={g.exercise_price} busy={busy} onHolder={onHolder} onCancel={() => setForm(null)} onIssue={(x) => onExercise(g.id, x)}
         note={v == null ? `No vesting schedule is recorded. ${fmt(outstanding(g))} remain under the grant.` : `${fmt(v)} vested to date; ${fmt(can)} vested and not yet exercised. Exercising unvested ${g.instrument}s is only allowed if the plan permits it.`} />
     );
@@ -979,14 +1012,17 @@ function EsopView({ data, canEdit, busy, form, setForm, today: t, onPlan, onGran
   const ess = essDue(data);
   return (
     <>
-      {data.plans.length === 0 && <p className="muted">No employee share plan recorded yet.</p>}
+      {data.plans.length === 0 && <p className="muted">No incentive plan recorded yet. Add an employee share option plan (ESOP) or a management incentive plan (MIP).</p>}
       {data.plans.map((p) => {
         const grants = data.grants.filter((g) => g.plan_id === p.id);
         const granted = grants.reduce((s, g) => s + g.number - g.lapsed, 0);
+        const cash = p.settlement === "cash";
         return (
           <section key={p.id} className="card block">
             <div className="row spread">
-              <h2>{p.name}</h2>
+              <h2>
+                {p.name} <span className="chip">{p.plan_type === "mip" ? "MIP" : "ESOP"}</span>
+              </h2>
               {canEdit && (
                 <button type="button" className="link-dark small" onClick={() => setForm(`plan:${p.id}`)}>
                   Edit plan
@@ -996,15 +1032,22 @@ function EsopView({ data, canEdit, busy, form, setForm, today: t, onPlan, onGran
             <dl className="facts">
               <div><dt>Pool</dt><dd>{fmt(p.pool_size)}</dd></div>
               <div><dt>Granted</dt><dd>{fmt(granted)}</dd></div>
-              <div><dt>Exercised</dt><dd>{fmt(grants.reduce((s, g) => s + g.exercised, 0))}</dd></div>
+              <div><dt>{cash ? "Settled in cash" : "Exercised or issued"}</dt><dd>{fmt(grants.reduce((s, g) => s + (cash ? g.settled : g.exercised), 0))}</dd></div>
               <div><dt>Unallocated</dt><dd>{fmt(p.pool_size - granted)}</dd></div>
             </dl>
             <p className="small muted">
-              Over {data.classes.find((c) => c.id === p.class_id)?.name ?? <span className="warning-text">no class recorded</span>}
+              {cash ? "Phantom units, settled in cash: no shares are issued" : <>Over {data.classes.find((c) => c.id === p.class_id)?.name ?? <span className="warning-text">no class recorded</span>}</>}
               {p.adopted_on ? ` · adopted ${day(p.adopted_on)}` : ""}
-              {" · Startup tax concession: "}
-              {p.startup_concession == null ? <span className="warning-text">not known</span> : p.startup_concession ? "relied on" : "not relied on"}
+              {!cash && <>{" · Startup tax concession: "}{p.startup_concession == null ? <span className="warning-text">not known</span> : p.startup_concession ? "relied on" : "not relied on"}</>}
             </p>
+            {p.plan_type === "mip" && (
+              <ul className="plain small">
+                <li>Hurdle: {p.hurdle_note || (p.hurdle_value != null ? `company value above ${money(p.hurdle_value)}` : <span className="warning-text">not recorded</span>)}</li>
+                {p.performance_conditions && <li>Performance conditions: {p.performance_conditions}</li>}
+                <li>Pays out: {p.exit_only == null ? <span className="warning-text">not recorded</span> : p.exit_only ? "only on an exit" : "on vesting"}</li>
+                {!cash && <li>Participants: {p.funding ? FUNDING_LABELS[p.funding].toLowerCase() : <span className="warning-text">how they pay is not recorded</span>}</li>}
+              </ul>
+            )}
             {grants.length > 0 && (
               <div className="table-scroll">
                 <table className="report-table wide">
@@ -1015,7 +1058,7 @@ function EsopView({ data, canEdit, busy, form, setForm, today: t, onPlan, onGran
                       <th scope="col" className="num">Price</th>
                       <th scope="col">Vesting</th>
                       <th scope="col" className="num">Vested</th>
-                      <th scope="col" className="num">Exercised</th>
+                      <th scope="col" className="num">{cash ? "Settled" : "Exercised"}</th>
                       <th scope="col" className="num">Lapsed</th>
                       <th scope="col">Expires</th>
                       <th scope="col" />
@@ -1029,32 +1072,38 @@ function EsopView({ data, canEdit, busy, form, setForm, today: t, onPlan, onGran
                         <tr key={g.id}>
                           <th scope="row">
                             {canEdit ? <button type="button" className="link-dark" onClick={() => setForm(`grant:${g.id}`)}>{g.holder_name}</button> : g.holder_name}
-                            <span className="muted small"><br />{g.instrument}s, {day(g.granted_on)}</span>
+                            <span className="muted small"><br />{INSTRUMENT_LABELS[g.instrument].toLowerCase()}, {day(g.granted_on)}</span>
+                            {g.performance_conditions && <span className="muted small"><br />Conditions: {g.performance_conditions}</span>}
+                            {g.loan_amount != null && <span className="muted small"><br />Loan {money(g.loan_amount)}{g.loan_terms ? `: ${g.loan_terms}` : ""}</span>}
                             <ConsentLine data={data} subjectTable="esop_grants" subjectId={g.id} subjectDate={g.granted_on} canEdit={canEdit} busy={busy} onConsent={onConsent} />
                           </th>
                           <td className="num">{fmt(g.number)}</td>
                           <td className="num">{money(g.exercise_price)}</td>
                           <td className="small">{vestingSummary(g)}{g.leaver_terms ? <><br /><span className="muted">Leaver: {g.leaver_terms}</span></> : null}</td>
-                          <td className={v == null ? "num warning-text" : "num"}>{v == null ? "?" : fmt(v)}</td>
-                          <td className="num">{fmt(g.exercised)}</td>
+                          <td className={v == null && !p.exit_only ? "num warning-text" : "num"}>{v == null ? (p.exit_only ? "On exit" : "?") : fmt(v)}</td>
+                          <td className="num">{fmt(cash ? g.settled : g.exercised)}</td>
                           <td className="num">{fmt(g.lapsed)}</td>
                           <td className={expired ? "warning-text" : undefined}>{day(g.expires_on)}{expired ? " (passed)" : ""}</td>
                           <td>
                             {canEdit && outstanding(g) > 0 && (
                               <span className="row">
-                                <button type="button" className="link-dark small" onClick={() => setForm(`exercise:${g.id}`)}>Exercise</button>
-                                <button type="button" className="link-dark small" onClick={() => setLapse({ id: g.id, n: outstanding(g) })}>Lapse</button>
+                                {cash ? (
+                                  <button type="button" className="link-dark small" onClick={() => setLapse({ id: g.id, n: outstanding(g), kind: "settle" })}>Settle</button>
+                                ) : (
+                                  <button type="button" className="link-dark small" onClick={() => setForm(`exercise:${g.id}`)}>{g.instrument === "share" ? "Issue" : "Exercise"}</button>
+                                )}
+                                <button type="button" className="link-dark small" onClick={() => setLapse({ id: g.id, n: outstanding(g), kind: "lapse" })}>Lapse</button>
                               </span>
                             )}
                             {lapse?.id === g.id && (
                               <span className="row wrap">
-                                <input aria-label="Number lapsing" type="number" value={lapse.n ?? ""} onChange={(e) => setLapse({ id: g.id, n: toNum(e.target.value) })} />
+                                <input aria-label={lapse.kind === "settle" ? "Number settled" : "Number lapsing"} type="number" value={lapse.n ?? ""} onChange={(e) => setLapse({ ...lapse, n: toNum(e.target.value) })} />
                                 <button type="button" disabled={busy || !lapse.n || lapse.n > outstanding(g)} onClick={() => {
                                   const { id: _id, exercised: _x, ...rest } = g;
-                                  onGrant(g.id, { ...rest, lapsed: g.lapsed + (lapse.n ?? 0) });
+                                  onGrant(g.id, lapse.kind === "settle" ? { ...rest, settled: g.settled + (lapse.n ?? 0) } : { ...rest, lapsed: g.lapsed + (lapse.n ?? 0) });
                                   setLapse(null);
                                 }}>
-                                  Record lapse
+                                  {lapse.kind === "settle" ? "Record cash settlement" : "Record lapse"}
                                 </button>
                               </span>
                             )}
@@ -1080,7 +1129,7 @@ function EsopView({ data, canEdit, busy, form, setForm, today: t, onPlan, onGran
       {canEdit && (
         <p className="block">
           <button type="button" onClick={() => setForm("plan")}>
-            Add an employee share plan
+            Add an incentive plan (ESOP or MIP)
           </button>
         </p>
       )}
@@ -1119,27 +1168,79 @@ function EsopView({ data, canEdit, busy, form, setForm, today: t, onPlan, onGran
 }
 
 function PlanForm({ initial, data, busy, onSave, onCancel }: { initial?: OwnershipData["plans"][number]; data: OwnershipData; busy: boolean; onSave: (v: PlanValues) => void; onCancel: () => void }) {
-  const [v, setV] = useState<PlanValues>(initial ? (({ id: _id, ...r }) => r)(initial) : { name: "Employee Share Option Plan", class_id: data.classes.find((c) => c.kind === "ordinary")?.id ?? null, pool_size: 0, adopted_on: null, resolution_id: null, startup_concession: null, notes: null, status: "active" });
+  const [v, setV] = useState<PlanValues>(initial ? (({ id: _id, ...r }) => r)(initial) : {
+    name: "Employee Share Option Plan", class_id: data.classes.find((c) => c.kind === "ordinary")?.id ?? null, pool_size: 0, adopted_on: null, resolution_id: null,
+    startup_concession: null, notes: null, status: "active", plan_type: "esop", hurdle_value: null, hurdle_note: null, performance_conditions: null, exit_only: null,
+    funding: null, settlement: "equity",
+  });
   const set = (p: Partial<PlanValues>) => setV({ ...v, ...p });
   const [missing, setMissing] = useState<string | null>(null);
+  const mip = v.plan_type === "mip";
   return (
     <div className="card form">
-      <h2>{initial ? initial.name : "New employee share plan"}</h2>
+      <h2>{initial ? initial.name : "New incentive plan"}</h2>
       <div className="row wrap">
-        <Text id="p-name" label="Name" value={v.name} onChange={(x) => set({ name: x })} wide />
-        <Text id="p-pool" label="Pool size (shares)" type="number" value={v.pool_size || null} onChange={(x) => set({ pool_size: toNum(x) ?? 0 })} />
-        <Field id="p-class" label="Over which class">
-          <select id="p-class" value={v.class_id ?? ""} onChange={(e) => set({ class_id: e.target.value || null })}>
-            <option value="">Not recorded</option>
-            {data.classes.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+        <Field id="p-type" label="Type of plan">
+          <select id="p-type" value={v.plan_type} onChange={(e) => {
+            const t = e.target.value as PlanValues["plan_type"];
+            const defaultName = (x: string) => x === "Employee Share Option Plan" || x === "Management Incentive Plan" || !x.trim();
+            set({ plan_type: t, name: defaultName(v.name) ? (t === "mip" ? "Management Incentive Plan" : "Employee Share Option Plan") : v.name });
+          }}>
+            {Object.entries(PLAN_TYPES).map(([id, l]) => (
+              <option key={id} value={id}>{l}</option>
             ))}
           </select>
         </Field>
+        <Text id="p-name" label="Name" value={v.name} onChange={(x) => set({ name: x })} wide />
       </div>
+      {mip && (
+        <div className="row wrap">
+          <Field id="p-settle" label="Settled in">
+            <select id="p-settle" value={v.settlement} onChange={(e) => set({ settlement: e.target.value as PlanValues["settlement"] })}>
+              <option value="equity">Shares (or options over shares)</option>
+              <option value="cash">Cash (phantom units)</option>
+            </select>
+          </Field>
+          {v.settlement === "equity" && (
+            <Field id="p-fund" label="How participants pay">
+              <select id="p-fund" value={v.funding ?? ""} onChange={(e) => set({ funding: (e.target.value || null) as PlanValues["funding"] })}>
+                <option value="">Not recorded</option>
+                {Object.entries(FUNDING_LABELS).map(([id, l]) => (
+                  <option key={id} value={id}>{l}</option>
+                ))}
+              </select>
+            </Field>
+          )}
+        </div>
+      )}
+      <div className="row wrap">
+        <Text id="p-pool" label={v.settlement === "cash" ? "Pool size (units)" : "Pool size (shares)"} type="number" value={v.pool_size || null} onChange={(x) => set({ pool_size: toNum(x) ?? 0 })} />
+        {v.settlement === "equity" && (
+          <Field id="p-class" label={mip ? "Class (often its own MIP or growth share class)" : "Over which class"}>
+            <select id="p-class" value={v.class_id ?? ""} onChange={(e) => set({ class_id: e.target.value || null })}>
+              <option value="">Not recorded</option>
+              {data.classes.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </Field>
+        )}
+      </div>
+      {mip && (
+        <>
+          <div className="row wrap">
+            <Text id="p-hurdle" label="Hurdle: company value above which it pays" value={v.hurdle_value} onChange={(x) => set({ hurdle_value: toNum(x) })} />
+            <Text id="p-hurdle-n" label="Hurdle in words" placeholder="Value above $50m, or 2.5x money for the investor" value={v.hurdle_note} onChange={(x) => set({ hurdle_note: x })} wide />
+          </div>
+          <div className="row wrap">
+            <Text id="p-perf" label="Performance conditions" placeholder="EBITDA targets, time in role" value={v.performance_conditions} onChange={(x) => set({ performance_conditions: x })} wide />
+            <Yes id="p-exit" label="Only pays out on an exit" value={v.exit_only} onChange={(x) => set({ exit_only: x })} />
+          </div>
+        </>
+      )}
       <div className="row wrap">
         <Text id="p-adopted" label="Adopted on" type="date" value={v.adopted_on} onChange={(x) => set({ adopted_on: x || null })} />
-        <Yes id="p-conc" label="Relies on the startup tax concession" value={v.startup_concession} onChange={(x) => set({ startup_concession: x })} />
+        {v.settlement === "equity" && <Yes id="p-conc" label="Relies on the startup tax concession" value={v.startup_concession} onChange={(x) => set({ startup_concession: x })} />}
         <Field id="p-status" label="Status">
           <select id="p-status" value={v.status} onChange={(e) => set({ status: e.target.value as PlanValues["status"] })}>
             <option value="active">Active</option>
@@ -1150,7 +1251,7 @@ function PlanForm({ initial, data, busy, onSave, onCancel }: { initial?: Ownersh
       <ResolutionPick id="p-res" data={data} value={v.resolution_id} onChange={(x) => set({ resolution_id: x })} />
       {missing && <p className="error">{missing}</p>}
       <div className="row">
-        <button type="button" disabled={busy} onClick={() => (v.pool_size > 0 && v.name.trim().length >= 2 ? onSave(v) : setMissing("Give the plan a name and a pool size."))}>
+        <button type="button" disabled={busy} onClick={() => (v.pool_size > 0 && v.name.trim().length >= 2 ? onSave(v.settlement === "cash" ? { ...v, class_id: null, funding: null, startup_concession: null } : v) : setMissing("Give the plan a name and a pool size."))}>
           Save
         </button>
         <button type="button" className="quiet" onClick={onCancel}>Cancel</button>
@@ -1160,31 +1261,35 @@ function PlanForm({ initial, data, busy, onSave, onCancel }: { initial?: Ownersh
 }
 
 function GrantForm({ initial, planId, data, busy, onSave, onCancel }: { initial?: Grant; planId: string; data: OwnershipData; busy: boolean; onSave: (v: GrantValues) => void; onCancel: () => void }) {
+  const plan = data.plans.find((p) => p.id === planId);
+  const cash = plan?.settlement === "cash";
+  const mip = plan?.plan_type === "mip";
   const [v, setV] = useState<GrantValues>(initial ? (({ id: _id, exercised: _x, ...r }) => r)(initial) : {
-    plan_id: planId, holder_name: "", person_id: null, instrument: "option", number: 0, exercise_price: 0, granted_on: today(), vesting_start_on: null,
-    vesting_months: 48, cliff_months: 12, vesting_every: "monthly", acceleration: null, leaver_terms: null, expires_on: null, lapsed: 0, resolution_id: null, notes: null,
+    plan_id: planId, holder_name: "", person_id: null, instrument: cash ? "unit" : mip ? "share" : "option", number: 0, exercise_price: 0, granted_on: today(), vesting_start_on: null,
+    vesting_months: mip ? null : 48, cliff_months: mip ? null : 12, vesting_every: "monthly", acceleration: null, leaver_terms: null, expires_on: null, lapsed: 0, resolution_id: null, notes: null,
+    performance_conditions: null, loan_amount: null, loan_terms: null, settled: 0,
   });
   const set = (p: Partial<GrantValues>) => setV({ ...v, ...p });
   const [missing, setMissing] = useState<string | null>(null);
   return (
     <div className="card form">
-      <h2>{initial ? `Grant to ${initial.holder_name}` : "New grant"}</h2>
+      <h2>{initial ? `Grant to ${initial.holder_name}` : `New grant under ${plan?.name ?? "the plan"}`}</h2>
       <div className="row wrap">
-        <Text id="g-name" label="Employee or adviser" value={v.holder_name} onChange={(x) => set({ holder_name: x })} wide />
+        <Text id="g-name" label={mip ? "Manager" : "Employee or adviser"} value={v.holder_name} onChange={(x) => set({ holder_name: x })} wide />
         <Field id="g-inst" label="What">
-          <select id="g-inst" value={v.instrument} onChange={(e) => set({ instrument: e.target.value as Grant["instrument"] })}>
-            <option value="option">Options</option>
-            <option value="right">Rights</option>
-            <option value="share">Shares</option>
+          <select id="g-inst" value={v.instrument} disabled={cash} onChange={(e) => set({ instrument: e.target.value as Grant["instrument"] })}>
+            {(cash ? ["unit"] : ["option", "right", "share"]).map((k) => (
+              <option key={k} value={k}>{INSTRUMENT_LABELS[k as Grant["instrument"]]}</option>
+            ))}
           </select>
         </Field>
         <Text id="g-num" label="Number" type="number" value={v.number || null} onChange={(x) => set({ number: toNum(x) ?? 0 })} />
-        <Text id="g-price" label="Exercise price" value={v.exercise_price} onChange={(x) => set({ exercise_price: toNum(x) ?? 0 })} />
+        <Text id="g-price" label={cash ? "Base value per unit" : v.instrument === "share" ? "Issue price per share" : "Exercise price"} value={v.exercise_price} onChange={(x) => set({ exercise_price: toNum(x) ?? 0 })} />
       </div>
       <div className="row wrap">
         <Text id="g-date" label="Granted on" type="date" value={v.granted_on} onChange={(x) => set({ granted_on: x })} />
         <Text id="g-vs" label="Vesting starts" type="date" value={v.vesting_start_on} onChange={(x) => set({ vesting_start_on: x || null })} />
-        <Text id="g-vm" label="Vesting over (months)" type="number" value={v.vesting_months} onChange={(x) => set({ vesting_months: toNum(x) })} />
+        <Text id="g-vm" label={plan?.exit_only ? "Vesting over (months), blank if only on exit" : "Vesting over (months)"} type="number" value={v.vesting_months} onChange={(x) => set({ vesting_months: toNum(x) })} />
         <Text id="g-cliff" label="Cliff (months)" type="number" value={v.cliff_months} onChange={(x) => set({ cliff_months: toNum(x) })} />
         <Field id="g-every" label="Vests">
           <select id="g-every" value={v.vesting_every} onChange={(e) => set({ vesting_every: e.target.value as Grant["vesting_every"] })}>
@@ -1195,9 +1300,16 @@ function GrantForm({ initial, planId, data, busy, onSave, onCancel }: { initial?
         </Field>
         <Text id="g-exp" label="Expires" type="date" value={v.expires_on} onChange={(x) => set({ expires_on: x || null })} />
       </div>
+      {mip && <Text id="g-perf" label="Performance conditions for this grant" placeholder={plan?.performance_conditions ?? "Targets that must be met"} value={v.performance_conditions} onChange={(x) => set({ performance_conditions: x })} wide />}
+      {plan?.funding === "loan_funded" && (
+        <div className="row wrap">
+          <Text id="g-loan" label="Loan from the company" value={v.loan_amount} onChange={(x) => set({ loan_amount: toNum(x) })} />
+          <Text id="g-loan-t" label="Loan terms" placeholder="Limited recourse, interest free, repaid from sale proceeds" value={v.loan_terms} onChange={(x) => set({ loan_terms: x })} wide />
+        </div>
+      )}
       <div className="row wrap">
         <Text id="g-acc" label="Acceleration (on a sale)" placeholder="Double trigger: sale and termination" value={v.acceleration} onChange={(x) => set({ acceleration: x })} wide />
-        <Text id="g-leave" label="Leaver terms" placeholder="Good leaver keeps vested; bad leaver forfeits all" value={v.leaver_terms} onChange={(x) => set({ leaver_terms: x })} wide />
+        <Text id="g-leave" label="Leaver terms" placeholder={mip ? "Good leaver: fair value; bad leaver: lower of cost and fair value" : "Good leaver keeps vested; bad leaver forfeits all"} value={v.leaver_terms} onChange={(x) => set({ leaver_terms: x })} wide />
       </div>
       <ResolutionPick id="g-res" data={data} value={v.resolution_id} onChange={(x) => set({ resolution_id: x })} />
       {missing && <p className="error">{missing}</p>}
@@ -1606,5 +1718,35 @@ function DilutedView({ data, today: t }: { data: OwnershipData; today: string })
         </section>
       )}
     </>
+  );
+}
+
+/** For a group company on the register: does the group chart agree with the register? Offers to update it. */
+function GroupChartLine({ data, group, entityId, holder, canEdit, busy, onSync }: {
+  data: OwnershipData; group: GroupData | null; entityId: string; holder: Holder; canEdit: boolean; busy: boolean; onSync: (parentId: string, pct: number, relId: string | null) => void;
+}) {
+  const total = data.positions.reduce((s, p) => s + p.shares, 0);
+  const held = data.positions.filter((p) => p.shareholder_id === holder.id).reduce((s, p) => s + p.shares, 0);
+  const pctHeld = total ? Math.round((held / total) * 100000) / 1000 : 0;
+  const rel = group?.relationships.find((r) => r.parent_entity_id === holder.holder_entity_id && r.child_entity_id === entityId && !r.ends_on);
+  const chart = rel?.ownership_pct == null ? null : Number(rel.ownership_pct);
+  const agrees = chart != null && Math.abs(chart - pctHeld) < 0.001;
+  return (
+    <span className="small">
+      <br />
+      <span className="muted">Group company · </span>
+      {agrees ? (
+        <span className="muted">group chart agrees ({pctHeld}%)</span>
+      ) : (
+        <>
+          <span className="warning-text">{chart == null ? (rel ? "group chart has no percentage" : "not on the group chart") : `group chart shows ${chart}%, register ${pctHeld}%`}</span>
+          {canEdit && (
+            <button type="button" className="link-dark small" disabled={busy} onClick={() => onSync(holder.holder_entity_id!, pctHeld, rel?.id ?? null)}>
+              {" "}Update the chart to {pctHeld}%
+            </button>
+          )}
+        </>
+      )}
+    </span>
   );
 }

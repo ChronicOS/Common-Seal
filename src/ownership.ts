@@ -93,6 +93,14 @@ export type Plan = {
   startup_concession: boolean | null;
   notes: string | null;
   status: "active" | "closed";
+  /** Migration 0045 */
+  plan_type: "esop" | "mip";
+  hurdle_value: number | null;
+  hurdle_note: string | null;
+  performance_conditions: string | null;
+  exit_only: boolean | null;
+  funding: "nil_cost" | "paid" | "loan_funded" | null;
+  settlement: "equity" | "cash";
 };
 export type PlanValues = Omit<Plan, "id">;
 export type Grant = {
@@ -100,7 +108,7 @@ export type Grant = {
   plan_id: string;
   holder_name: string;
   person_id: string | null;
-  instrument: "option" | "right" | "share";
+  instrument: "option" | "right" | "share" | "unit";
   number: number;
   exercise_price: number;
   granted_on: string;
@@ -115,8 +123,17 @@ export type Grant = {
   lapsed: number;
   resolution_id: string | null;
   notes: string | null;
+  /** Migration 0045 */
+  performance_conditions: string | null;
+  loan_amount: number | null;
+  loan_terms: string | null;
+  settled: number;
 };
 export type GrantValues = Omit<Grant, "id" | "exercised">;
+
+export const PLAN_TYPES = { esop: "Employee share option plan (ESOP)", mip: "Management incentive plan (MIP)" } as const;
+export const FUNDING_LABELS = { nil_cost: "Nil cost", paid: "Paid for in full", loan_funded: "Funded by a loan from the company" } as const;
+export const INSTRUMENT_LABELS: Record<Grant["instrument"], string> = { option: "Options", right: "Rights", share: "Shares", unit: "Phantom units (cash)" };
 
 export type ConvertibleKind = "safe" | "convertible_note" | "warrant" | "investor_option" | "other";
 export type Convertible = {
@@ -278,8 +295,8 @@ export async function loadOwnership(organisationId: string, entityId: string): P
     holders: (holders.data ?? []) as Holder[],
     movements: n<Movement>(movements.data, ["shares", "to_shares", "price_per_share", "paid_per_share", "unpaid_per_share"]),
     positions: n<Position>(positions.data, ["shares", "paid", "unpaid"]),
-    plans: n<Plan>(plans.data, ["pool_size"]),
-    grants: n<Grant>(grants.data, ["number", "exercise_price", "exercised", "lapsed"]),
+    plans: n<Plan>(plans.data, ["pool_size", "hurdle_value"]).map((x) => ({ ...x, plan_type: x.plan_type ?? "esop", settlement: x.settlement ?? "equity" })),
+    grants: n<Grant>(grants.data, ["number", "exercise_price", "exercised", "lapsed", "loan_amount", "settled"]).map((x) => ({ ...x, settled: x.settled ?? 0 })),
     convertibles: n<Convertible>(convertibles.data, ["principal", "valuation_cap", "discount_pct", "interest_rate", "shares", "exercise_price"]),
     terms: (terms.data ?? null) as Terms | null,
     matters: n<Matter>(matters.data, ["contracts_from"]),
@@ -373,7 +390,7 @@ export function vestedBy(g: Grant, asOf: string): number | null {
   const months = Math.min(g.vesting_months, Math.floor(elapsed / step) * step);
   return Math.floor((g.number * months) / g.vesting_months);
 }
-export const outstanding = (g: Grant) => g.number - g.exercised - g.lapsed;
+export const outstanding = (g: Grant) => g.number - g.exercised - g.lapsed - (g.settled ?? 0);
 export function vestingSummary(g: Grant) {
   if (g.vesting_months == null) return "No vesting schedule recorded";
   if (g.vesting_months === 0) return "Vested on grant";
@@ -387,7 +404,8 @@ export type EssDue = { fyEnd: number; grants: number; statementsDue: string; ato
 /** Employee share scheme reporting: statements to employees by 14 July and the ATO report by 14 August after each year with grants */
 export function essDue(data: Pick<OwnershipData, "grants" | "ess">): EssDue[] {
   const years = new Map<number, number>();
-  for (const g of data.grants) years.set(fyOf(g.granted_on), (years.get(fyOf(g.granted_on)) ?? 0) + 1);
+  // Cash-settled units are not employee share scheme interests
+  for (const g of data.grants.filter((x) => x.instrument !== "unit")) years.set(fyOf(g.granted_on), (years.get(fyOf(g.granted_on)) ?? 0) + 1);
   return [...years.entries()].sort((a, b) => b[0] - a[0]).map(([fy, n]) => ({
     fyEnd: fy, grants: n, statementsDue: `${fy}-07-14`, atoDue: `${fy}-08-14`, report: data.ess.find((r) => r.fy_end === fy),
   }));
@@ -434,11 +452,16 @@ export function fullyDiluted(data: OwnershipData, today: string): Diluted {
   }
   for (const plan of data.plans) {
     const grants = data.grants.filter((g) => g.plan_id === plan.id);
+    if (plan.settlement === "cash") {
+      const units = grants.reduce((s, g) => s + outstanding(g), 0);
+      if (units > 0) notEstimated.push({ holder: plan.name, why: `${fmt(units)} phantom units are settled in cash, so they do not dilute shareholders (but they are a cost on an exit)` });
+      continue;
+    }
     for (const g of grants) {
       const o = outstanding(g);
       if (o <= 0) continue;
       const r = asConverted(cls(plan.class_id), o);
-      rows.push({ key: `g-${g.id}`, holder: g.holder_name, instrument: `ESOP ${g.instrument}s`, shares: r.shares, how: `${fmt(g.number)} granted − ${fmt(g.exercised)} exercised − ${fmt(g.lapsed)} lapsed = ${fmt(o)} outstanding` });
+      rows.push({ key: `g-${g.id}`, holder: g.holder_name, instrument: `${plan.plan_type === "mip" ? "MIP" : "ESOP"} ${g.instrument}s`, shares: r.shares, how: `${fmt(g.number)} granted − ${fmt(g.exercised)} exercised − ${fmt(g.lapsed)} lapsed = ${fmt(o)} outstanding` });
     }
     if (plan.status === "active") {
       const unallocated = plan.pool_size - grants.reduce((s, g) => s + g.number - g.lapsed, 0);
@@ -481,4 +504,10 @@ export function preferenceStack(data: OwnershipData) {
       return { cls: c, shares, amount };
     })
     .sort((a, b) => (a.cls.liq_seniority ?? 99) - (b.cls.liq_seniority ?? 99));
+}
+
+/** Brings the group chart (entity_relationships) into line with the register for a group company shareholder */
+export async function syncGroupChart(organisationId: string, childId: string, parentId: string, pct: number, relId: string | null) {
+  if (relId) check((await db().from("entity_relationships").update({ ownership_pct: pct }).eq("id", relId)).error);
+  else check((await db().from("entity_relationships").insert({ organisation_id: organisationId, parent_entity_id: parentId, child_entity_id: childId, ownership_pct: pct })).error);
 }

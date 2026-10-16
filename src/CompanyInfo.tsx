@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { applies, FIELD_LABELS, progress, type FieldKey } from "./checks";
 import { displayValue } from "./EntityDetail";
 import type { GroupData, OfficeRole } from "./types";
@@ -13,15 +14,16 @@ const OFFICES: { roles: OfficeRole[]; label: string }[] = [
 const share = (pct: number | null) => (pct === null ? "" : ` (${Number(pct)}%)`);
 
 /** Every company in the group on one page: details, officers and ownership. Changes are made on the company's own page. */
-export default function CompanyInfo({ data, canEdit, onOpen }: { data: GroupData; canEdit: boolean; onOpen: (entityId: string) => void }) {
+export default function CompanyInfo({ data, canEdit, onOpen, addSlot }: { data: GroupData; canEdit: boolean; onOpen: (entityId: string) => void; addSlot?: ReactNode }) {
   const nameOf = (id: string) => data.entities.find((e) => e.id === id)?.name ?? "Unknown entity";
   return (
     <>
-      <p className="eyebrow">Board</p>
+      <p className="eyebrow">Company</p>
       <h1>Company Info</h1>
       <p className="lead">
-        {data.entities.length === 0 ? "No companies yet. Add the first one from Overview." : `${data.entities.length} ${data.entities.length === 1 ? "company" : "companies"} in the group.`}
+        {data.entities.length === 0 ? "No companies yet. Add the first one below." : `${data.entities.length} ${data.entities.length === 1 ? "company" : "companies"} in the group.`}
       </p>
+      {addSlot}
       {data.entities.length > 1 && (
         <p className="muted">
           Jump to:{" "}
