@@ -306,7 +306,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
       <div className="workspace">
         {nav}
         <div className="workspace-main">
-        <Members organisationId={organisation.id} role={role} />
+        <Members organisationId={organisation.id} role={role} organisationName={organisation.name} />
         </div>
       </div>
     );

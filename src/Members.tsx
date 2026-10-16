@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { mailto } from "./risk";
 import { formatDay, inviteMember, loadInvitations, loadMembers, revokeInvitation, setMemberRoles, type Invitation, type Member } from "./board";
 import { has, roleLabel, roleLabels, roleList, ROLES } from "./roles";
 
@@ -23,7 +24,14 @@ function RolePicker({ idPrefix, value, onChange, canGrantOwner }: { idPrefix: st
   );
 }
 
-export default function Members({ organisationId, role }: { organisationId: string; role: string }) {
+const inviteHref = (email: string, roles: string, org: string) =>
+  mailto(
+    [email],
+    `You're invited to ${org} on Common Seal`,
+    `Hello,\n\nYou have been invited to join ${org} on Common Seal as ${roles}.\n\nTo join:\n1. Go to ${window.location.origin}\n2. Enter this email address (${email}) and choose "Email me a sign-in link".\n3. Open the link in the email that arrives (check your junk folder if it does not appear within a few minutes).\n\nYou will join automatically the first time you sign in with this address.\n\nThank you`,
+  );
+
+export default function Members({ organisationId, role, organisationName = "our organisation" }: { organisationId: string; role: string; organisationName?: string }) {
   const canInvite = has(role, "owner", "admin");
   const [members, setMembers] = useState<Member[] | null>(null);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
@@ -36,6 +44,7 @@ export default function Members({ organisationId, role }: { organisationId: stri
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [invited, setInvited] = useState<string | null>(null);
+  const [invitedRoles, setInvitedRoles] = useState("");
 
   const reload = useCallback(async () => {
     try {
@@ -70,8 +79,11 @@ export default function Members({ organisationId, role }: { organisationId: stri
     void act(async () => {
       const who = email.trim();
       const result = await inviteMember(organisationId, who, inviteRoles);
-      if (result === "added") setDone(`${who} already had an account and has been added.`);
-      else setInvited(who);
+      if (result === "added") setDone(`${who} already had an account and has been added. They will see the organisation next time they sign in at ${window.location.origin}.`);
+      else {
+        setInvited(who);
+        setInvitedRoles(inviteRoles.join(","));
+      }
       setEmail("");
       setInviteRoles([]);
     });
@@ -131,6 +143,9 @@ export default function Members({ organisationId, role }: { organisationId: stri
                     · {roleLabels(i.role)} · invited {formatDay(i.created_at)}
                   </span>
                 </span>
+                <a className="link-dark" href={inviteHref(i.email, roleLabels(i.role), organisationName)}>
+                  Send invitation email
+                </a>{" "}
                 <button type="button" className="link-dark" aria-label={`Revoke invitation for ${i.email}`} onClick={() => void act(() => revokeInvitation(i.id))}>
                   Revoke
                 </button>
@@ -226,7 +241,11 @@ export default function Members({ organisationId, role }: { organisationId: stri
                 <strong>{invited} is invited.</strong> They will join automatically the first time they sign in with that email.
               </p>
               <p>
-                No email is sent yet, so send them this link yourself: <code>{window.location.origin}</code>
+                Common Seal does not send the invitation itself yet.{" "}
+                <a className="link-dark" href={inviteHref(invited, roleLabels(invitedRoles), organisationName)}>
+                  Open the invitation email
+                </a>{" "}
+                in your own email and send it. It tells them to go to <code>{window.location.origin}</code> and sign in with this address.
               </p>
             </div>
           )}
