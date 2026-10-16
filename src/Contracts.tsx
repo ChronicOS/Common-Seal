@@ -19,6 +19,7 @@ import {
   fileContract,
   INTERCOMPANY_TYPE,
   loadContracts,
+  partyGate,
   recordSignature,
   resubmitContract,
   type Approval,
@@ -212,19 +213,8 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
     const canSign = canRecord && open.status !== "signed" && open.status !== "terminated";
     const outOfOrder = open.status !== "approved";
     const partyId = open.counterparty?.id;
-    const party = partyId ? data.counterparties.find((p) => p.id === partyId) : undefined;
-    const blocked = party?.dd_status === "rejected" || (party?.dd_status === "open" && party?.risk_rating === "high");
-    const ddLine = twoSided
-      ? "Both sides are group entities, so third-party due diligence does not apply."
-      : !party?.dd_status
-        ? "No due diligence on record for the other party."
-        : party.dd_status === "rejected"
-          ? "The other party was rejected in due diligence, so this contract cannot be approved."
-          : party.dd_status === "open"
-            ? party.risk_rating === "high"
-              ? "The other party is rated high risk and its due diligence is not finished, so this contract cannot be approved yet."
-              : "Due diligence on the other party is in progress."
-            : `The other party is cleared${party.dd_status === "cleared_with_conditions" ? " with conditions" : ""} (${party.risk_rating ?? "unrated"} risk).`;
+    const gate = twoSided ? { blocks: [], flags: [], cleared: [] } : partyGate(data, partyId, new Date().toLocaleDateString("en-CA"));
+    const blocked = gate.blocks.length > 0;
 
     return (
       <>
@@ -244,7 +234,18 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
             </>
           )}
         </p>
-        <p className={blocked ? "card warning" : "muted"}>{ddLine}</p>
+        {twoSided ? (
+          <p className="muted">Both sides are group entities, so third-party due diligence and sanctions checks do not apply.</p>
+        ) : (
+          <div className={blocked ? "card warning" : gate.flags.length ? "card note" : "muted"} role={blocked ? "alert" : undefined}>
+            {blocked && <p><strong>This contract cannot be approved yet.</strong></p>}
+            <ul className="plain small">
+              {gate.blocks.map((x) => <li key={x} className="warning-text">{x}</li>)}
+              {gate.flags.map((x) => <li key={x}><strong>Flag:</strong> {x}</li>)}
+              {gate.cleared.map((x) => <li key={x}>{x}</li>)}
+            </ul>
+          </div>
+        )}
 
         <dl className="detail-list two">
           <div>

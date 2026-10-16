@@ -1791,3 +1791,14 @@ input.signature { margin-top: 0; font-weight: 400; font-family: "Brush Script MT
 .file-button { display: inline-block; cursor: pointer; padding: 8px 14px; border: 1px solid var(--line, #cfc8b8); border-radius: 6px; }
 .file-button:focus-within { outline: 2px solid var(--wax, #a3392b); outline-offset: 2px; }
 .nowrap { white-space: nowrap; }
+
+/* Legal Audit */
+.audit-question { padding-top: 12px; padding-bottom: 12px; }
+.audit-question > .audit-q { font-weight: 600; margin-bottom: 0.5rem; }
+.audit-item { padding: 10px 0; border-top: 1px solid var(--line, #e3ddcf); }
+.audit-item:first-child, .audit-question > .audit-q + .audit-item { border-top: 0; }
+.audit-item .audit-q { margin: 0 0 4px; }
+.audit-item textarea { width: 100%; margin-top: 6px; }
+.audit-item.needs { box-shadow: inset 3px 0 0 var(--wax, #a3392b); padding-left: 10px; }
+.evidence { background: #f1efe7; border-radius: 6px; padding: 6px 10px; margin: 6px 0; }
+@media print { .audit-item textarea { border: 0; resize: none; } }

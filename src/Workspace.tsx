@@ -11,6 +11,7 @@ import Employees, { type EmployeesSub } from "./Employees";
 import KeyContracts from "./KeyContracts";
 import Disputes from "./Disputes";
 import Sanctions from "./Sanctions";
+import LegalAudit from "./LegalAudit";
 import SpeakUp from "./SpeakUp";
 import Expenses from "./Expenses";
 import Horizon from "./Horizon";
@@ -50,7 +51,7 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Tab =
   | "overview" | "company" | "authorities" | "insurance" | "foryou" | "report" | "modernslavery" | "oldregister" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
-  | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "conflicts" | "expenses" | "speakup" | "people" | "keyemployees" | "keycontracts" | "disputes" | "sanctions";
+  | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "conflicts" | "expenses" | "speakup" | "people" | "keyemployees" | "keycontracts" | "disputes" | "sanctions" | "legalaudit";
 const SECTIONS = ["Company", "Board", "Risk and compliance", "Contracts", "Third parties", "Conduct"] as const;
 const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = [
   { id: "foryou", label: "For you" },
@@ -67,6 +68,7 @@ const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = 
   { id: "policies", label: "Policies", section: "Risk and compliance" },
   { id: "modernslavery", label: "Modern slavery", section: "Risk and compliance" },
   { id: "training", label: "Training", section: "Risk and compliance" },
+  { id: "legalaudit", label: "Legal Audit", section: "Risk and compliance" },
   { id: "workflows", label: "Workflows", section: "Risk and compliance" },
   { id: "horizon", label: "Horizon", section: "Risk and compliance" },
   { id: "contracts", label: "Contract Management", section: "Contracts" },
@@ -265,6 +267,17 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
           ) : (
             <Disputes organisationId={organisation.id} group={data} canEdit={canEdit} />
           )}
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === "legalaudit") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+          <LegalAudit organisationId={organisation.id} role={role} group={data} />
         </div>
       </div>
     );

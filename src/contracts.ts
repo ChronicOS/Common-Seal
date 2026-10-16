@@ -51,7 +51,34 @@ export type ContractsData = {
   reminders: Reminder[];
   counterparties: { id: string; name: string; risk_rating?: string | null; dd_status?: string | null }[];
   people: { user_id: string | null; full_name: string }[];
+  /** Latest sanctions assessment per third party (empty before migration 0038, or if not visible) */
+  sanctions: { counterparty_id: string; status: string; outcome: string | null; licence_reference: string | null; next_screen_on: string | null; risk_level: string }[];
+  /** Third parties recorded as out of scope for due diligence */
+  exempt: string[];
 };
+
+/** What stands between a contract and its approval: blocks (the database refuses) and flags (warnings) */
+export function partyGate(data: ContractsData, partyId: string | undefined, today: string): { blocks: string[]; flags: string[]; cleared: string[] } {
+  const blocks: string[] = [];
+  const flags: string[] = [];
+  const cleared: string[] = [];
+  if (!partyId) return { blocks, flags, cleared };
+  const p = data.counterparties.find((x) => x.id === partyId);
+  if (!p?.dd_status) {
+    if (data.exempt.includes(partyId)) cleared.push("Recorded as out of scope for due diligence.");
+    else flags.push("No due diligence on record for the other party.");
+  } else if (p.dd_status === "rejected") blocks.push("The other party was rejected in due diligence.");
+  else if (p.dd_status === "open") blocks.push("Due diligence on the other party is not finished.");
+  else cleared.push(`Due diligence: cleared${p.dd_status === "cleared_with_conditions" ? " with conditions" : ""} (${p.risk_rating ?? "unrated"} risk).`);
+  const s = data.sanctions.find((x) => x.counterparty_id === partyId);
+  if (!s) flags.push("No sanctions assessment for the other party.");
+  else if (s.status === "draft" || s.status === "submitted") blocks.push("The sanctions assessment is not decided.");
+  else if (s.outcome === "do_not_proceed") blocks.push("The sanctions decision is do not proceed.");
+  else if (s.outcome === "licence_required" && !s.licence_reference) blocks.push("A sanctions permit or licence is needed first.");
+  else if (s.next_screen_on && s.next_screen_on < today) blocks.push("The sanctions re-screen is overdue.");
+  else cleared.push(`Sanctions: ${s.outcome === "licence_required" ? "permit recorded" : s.outcome === "proceed_conditions" ? "proceed with conditions" : "proceed"}${s.next_screen_on ? `, re-screen by ${s.next_screen_on}` : ""}.`);
+  return { blocks, flags, cleared };
+}
 
 export const CONTRACT_STATUS: Record<ContractStatus, string> = {
   draft: "Draft",
@@ -102,6 +129,12 @@ export async function loadContracts(organisationId: string): Promise<ContractsDa
     client.from("counterparties").select("*").eq("organisation_id", organisationId).order("name"),
     client.from("people").select("user_id, full_name").eq("organisation_id", organisationId),
   ]);
+  const [sanctions, exempt] = await Promise.all([
+    client.from("sanctions_assessments").select("counterparty_id, status, outcome, licence_reference, next_screen_on, risk_level, created_at").eq("organisation_id", organisationId).neq("status", "withdrawn").not("counterparty_id", "is", null).order("created_at", { ascending: false }),
+    client.from("dd_exemptions").select("counterparty_id").eq("organisation_id", organisationId),
+  ]);
+  const latest = new Map<string, ContractsData["sanctions"][number]>();
+  for (const r of (sanctions.data ?? []) as ContractsData["sanctions"]) if (!latest.has(r.counterparty_id)) latest.set(r.counterparty_id, r);
   check(
     contracts.error ??
       approvals.error ??
@@ -122,6 +155,8 @@ export async function loadContracts(organisationId: string): Promise<ContractsDa
     reminders: (reminders.data ?? []) as Reminder[],
     counterparties: (counterparties.data ?? []) as ContractsData["counterparties"],
     people: (people.data ?? []) as { user_id: string | null; full_name: string }[],
+    sanctions: [...latest.values()],
+    exempt: ((exempt.data ?? []) as { counterparty_id: string }[]).map((x) => x.counterparty_id),
   };
 }
 
