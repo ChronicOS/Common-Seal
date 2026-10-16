@@ -23,9 +23,13 @@ export function usePresence(organisationId: string, userId: string, name: string
     if (!supabase) return;
     const client = supabase;
     let closed = false;
-    const channel = client.channel(`org:${organisationId}`, { config: { private: true, presence: { key: userId } } });
-    channel.on("presence", { event: "sync" }, () => {
-      const state = channel.presenceState<{ name: string; tab: string | null; idle?: boolean }>();
+    let channel: ReturnType<typeof client.channel> | null = null;
+    let retry: number | undefined;
+    let attempts = 0;
+    let connecting = false;
+
+    const onSync = (ch: ReturnType<typeof client.channel>) => () => {
+      const state = ch.presenceState<{ name: string; tab: string | null; idle?: boolean }>();
       const list: Present[] = [];
       for (const [id, entries] of Object.entries(state)) {
         if (id === userId) continue;
@@ -38,24 +42,65 @@ export function usePresence(organisationId: string, userId: string, name: string
           list.push({ user_id: id, name: String(e.name ?? "Someone").slice(0, 80), tab: typeof e.tab === "string" ? e.tab : null, idle: e.idle === true });
         }
       }
-      if (!closed) setOthers(list);
-    });
-    void client.realtime
-      .setAuth()
-      .catch(() => undefined)
-      .then(() => {
-        if (closed) return;
-        channel.subscribe((status) => {
-          if (status === "SUBSCRIBED") {
-            channelRef.current = channel;
-            void channel.track(mine.current);
-          }
-        });
+      if (!closed && ch === channel) setOthers(list);
+    };
+
+    // Start (or restart) the live channel. A dropped connection, a timeout or an expired sign-in
+    // token used to end presence for good; now it reconnects, waiting a little longer each time.
+    const connect = async () => {
+      if (closed || connecting) return;
+      connecting = true;
+      window.clearTimeout(retry);
+      if (channel) {
+        const old = channel;
+        channel = null;
+        channelRef.current = null;
+        await client.removeChannel(old).catch(() => undefined);
+      }
+      await client.realtime.setAuth().catch(() => undefined);
+      connecting = false;
+      if (closed) return;
+      const ch = client.channel(`org:${organisationId}`, { config: { private: true, presence: { key: userId } } });
+      channel = ch;
+      ch.on("presence", { event: "sync" }, onSync(ch));
+      ch.subscribe((status) => {
+        if (closed || ch !== channel) return;
+        if (status === "SUBSCRIBED") {
+          // The library may rejoin by itself before our retry fires; then the retry is not needed
+          window.clearTimeout(retry);
+          attempts = 0;
+          channelRef.current = ch;
+          void ch.track(mine.current);
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          // While disconnected we do not know who is here, so show nobody rather than an old list
+          channelRef.current = null;
+          setOthers([]);
+          attempts += 1;
+          retry = window.setTimeout(() => void connect(), Math.min(60_000, 1_000 * 2 ** Math.min(attempts, 6)));
+        }
       });
+    };
+
+    // Coming back to the tab, or back online: make sure we are connected and shown
+    const wake = () => {
+      if (closed || document.visibilityState === "hidden") return;
+      const state = channel?.state;
+      if (channelRef.current && state === "joined") void channelRef.current.track(mine.current);
+      else if (!channel || state === "closed" || state === "errored") void connect();
+    };
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("online", wake);
+    window.addEventListener("focus", wake);
+
+    void connect();
     return () => {
       closed = true;
+      window.clearTimeout(retry);
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("online", wake);
+      window.removeEventListener("focus", wake);
       channelRef.current = null;
-      void client.removeChannel(channel);
+      if (channel) void client.removeChannel(channel);
     };
   }, [organisationId, userId]);
 
