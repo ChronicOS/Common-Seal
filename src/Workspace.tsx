@@ -370,7 +370,11 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
       <div className="workspace">
         {nav}
         <div className="workspace-main">
-          <Ownership organisationId={organisation.id} group={data} canEdit={canEdit} onChanged={reload} />
+          <Ownership organisationId={organisation.id} group={data} canEdit={canEdit} onChanged={reload} onAddEntity={() => {
+            go("company");
+            // Take them to the Add an entity form at the top of Company Info
+            setTimeout(() => { const f = document.getElementById("entity-name"); f?.scrollIntoView({ block: "center" }); f?.focus(); }, 50);
+          }} />
         </div>
       </div>
     );

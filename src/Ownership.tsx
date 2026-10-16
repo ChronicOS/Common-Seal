@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import AddEntity from "./AddEntity";
 import Attachments from "./Attachments";
 import { createEntity } from "./data";
 import { today } from "./authorities";
@@ -14,7 +13,7 @@ import {
 import type { GroupData } from "./types";
 
 type Sub = "register" | "history" | "classes" | "esop" | "convertibles" | "rights" | "diluted";
-type Props = { organisationId: string; group: GroupData | null; canEdit: boolean; onChanged: () => void | Promise<void> };
+type Props = { organisationId: string; group: GroupData | null; canEdit: boolean; onChanged: () => void | Promise<void>; onAddEntity: () => void };
 
 const day = (iso: string | null | undefined) => (iso ? formatDay(`${iso.slice(0, 10)}T12:00:00`) : "");
 
@@ -65,7 +64,7 @@ function ResolutionPick({ id, data, value, onChange }: { id: string; data: Owner
 
 let chosenEntity: string | null = null;
 
-export default function Ownership({ organisationId, group, canEdit, onChanged }: Props) {
+export default function Ownership({ organisationId, group, canEdit, onChanged, onAddEntity }: Props) {
   const entities = useMemo(() => (group?.entities ?? []).filter((e) => e.status !== "deregistered"), [group]);
   // Remembered for the visit, so the choice survives the page reloading or a trip to another tab
   const [entityId, setEntityIdState] = useState<string | null>(() => (entities.some((e) => e.id === chosenEntity) ? chosenEntity : entities[0]?.id ?? null));
@@ -125,7 +124,7 @@ export default function Ownership({ organisationId, group, canEdit, onChanged }:
         <p className="eyebrow">Company</p>
         <h1>Ownership</h1>
         <p className="muted">No companies yet. Add the first one.</p>
-        {canEdit && <AddEntity organisationId={organisationId} onAdded={async (e) => { await onChanged(); setEntityId(e.id); }} />}
+        {canEdit && <button type="button" className="quiet" onClick={onAddEntity}>+ Add entity</button>}
       </>
     );
   }
@@ -137,7 +136,7 @@ export default function Ownership({ organisationId, group, canEdit, onChanged }:
       <p className="lead">
         The register of members: who holds the shares, of which class, and what was paid. Every holding is worked out from the history of issues, transfers and other changes, so each number traces back to the event and the board approval behind it.
       </p>
-      <div className="row wrap block-gap">
+      <div className="row wrap block-gap entity-picker">
         <span className="field">
           <label htmlFor="own-entity">Company</label>
           <select id="own-entity" value={entityId ?? ""} onChange={(e) => { setEntityId(e.target.value); setForm(null); setSub("register"); }}>
@@ -148,7 +147,11 @@ export default function Ownership({ organisationId, group, canEdit, onChanged }:
             ))}
           </select>
         </span>
-        {canEdit && <AddEntity organisationId={organisationId} onAdded={async (e) => { await onChanged(); setEntityId(e.id); setSub("register"); setNotice(`${e.name} added. Fill in its details under Company Info.`); }} />}
+        {canEdit && (
+          <button type="button" className="quiet" onClick={onAddEntity}>
+            + Add entity
+          </button>
+        )}
         <label className="check" title="Adds the ESOP, convertibles, investor rights, reserved matters and the fully diluted view">
           <input
             type="checkbox"

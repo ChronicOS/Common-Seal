@@ -1836,3 +1836,6 @@ li.voided > *:not(.card):not(.warning-text) { text-decoration: line-through; opa
   .report-table.wide th, .report-table.wide td { display: table-cell; padding-top: 8px; border-top: 1px solid var(--line, #e2dccf); }
 }
 .report-table.wide th .link-dark { text-align: left; }
+/* Ownership: the Add entity button sits level with the company drop-down, not its label */
+.entity-picker { align-items: flex-end; }
+.entity-picker > button { height: 48px; padding-top: 0; padding-bottom: 0; }
