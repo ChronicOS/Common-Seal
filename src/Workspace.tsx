@@ -25,6 +25,7 @@ import { CHECKIN_KEY, dueCheckIns, progress } from "./checks";
 import { createEntity, loadGroup, setPrompt } from "./data";
 import Authorities from "./Authorities";
 import CompanyInfo from "./CompanyInfo";
+import Insurance from "./Insurance";
 import EntityDetail from "./EntityDetail";
 import Intercompany from "./Intercompany";
 import GroupChart from "./GroupChart";
@@ -42,7 +43,7 @@ const BOARD_WRITE_ROLES = ["owner", "admin", "secretary"];
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Tab =
-  | "overview" | "company" | "authorities" | "foryou" | "report" | "modernslavery" | "oldregister" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
+  | "overview" | "company" | "authorities" | "insurance" | "foryou" | "report" | "modernslavery" | "oldregister" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
   | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "expenses" | "speakup" | "people";
 const SECTIONS = ["Board", "Risk and compliance", "Contracts and third parties", "Conduct"] as const;
 const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = [
@@ -50,6 +51,7 @@ const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = 
   { id: "overview", label: "Overview" },
   { id: "company", label: "Company Info", section: "Board" },
   { id: "authorities", label: "Authorities", section: "Board" },
+  { id: "insurance", label: "Insurance", section: "Board" },
   { id: "report", label: "Board report", section: "Board" },
   { id: "meetings", label: "Meetings", section: "Board" },
   { id: "people", label: "People", section: "Board" },
@@ -222,6 +224,17 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
     );
   }
   if (!data) return <p className="lead">Loading…</p>;
+
+  if (tab === "insurance") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+          <Insurance organisationId={organisation.id} organisationName={organisation.name} group={data} canEdit={canEdit} userId={userId} />
+        </div>
+      </div>
+    );
+  }
 
   if (tab === "authorities") {
     return (

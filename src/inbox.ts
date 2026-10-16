@@ -1,3 +1,4 @@
+import { loadInsurance, reminderDue, standing } from "./insurance";
 import { has } from "./roles";
 import { loadContracts } from "./contracts";
 import { loadDeclarations } from "./declarations";
@@ -37,6 +38,17 @@ export async function loadInbox(organisationId: string, role: string, userId: st
   };
 
   await Promise.all([
+    safely(async () => {
+      const d = await loadInsurance(organisationId);
+      for (const p of d.policies.filter((x) => x.status === "current")) {
+        if (!manage && p.responsible_user_id !== userId) continue;
+        if (standing(p) === "expired") add("insurance", "Insurance expired: record the renewal", p.id, p.policy_type, p.period_to);
+        else {
+          const m = reminderDue(p);
+          if (m) add("insurance", `Insurance renewal reminder (${m} ${m === 1 ? "month" : "months"})`, p.id, p.policy_type, p.period_to);
+        }
+      }
+    }),
     safely(async () => {
       const d = await loadTraining(organisationId);
       for (const a of d.assignments.filter((x) => x.user_id === userId && !x.completed_at)) {

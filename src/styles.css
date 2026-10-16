@@ -1618,3 +1618,40 @@ input.amount {
 .scope-edit > input.grow {
   flex: 1 1 100%;
 }
+
+/* Insurance */
+.dropzone {
+  padding: 22px;
+  border: 2px dashed var(--rule);
+  border-radius: 10px;
+  background: var(--card);
+  text-align: center;
+}
+
+.dropzone .row {
+  justify-content: center;
+}
+
+.dropzone.on {
+  border-color: var(--wax);
+}
+
+input.from-certificate,
+select.from-certificate,
+.field.from-certificate input {
+  background: #fff8dc;
+  border-color: #c9a227;
+}
+
+.card.insurance {
+  margin-bottom: 16px;
+}
+
+.card.insurance h3 {
+  margin: 0;
+}
+
+.chip-warn {
+  border-color: #b7791f;
+  color: #8a5a12;
+}
