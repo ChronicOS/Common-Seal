@@ -1765,3 +1765,20 @@ input.signature { margin-top: 0; font-weight: 400; font-family: "Brush Script MT
 .feed-card { border-left: 4px solid var(--accent, #1f4e79); }
 .feed-card h2 { margin: 0; }
 .feed-card li .row { align-items: center; gap: 0.5rem; flex-shrink: 0; }
+
+/* Organisation picker in the header */
+.masthead { align-items: center; }
+.org-picker { margin-right: auto; margin-left: 8px; }
+.org-picker select {
+  background: transparent;
+  color: var(--paper);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 6px;
+  padding: 6px 30px 6px 12px;
+  font-size: 15px;
+  max-width: 22rem;
+  width: auto;
+}
+.org-picker select:focus { outline: 2px solid var(--wax); outline-offset: 2px; }
+.org-picker option { color: var(--ink); background: #fff; }
+@media print { .org-picker { display: none; } }

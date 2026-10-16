@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { isConfigured, supabase } from "./supabase";
-import { joinRoles } from "./roles";
+import { joinRoles, roleLabels } from "./roles";
 import type { Membership } from "./types";
 import Workspace from "./Workspace";
 
@@ -18,8 +18,25 @@ function remembered(): string | null {
 function remember(id: string) {
   try {
     window.localStorage.setItem(ORG_KEY, id);
+    window.sessionStorage.setItem(ORG_KEY, id);
   } catch {
     // Storage can be unavailable (private windows); the choice then lasts for this visit only.
+  }
+}
+
+/** Chosen in this browser tab since signing in; otherwise people with several organisations are asked to choose */
+function chosenThisVisit(): boolean {
+  try {
+    return Boolean(window.sessionStorage.getItem(ORG_KEY));
+  } catch {
+    return false;
+  }
+}
+function forgetVisit() {
+  try {
+    window.sessionStorage.removeItem(ORG_KEY);
+  } catch {
+    // nothing to forget
   }
 }
 
@@ -30,13 +47,16 @@ type ShellProps = {
   email?: string;
   onSignOut?: () => void;
   onPassword?: () => void;
+  /** Which organisation is open, and a way to change it */
+  orgSwitch?: ReactNode;
 };
 
-function Shell({ children, wide, email, onSignOut, onPassword }: ShellProps) {
+function Shell({ children, wide, email, onSignOut, onPassword, orgSwitch }: ShellProps) {
   return (
     <div className="page">
       <header className="masthead">
         <span className="wordmark">Common Seal</span>
+        {orgSwitch}
         {email && (
           <span className="account">
             <span className="account-email">{email}</span>
@@ -218,7 +238,7 @@ function PasswordForm({ onClose }: { onClose: () => void }) {
   );
 }
 
-function CreateOrganisation({ onCreated }: { onCreated: () => void }) {
+function CreateOrganisation({ onCreated, onCancel }: { onCreated: (id: string) => void; onCancel?: () => void }) {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -228,28 +248,65 @@ function CreateOrganisation({ onCreated }: { onCreated: () => void }) {
     if (!supabase) return;
     setBusy(true);
     setError(null);
-    const { error: rpcError } = await supabase.rpc("create_organisation", { p_name: name });
+    const { data, error: rpcError } = await supabase.rpc("create_organisation", { p_name: name });
     setBusy(false);
     if (rpcError) setError(rpcError.message);
-    else onCreated();
+    else onCreated(data as string);
   }
 
   return (
     <>
-      <h1>Set up your organisation</h1>
-      <p className="lead">Start with a name. You can add entities, directors and documents later.</p>
+      <h1>{onCancel ? "Set up another organisation" : "Set up your organisation"}</h1>
+      <p className="lead">Start with a name. You can add entities, directors and documents later.{onCancel ? " You will be its owner. Your other organisations are not affected, and nothing is shared between them." : ""}</p>
       <form className="card form" onSubmit={submit}>
         <label htmlFor="org">Organisation name</label>
         <input id="org" required minLength={2} maxLength={200} value={name} onChange={(e) => setName(e.target.value)} />
-        <button type="submit" disabled={busy}>
-          {busy ? "Creating…" : "Create organisation"}
-        </button>
+        <div className="row">
+          <button type="submit" disabled={busy}>
+            {busy ? "Creating…" : "Create organisation"}
+          </button>
+          {onCancel && (
+            <button type="button" className="link-dark" onClick={onCancel}>
+              Cancel
+            </button>
+          )}
+        </div>
         {error && (
           <p className="error" role="alert">
             {error}
           </p>
         )}
       </form>
+    </>
+  );
+}
+
+function ChooseOrganisation({ memberships, onChoose, onCreate }: { memberships: Membership[]; onChoose: (id: string) => void; onCreate: () => void }) {
+  return (
+    <>
+      <h1>Choose an organisation</h1>
+      <p className="lead">You belong to {memberships.length} organisations. Each is kept separate. You can switch at any time from the top of the page.</p>
+      <ul className="entity-list">
+        {[...memberships]
+          .sort((a, b) => a.organisation.name.localeCompare(b.organisation.name))
+          .map((m) => (
+            <li key={m.organisation.id}>
+              <button type="button" className="entity-row" onClick={() => onChoose(m.organisation.id)}>
+                <span>
+                  <span className="entity-name">{m.organisation.name}</span>
+                  <br />
+                  <span className="muted">{roleLabels(m.role)}</span>
+                </span>
+                <span aria-hidden="true">→</span>
+              </button>
+            </li>
+          ))}
+      </ul>
+      <p>
+        <button type="button" className="quiet" onClick={onCreate}>
+          Set up another organisation
+        </button>
+      </p>
     </>
   );
 }
@@ -261,6 +318,8 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [orgId, setOrgId] = useState<string | null>(remembered);
   const [showPassword, setShowPassword] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     if (!supabase) return;
@@ -268,7 +327,10 @@ export default function App() {
       setSession(data.session);
       setReady(true);
     });
-    const { data } = supabase.auth.onAuthStateChange((_event, next) => setSession(next));
+    const { data } = supabase.auth.onAuthStateChange((event, next) => {
+      if (event === "SIGNED_OUT") forgetVisit();
+      setSession(next);
+    });
     return () => data.subscription.unsubscribe();
   }, []);
 
@@ -291,7 +353,10 @@ export default function App() {
       setLoadError(error.message);
       return;
     }
-    setMemberships(((data ?? []) as unknown as (Membership & { extra_roles?: string[] })[]).map((m) => ({ role: joinRoles(m.role, m.extra_roles), organisation: m.organisation })));
+    const list = ((data ?? []) as unknown as (Membership & { extra_roles?: string[] })[]).map((m) => ({ role: joinRoles(m.role, m.extra_roles), organisation: m.organisation }));
+    setMemberships(list);
+    // Several organisations and none chosen since signing in: ask which one
+    if (list.length > 1 && !chosenThisVisit()) setChoosing(true);
   }, [userId]);
 
   useEffect(() => {
@@ -305,6 +370,14 @@ export default function App() {
 
   const client = supabase;
   const current = memberships?.find((m) => m.organisation.id === orgId) ?? memberships?.[0];
+  const several = (memberships?.length ?? 0) > 1;
+  const choose = (id: string) => {
+    setOrgId(id);
+    remember(id);
+    setChoosing(false);
+    setCreating(false);
+    setShowPassword(false);
+  };
 
   let body: ReactNode;
   if (showPassword) {
@@ -317,38 +390,56 @@ export default function App() {
     );
   } else if (memberships === null) {
     body = <p className="lead">Loading…</p>;
-  } else if (!current) {
-    body = <CreateOrganisation onCreated={() => void loadMemberships()} />;
-  } else {
+  } else if (!current || creating) {
     body = (
-      <>
-        {memberships.length > 1 && (
-          <div className="row org-switch">
-            <label htmlFor="org-switch">Organisation</label>
-            <select
-              id="org-switch"
-              value={current.organisation.id}
-              onChange={(e) => {
-                setOrgId(e.target.value);
-                remember(e.target.value);
-              }}
-            >
-              {memberships.map((m) => (
-                <option key={m.organisation.id} value={m.organisation.id}>
-                  {m.organisation.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-        <Workspace key={current.organisation.id} membership={current} userId={session.user.id} userName={session.user.email ?? "Someone"} onPassword={() => setShowPassword(true)} />
-      </>
+      <CreateOrganisation
+        onCreated={(id) => {
+          choose(id);
+          void loadMemberships();
+        }}
+        onCancel={current ? () => setCreating(false) : undefined}
+      />
     );
+  } else if (choosing && several) {
+    body = <ChooseOrganisation memberships={memberships} onChoose={choose} onCreate={() => setCreating(true)} />;
+  } else {
+    body = <Workspace key={current.organisation.id} membership={current} userId={session.user.id} userName={session.user.email ?? "Someone"} onPassword={() => setShowPassword(true)} />;
   }
+
+  const inWorkspace = Boolean(current) && !showPassword && !creating && !(choosing && several);
+  const orgSwitch =
+    current && memberships ? (
+      <span className="org-picker">
+        <label htmlFor="org-switch" className="visually-hidden">
+          Organisation
+        </label>
+        <select
+          id="org-switch"
+          value={creating ? "__new" : choosing && several ? "__choose" : current.organisation.id}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === "__new") setCreating(true);
+            else if (v === "__choose") setChoosing(true);
+            else choose(v);
+          }}
+        >
+          {choosing && several && <option value="__choose">Choose an organisation</option>}
+          {[...memberships]
+            .sort((a, b) => a.organisation.name.localeCompare(b.organisation.name))
+            .map((m) => (
+              <option key={m.organisation.id} value={m.organisation.id}>
+                {m.organisation.name}
+              </option>
+            ))}
+          <option value="__new">＋ Set up another organisation</option>
+        </select>
+      </span>
+    ) : undefined;
 
   return (
     <Shell
-      wide={Boolean(current) && !showPassword}
+      wide={inWorkspace}
+      orgSwitch={orgSwitch}
       email={session.user.email}
       onSignOut={() => void client.auth.signOut()}
       // Inside an organisation, Password lives under Settings in the side menu
