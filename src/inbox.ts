@@ -1,3 +1,4 @@
+import { loadConflictOfficer, loadConflicts } from "./conflicts";
 import { loadInsurance, reminderDue, standing } from "./insurance";
 import { has } from "./roles";
 import { loadContracts } from "./contracts";
@@ -38,6 +39,18 @@ export async function loadInbox(organisationId: string, role: string, userId: st
   };
 
   await Promise.all([
+    safely(async () => {
+      const off = await loadConflictOfficer(organisationId);
+      if (!off.ready) return;
+      const mine = off.officer === userId;
+      if (!mine && !manage) return;
+      for (const c of await loadConflicts(organisationId)) {
+        if (c.status === "closed" || c.person_user_id === userId) continue;
+        if (!mine && off.officer && off.officer !== c.person_user_id) continue;
+        if (!c.outcome) add("conflicts", "Conflict of interest to review", c.id, `${c.person_name}: ${c.description}`, null);
+        else if (c.outcome === "not_acceptable" && !c.action_complete_at) add("conflicts", "Conflict: confirm the action is complete", c.id, `${c.person_name}: ${c.outcome_actions.join("; ")}`, c.review_on);
+      }
+    }),
     safely(async () => {
       const d = await loadInsurance(organisationId);
       for (const p of d.policies.filter((x) => x.status === "current")) {

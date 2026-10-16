@@ -1730,3 +1730,11 @@ label.check.option-help input {
   vertical-align: -4px;
   margin-right: 6px;
 }
+
+.conflict-table td:nth-child(2) {
+  min-width: 240px;
+}
+
+.conflict-table td:last-child {
+  min-width: 220px;
+}

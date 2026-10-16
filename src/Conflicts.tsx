@@ -1,6 +1,23 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { formatDay, loadMembers, type Member } from "./board";
-import { assess, declare, LEVELS, levelLabel, loadConflicts, STATUS, TYPES, typeLabel, type ConflictRow, type ConflictType, type RiskLevel, type Status } from "./conflicts";
+import {
+  ACCEPTABLE_ACTIONS,
+  closeConflict,
+  declare,
+  LEVELS,
+  levelLabel,
+  loadConflictOfficer,
+  loadConflicts,
+  NOT_ACCEPTABLE_ACTIONS,
+  reviewConflict,
+  setConflictOfficer,
+  standing,
+  TYPES,
+  typeLabel,
+  type ConflictRow,
+  type ConflictType,
+  type RiskLevel,
+} from "./conflicts";
 import { has, only } from "./roles";
 import type { Entity } from "./types";
 
@@ -11,12 +28,40 @@ const today = () => {
 };
 const levelClass = (l: RiskLevel | null) => (l === "actual" ? "chip chip-alert" : l === "potential" ? "chip chip-warn" : "chip");
 
-function Assess({ c, busy, onSave }: { c: ConflictRow; busy: boolean; onSave: (p: { status: Status; risk_level: RiskLevel; management_plan: string; review_on: string }) => void }) {
+/** The responsible person's review: acceptable or not, and what was done */
+function Review({ c, busy, onSave, onCancel }: { c: ConflictRow; busy: boolean; onSave: (r: { outcome: "acceptable" | "not_acceptable"; actions: string[]; details: string; riskLevel: RiskLevel; reviewOn: string }) => void; onCancel: () => void }) {
+  const [outcome, setOutcome] = useState<"acceptable" | "not_acceptable" | "">(c.outcome ?? "");
+  const [actions, setActions] = useState<string[]>(c.outcome_actions ?? []);
+  const [details, setDetails] = useState(c.outcome_details ?? "");
   const [level, setLevel] = useState<RiskLevel>(c.risk_level ?? "potential");
-  const [plan, setPlan] = useState(c.management_plan ?? "");
   const [review, setReview] = useState(c.review_on ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const list = outcome === "not_acceptable" ? NOT_ACCEPTABLE_ACTIONS : ACCEPTABLE_ACTIONS;
   return (
-    <div className="form review">
+    <div className="form review conflict-review">
+      <fieldset className="plain-fieldset">
+        <legend>Is the conflict acceptable?</legend>
+        <label className="check option-help">
+          <input type="radio" name={`oc-${c.id}`} checked={outcome === "acceptable"} onChange={() => { setOutcome("acceptable"); setActions([]); }} /> <strong>Acceptable</strong>
+          <span className="muted"> · it can continue, with any action or mitigation recorded below</span>
+        </label>
+        <label className="check option-help">
+          <input type="radio" name={`oc-${c.id}`} checked={outcome === "not_acceptable"} onChange={() => { setOutcome("not_acceptable"); setActions([]); }} /> <strong>Not acceptable</strong>
+          <span className="muted"> · it must end; record the action taken</span>
+        </label>
+      </fieldset>
+      {outcome && (
+        <fieldset className="plain-fieldset">
+          <legend>{outcome === "not_acceptable" ? "Action taken" : "Action or mitigation"}</legend>
+          {list.map((a) => (
+            <label key={a} className="check">
+              <input type="checkbox" checked={actions.includes(a)} onChange={(e) => setActions(e.target.checked ? [...actions, a] : actions.filter((x) => x !== a))} /> {a}
+            </label>
+          ))}
+        </fieldset>
+      )}
+      <label htmlFor={`dt-${c.id}`}>Details{actions.includes("Other") ? "" : " (optional)"}</label>
+      <textarea id={`dt-${c.id}`} rows={2} placeholder={outcome === "not_acceptable" ? "e.g. Shares to be sold within 30 days; evidence of sale to be provided" : "e.g. Not to attend the pricing committee when the supplier is discussed"} value={details} onChange={(e) => setDetails(e.target.value)} />
       <div className="row">
         <span className="field">
           <label htmlFor={`lv-${c.id}`}>Risk level (assessed)</label>
@@ -33,14 +78,23 @@ function Assess({ c, busy, onSave }: { c: ConflictRow; busy: boolean; onSave: (p
           <input id={`rv-${c.id}`} type="date" value={review} onChange={(e) => setReview(e.target.value)} />
         </span>
       </div>
-      <label htmlFor={`pl-${c.id}`}>How it is being managed</label>
-      <input id={`pl-${c.id}`} placeholder="e.g. Excluded from decisions and papers about the supplier" value={plan} onChange={(e) => setPlan(e.target.value)} />
+      {error && <p className="error">{error}</p>}
       <div className="row">
-        <button type="button" className="quiet" disabled={busy} onClick={() => onSave({ status: "managed", risk_level: level, management_plan: plan, review_on: review })}>
-          Save as managed
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            if (!outcome) return setError("Record whether the conflict is acceptable.");
+            if (actions.length === 0) return setError(outcome === "not_acceptable" ? "Record the action taken." : 'Record the action or mitigation, or choose "No further action needed".');
+            if (actions.includes("Other") && details.trim().length < 5) return setError("Describe the other action in the details.");
+            setError(null);
+            onSave({ outcome, actions, details, riskLevel: level, reviewOn: review });
+          }}
+        >
+          Save the review
         </button>
-        <button type="button" className="link-dark" disabled={busy} onClick={() => onSave({ status: "closed", risk_level: level, management_plan: plan, review_on: review })}>
-          Close (the conflict no longer exists)
+        <button type="button" className="quiet" onClick={onCancel}>
+          Cancel
         </button>
       </div>
     </div>
@@ -48,7 +102,12 @@ function Assess({ c, busy, onSave }: { c: ConflictRow; busy: boolean; onSave: (p
 }
 
 export default function Conflicts({ organisationId, role, userId, entities }: Props) {
-  const canAssess = has(role, "owner", "admin", "secretary", "legal", "compliance");
+  const isRecords = has(role, "owner", "admin", "secretary", "legal", "compliance");
+  const [officer, setOfficer] = useState<{ ready: boolean; officer: string | null }>({ ready: false, officer: null });
+  /** May this person review this conflict: the responsible person, or the records roles when nobody is nominated or the conflict is the responsible person's own */
+  const canReview = (c: ConflictRow) =>
+    c.person_user_id !== userId && (officer.officer === userId || (isRecords && (!officer.officer || officer.officer === c.person_user_id)));
+  const canAssess = isRecords;
   const canDeclare = !only(role, "auditor");
   const [rows, setRows] = useState<ConflictRow[] | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -68,9 +127,10 @@ export default function Conflicts({ organisationId, role, userId, entities }: Pr
   const [related, setRelated] = useState("");
 
   const reload = useCallback(async () => {
-    const [list, people] = await Promise.all([loadConflicts(organisationId), loadMembers(organisationId).catch(() => [])]);
+    const [list, people, off] = await Promise.all([loadConflicts(organisationId), loadMembers(organisationId).catch(() => []), loadConflictOfficer(organisationId).catch(() => ({ ready: false, officer: null }))]);
     setRows(list);
     setMembers(people);
+    setOfficer(off);
   }, [organisationId]);
   useEffect(() => {
     reload().catch((e) => setError(e instanceof Error ? e.message : "Could not load the register."));
@@ -123,7 +183,8 @@ export default function Conflicts({ organisationId, role, userId, entities }: Pr
       (!filter.level || c.risk_level === filter.level),
   );
   const open = rows.filter((c) => c.status !== "closed");
-  const unassessed = rows.filter((c) => c.status === "open").length;
+  const unassessed = rows.filter((c) => c.status !== "closed" && !c.outcome).length;
+  const actionsOpen = rows.filter((c) => c.status !== "closed" && c.outcome === "not_acceptable" && !c.action_complete_at).length;
   const actual = open.filter((c) => c.risk_level === "actual").length;
   const reviewDue = open.filter((c) => c.review_on && c.review_on <= today()).length;
 
@@ -143,14 +204,39 @@ export default function Conflicts({ organisationId, role, userId, entities }: Pr
         </p>
       )}
 
+      {officer.ready && (
+        <section className={officer.officer ? "card form" : "card warning form"}>
+          <h2>Responsible person</h2>
+          <p className="muted">Reviews every conflict and records whether it is acceptable, and what action or mitigation was taken. Nobody reviews a conflict of their own; Legal, Compliance or the company secretary review the responsible person's own conflicts.</p>
+          {isRecords ? (
+            <select aria-label="Responsible person for conflicts of interest" value={officer.officer ?? ""} disabled={busy} onChange={(e) => void run(() => setConflictOfficer(organisationId, e.target.value || null), "Responsible person saved.")}>
+              <option value="">Not nominated: Legal, Compliance or the company secretary review</option>
+              {members
+                .filter((m) => m.is_active)
+                .map((m) => (
+                  <option key={m.user_id} value={m.user_id}>
+                    {m.name}
+                  </option>
+                ))}
+            </select>
+          ) : (
+            <p>{officer.officer ? memberName(officer.officer) : "Not nominated yet"}</p>
+          )}
+        </section>
+      )}
+
       <dl className="facts">
         <div>
           <dt>Current</dt>
           <dd>{open.length}</dd>
         </div>
         <div>
-          <dt>Awaiting assessment</dt>
+          <dt>Awaiting review</dt>
           <dd className={unassessed ? "warning-text" : undefined}>{unassessed}</dd>
+        </div>
+        <div>
+          <dt>Not acceptable: action in progress</dt>
+          <dd className={actionsOpen ? "warning-text" : undefined}>{actionsOpen}</dd>
         </div>
         <div>
           <dt>Actual conflicts</dt>
@@ -167,8 +253,8 @@ export default function Conflicts({ organisationId, role, userId, entities }: Pr
           <label htmlFor="cf-status">Showing</label>
           <select id="cf-status" value={filter.status} onChange={(e) => setFilter({ ...filter, status: e.target.value })}>
             <option value="current">Current (open and managed)</option>
-            <option value="open">Awaiting assessment</option>
-            <option value="managed">Managed</option>
+            <option value="open">Awaiting review</option>
+            <option value="managed">Reviewed</option>
             <option value="closed">Closed</option>
             <option value="">All</option>
           </select>
@@ -208,7 +294,7 @@ export default function Conflicts({ organisationId, role, userId, entities }: Pr
                 <th scope="col">Interest</th>
                 <th scope="col">Type</th>
                 <th scope="col">Risk level</th>
-                <th scope="col">Status and management</th>
+                <th scope="col">Review and action</th>
               </tr>
             </thead>
             <tbody>
@@ -236,23 +322,44 @@ export default function Conflicts({ organisationId, role, userId, entities }: Pr
                     <span className={levelClass(c.risk_level)}>{levelLabel(c.risk_level)}</span>
                   </td>
                   <td>
-                    <span className={c.status === "open" ? "warning-text" : undefined}>{STATUS[c.status]}</span>
-                    {c.management_plan && <span className="small"><br />{c.management_plan}</span>}
+                    <span className={!c.outcome && c.status !== "closed" ? "warning-text" : c.outcome === "not_acceptable" && !c.action_complete_at && c.status !== "closed" ? "chip chip-alert" : undefined}>{standing(c)}</span>
+                    {c.outcome_actions.length > 0 && <span className="small"><br />{c.outcome_actions.filter((a) => a !== "Other").join("; ")}</span>}
+                    {c.outcome_details && <span className="small muted pre-wrap"><br />{c.outcome_details}</span>}
+                    {!c.outcome && c.management_plan && <span className="small"><br />{c.management_plan}</span>}
+                    {c.outcome_by && (
+                      <span className="muted small">
+                        <br />
+                        Reviewed by {memberName(c.outcome_by)}
+                        {c.outcome_at ? `, ${formatDay(c.outcome_at)}` : ""}
+                      </span>
+                    )}
                     {c.review_on && c.status !== "closed" && (
                       <span className={c.review_on <= today() ? "warning-text small" : "muted small"}>
                         <br />
                         Review {formatDay(c.review_on)}
                       </span>
                     )}
-                    {canAssess && c.status !== "closed" && assessing !== c.id && (
-                      <>
-                        <br />
+                    {officer.ready && canReview(c) && c.status !== "closed" && assessing !== c.id && (
+                      <span className="row">
                         <button type="button" className="link-dark small" onClick={() => setAssessing(c.id)}>
-                          {c.status === "open" ? "Assess" : "Update"}
+                          {c.outcome ? "Update the review" : "Review"}
                         </button>
-                      </>
+                        {c.outcome && (
+                          <button
+                            type="button"
+                            className="link-dark small"
+                            disabled={busy}
+                            onClick={() => {
+                              const note = window.prompt(c.outcome === "not_acceptable" ? "Close the conflict: confirm the action is complete (for example, the date the shares were sold)" : "Close the conflict: why it no longer exists (optional)", "");
+                              if (note !== null) void run(() => closeConflict(c.id, note), "Closed.");
+                            }}
+                          >
+                            {c.outcome === "not_acceptable" ? "Action complete: close" : "Close"}
+                          </button>
+                        )}
+                      </span>
                     )}
-                    {assessing === c.id && <Assess c={c} busy={busy} onSave={(p) => void run(() => assess(c.id, p), "Saved.").then((ok) => ok && setAssessing(null))} />}
+                    {assessing === c.id && <Review c={c} busy={busy} onCancel={() => setAssessing(null)} onSave={(r) => void run(() => reviewConflict(c.id, r), "Review saved.").then((ok) => ok && setAssessing(null))} />}
                   </td>
                 </tr>
               ))}
@@ -328,7 +435,7 @@ export default function Conflicts({ organisationId, role, userId, entities }: Pr
               </select>
             </span>
           </div>
-          <p className="muted">A declaration cannot be edited once made; if it was wrong, declare again. Legal, Compliance or the company secretary assesses it and records how it is managed. Directors must also declare material personal interests to the board.</p>
+          <p className="muted">A declaration cannot be edited once made; if it was wrong, declare again. The responsible person reviews it and records whether it is acceptable, and the action or mitigation. Directors must also declare material personal interests to the board.</p>
           <button type="submit" disabled={busy}>
             Declare
           </button>

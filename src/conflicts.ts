@@ -21,7 +21,34 @@ export type ConflictRow = {
   management_plan: string | null;
   review_on: string | null;
   reviewed_at: string | null;
+  outcome: "acceptable" | "not_acceptable" | null;
+  outcome_actions: string[];
+  outcome_details: string | null;
+  outcome_by: string | null;
+  outcome_at: string | null;
+  action_complete_at: string | null;
 };
+
+/** Actions when a conflict is not acceptable */
+export const NOT_ACCEPTABLE_ACTIONS = [
+  "Disposal of the interest",
+  "Termination of employment or engagement",
+  "Removal from the role or duties affected",
+  "Resignation from the other position or directorship",
+  "The other relationship or contract ended",
+  "The transaction or decision did not proceed",
+  "Other",
+];
+/** Actions or mitigations when a conflict is acceptable */
+export const ACCEPTABLE_ACTIONS = [
+  "Excluded from related decisions and discussions",
+  "Restricted access to related information",
+  "An independent person approves related decisions",
+  "Disclosed to the board or the other parties",
+  "Monitored and reviewed periodically",
+  "No further action needed",
+  "Other",
+];
 
 export const TYPES: { value: ConflictType; label: string; help: string }[] = [
   {
@@ -40,7 +67,13 @@ export const LEVELS: { value: RiskLevel; label: string; help: string }[] = [
   { value: "potential", label: "Potential conflict", help: "Private interests could foreseeably turn into a clash with duties in the future." },
   { value: "perceived", label: "Perceived (apparent) conflict", help: "No actual wrongdoing, but an outside observer could reasonably suspect that personal interests are influencing decisions." },
 ];
-export const STATUS: Record<Status, string> = { open: "Open: not yet assessed", managed: "Managed", closed: "Closed" };
+export const STATUS: Record<Status, string> = { open: "Awaiting review", managed: "Reviewed", closed: "Closed" };
+export function standing(c: ConflictRow) {
+  if (c.status === "closed") return "Closed";
+  if (!c.outcome) return "Awaiting review";
+  if (c.outcome === "acceptable") return "Acceptable";
+  return c.action_complete_at ? "Not acceptable: action complete" : "Not acceptable: action in progress";
+}
 export const typeLabel = (t: ConflictType | null) => TYPES.find((x) => x.value === t)?.label.replace(" conflict of interest", "") ?? "Not recorded";
 export const levelLabel = (l: RiskLevel | null) => LEVELS.find((x) => x.value === l)?.label.replace(" conflict", "").replace(" (apparent)", "") ?? "Not recorded";
 
@@ -56,7 +89,7 @@ export async function loadConflicts(organisationId: string): Promise<ConflictRow
   const client = db();
   const read = (columns: string) => client.from("conflict_declarations").select(columns)
 .eq("organisation_id", organisationId).order("declared_on", { ascending: false });
-  let { data, error } = await read("id, declared_by, person_name, person_user_id, person_position, entity_id, description, related_party, conflict_type, risk_level, declared_on, status, management_plan, review_on, reviewed_at");
+  let { data, error } = await read("*");
   // Before migration 0034 the register columns do not exist yet
   if (error) ({ data, error } = await read("id, declared_by, person_name, description, related_party, declared_on, status, management_plan, reviewed_at"));
   check(error);
@@ -67,6 +100,12 @@ export async function loadConflicts(organisationId: string): Promise<ConflictRow
     conflict_type: null,
     risk_level: null,
     review_on: null,
+    outcome: null,
+    outcome_actions: [],
+    outcome_details: null,
+    outcome_by: null,
+    outcome_at: null,
+    action_complete_at: null,
     ...c,
   })) as ConflictRow[];
 }
@@ -101,4 +140,22 @@ export async function assess(id: string, patch: { status: Status; risk_level: Ri
         .eq("id", id)
     ).error,
   );
+}
+
+// ---- The responsible person and reviews (migration 0035) ----
+export async function loadConflictOfficer(organisationId: string): Promise<{ ready: boolean; officer: string | null }> {
+  const client = db();
+  const ensured = await client.rpc("ensure_conflict_settings", { p_org: organisationId });
+  if (ensured.error) return { ready: false, officer: null };
+  const { data, error } = await client.from("conflict_settings").select("responsible_user_id").eq("organisation_id", organisationId).maybeSingle();
+  return { ready: !error, officer: (data?.responsible_user_id as string | null) ?? null };
+}
+export async function setConflictOfficer(organisationId: string, userId: string | null) {
+  check((await db().rpc("set_conflict_officer", { p_org: organisationId, p_user: userId })).error);
+}
+export async function reviewConflict(id: string, r: { outcome: "acceptable" | "not_acceptable"; actions: string[]; details: string; riskLevel: RiskLevel; reviewOn: string }) {
+  check((await db().rpc("review_conflict", { p_conflict: id, p_outcome: r.outcome, p_actions: r.actions, p_details: r.details, p_risk_level: r.riskLevel, p_review_on: r.reviewOn || null })).error);
+}
+export async function closeConflict(id: string, note: string) {
+  check((await db().rpc("close_conflict", { p_conflict: id, p_note: note })).error);
 }
