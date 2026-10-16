@@ -12,6 +12,8 @@ import {
   type Rule,
 } from "./authority";
 import { formatDay, formatWhen } from "./board";
+import DropZone from "./DropZone";
+import { attachFile, downloadFile, listFiles, type LinkedFile } from "./files";
 import {
   CONTRACT_STATUS,
   decideApproval,
@@ -155,10 +157,12 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
   const [autoRenews, setAutoRenews] = useState(false);
   const [summary, setSummary] = useState("");
 
+  const [files, setFiles] = useState<LinkedFile[]>([]);
   const reload = useCallback(async () => {
     const [contracts, rules] = await Promise.all([loadContracts(organisationId), loadAuthority(organisationId)]);
     setData(contracts);
     setAuthority(rules);
+    setFiles(await listFiles("contracts", contracts.contracts.map((c) => c.id)));
   }, [organisationId]);
 
   useEffect(() => {
@@ -287,6 +291,27 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
             </div>
           )}
         </dl>
+
+        <section className="block">
+          <h2>Contract documents</h2>
+          {files.filter((f) => f.subject_id === open.id).length === 0 ? (
+            <p className="muted">No signed copy or draft attached yet.</p>
+          ) : (
+            <ul className="plain rows">
+              {files.filter((f) => f.subject_id === open.id).map((f) => (
+                <li key={f.storage_path}>
+                  <button type="button" className="quiet doc-icon" onClick={() => void downloadFile(f.storage_path, f.file_name).catch((e) => setError(e.message))}>
+                    ⤓ {f.file_name}
+                  </button>{" "}
+                  <span className="muted small">added {formatDay(f.created_at)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {canFile && (
+            <DropZone label="Upload the contract" busy={busy} onFile={(f) => void run(() => attachFile("contracts", open.id, f).then(() => undefined)).then((ok) => ok && setNotice(`${f.name} attached.`))} />
+          )}
+        </section>
 
         {notice && (
           <p className="card note block" role="status">

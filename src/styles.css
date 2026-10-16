@@ -1802,3 +1802,17 @@ input.signature { margin-top: 0; font-weight: 400; font-family: "Brush Script MT
 .audit-item.needs { box-shadow: inset 3px 0 0 var(--wax, #a3392b); padding-left: 10px; }
 .evidence { background: #f1efe7; border-radius: 6px; padding: 6px 10px; margin: 6px 0; }
 @media print { .audit-item textarea { border: 0; resize: none; } }
+
+/* Drop zone (contracts and others) */
+.drop-zone { display: block; border: 2px dashed var(--line, #cfc8b8); border-radius: 8px; padding: 18px; text-align: center; cursor: pointer; background: #fbfaf5; }
+.drop-zone.over { border-color: var(--wax, #a3392b); background: #f6efe6; }
+.drop-zone:focus-within { outline: 2px solid var(--wax, #a3392b); outline-offset: 2px; }
+
+/* IP Register */
+.class-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 2px 12px; max-height: 16rem; overflow-y: auto; margin-bottom: 0.5rem; }
+.class-grid .check { margin: 0; }
+.vault { padding: 10px 16px; }
+.vault h2 { margin-top: 0; }
+code.secret { background: #1f2a24; color: #f3efe4; padding: 6px 10px; border-radius: 6px; font-size: 15px; user-select: all; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover { background: #f6f3ea; }
