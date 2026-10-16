@@ -15,7 +15,7 @@ import {
 } from "./registers";
 import type { GroupData } from "./types";
 
-type Props = { organisationId: string; group: GroupData | null; canEdit: boolean };
+type Props = { organisationId: string; group: GroupData | null; canEdit: boolean; embedded?: boolean };
 const today = () => new Date().toLocaleDateString("en-CA");
 
 function EmployeeForm({ initial, group, busy, onSave, onCancel }: { initial: KeyEmployeeValues; group: GroupData | null; busy: boolean; onSave: (v: KeyEmployeeValues) => void; onCancel: () => void }) {
@@ -129,7 +129,7 @@ function EmployeeForm({ initial, group, busy, onSave, onCancel }: { initial: Key
   );
 }
 
-export default function KeyEmployees({ organisationId, group, canEdit }: Props) {
+export default function KeyEmployees({ organisationId, group, canEdit, embedded = false }: Props) {
   const [rows, setRows] = useState<KeyEmployee[] | null>(null);
   const [ready, setReady] = useState(true);
   const [editing, setEditing] = useState<string | null>(null);
@@ -171,8 +171,8 @@ export default function KeyEmployees({ organisationId, group, canEdit }: Props) 
 
   return (
     <>
-      <p className="eyebrow">Company · People</p>
-      <h1>Key Employees</h1>
+      {!embedded && <p className="eyebrow">Company</p>}
+      {!embedded && <h1>Key Employees</h1>}
       <p className="lead">The people the business depends on, who would step in, and how ready they are. Anyone leaving, a vacant role, or no successor ready now goes into the next risk review under People.</p>
       {!ready && <p className="card warning">Run migration 0037 to turn on Key Employees.</p>}
       {notice && <p className="card note" role="status">{notice}</p>}

@@ -17,7 +17,7 @@ import {
 } from "./registers";
 import type { GroupData } from "./types";
 
-type Props = { organisationId: string; group: GroupData | null; canEdit: boolean };
+type Props = { organisationId: string; group: GroupData | null; canEdit: boolean; employeeOnly?: boolean };
 const KINDS: { id: DisputeKind; label: string }[] = [
   { id: "litigation", label: "Material Litigation" },
   { id: "complaint", label: "Material Customer Complaints" },
@@ -158,11 +158,11 @@ function DisputeForm({ kind, initial, group, members, busy, onSave, onCancel }: 
   );
 }
 
-export default function Disputes({ organisationId, group, canEdit }: Props) {
+export default function Disputes({ organisationId, group, canEdit, employeeOnly = false }: Props) {
   const [rows, setRows] = useState<Dispute[] | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [ready, setReady] = useState(true);
-  const [kind, setKind] = useState<DisputeKind>("litigation");
+  const [kind, setKind] = useState<DisputeKind>(employeeOnly ? "employee" : "litigation");
   const [editing, setEditing] = useState<string | null>(null);
   const [showClosed, setShowClosed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -224,17 +224,25 @@ export default function Disputes({ organisationId, group, canEdit }: Props) {
 
   return (
     <>
-      <p className="eyebrow">Contracts and third parties</p>
-      <h1>Disputes</h1>
-      <p className="lead">Open disputes go into the next risk review: litigation under Legal and Compliance, customer complaints under Commercial, and employee disputes under People (without the employee's name).</p>
+      {!employeeOnly && (
+        <>
+          <p className="eyebrow">Contracts and third parties</p>
+          <h1>Disputes</h1>
+          <p className="lead">Open disputes go into the next risk review: litigation under Legal and Compliance, and customer complaints under Commercial. Employee disputes are under Company, Employees.</p>
+        </>
+      )}
       {!ready && <p className="card warning">Run migration 0037 to turn on Disputes.</p>}
+      {employeeOnly ? (
+        <p className="lead">Active and potential disputes with employees. Open ones go into the next risk review under People, without the employee's name.</p>
+      ) : (
       <span className="segmented block-gap" role="group" aria-label="Kinds of dispute">
-        {KINDS.map((k) => (
+        {KINDS.filter((k) => k.id !== "employee").map((k) => (
           <button key={k.id} type="button" className={kind === k.id ? "on" : undefined} aria-pressed={kind === k.id} onClick={() => { setKind(k.id); setEditing(null); setNotice(null); }}>
             {k.label}{openCount(k.id) ? ` (${openCount(k.id)})` : ""}
           </button>
         ))}
       </span>
+      )}
       {kind === "employee" && <p className="muted">Employee disputes are visible only to the owner, administrators, the company secretary, legal and compliance, and the person handling each one.</p>}
       {notice && <p className="card note" role="status">{notice}</p>}
       {error && <p className="error block" role="alert">{error}</p>}

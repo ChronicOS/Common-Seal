@@ -7,7 +7,7 @@ import Declarations from "./Declarations";
 import Training from "./Training";
 import Workflows from "./Workflows";
 import Policies from "./Policies";
-import KeyEmployees from "./KeyEmployees";
+import Employees from "./Employees";
 import KeyContracts from "./KeyContracts";
 import Disputes from "./Disputes";
 import SpeakUp from "./SpeakUp";
@@ -55,12 +55,12 @@ const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = 
   { id: "foryou", label: "For you" },
   { id: "overview", label: "Overview" },
   { id: "company", label: "Company Info", section: "Company" },
-  { id: "authorities", label: "Authorities", section: "Company" },
   { id: "insurance", label: "Insurance", section: "Company" },
-  { id: "people", label: "People", section: "Company" },
-  { id: "keyemployees", label: "Key Employees", section: "Company" },
+  { id: "keyemployees", label: "Employees", section: "Company" },
   { id: "meetings", label: "Meetings", section: "Board" },
   { id: "report", label: "Board report", section: "Board" },
+  { id: "people", label: "Appointments", section: "Board" },
+  { id: "authorities", label: "Authorities", section: "Board" },
   { id: "register", label: "Risk Register", section: "Risk and compliance" },
   { id: "oldregister", label: "(Old Register)", section: "Risk and compliance" },
   { id: "policies", label: "Policies", section: "Risk and compliance" },
@@ -255,7 +255,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
         {nav}
         <div className="workspace-main">
           {tab === "keyemployees" ? (
-            <KeyEmployees organisationId={organisation.id} group={data} canEdit={canEdit} />
+            <Employees organisationId={organisation.id} group={data} canEdit={canEdit} />
           ) : tab === "keycontracts" ? (
             <KeyContracts organisationId={organisation.id} group={data} canEdit={canEdit} />
           ) : (

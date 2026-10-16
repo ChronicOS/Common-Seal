@@ -92,8 +92,8 @@ export default function Members({ organisationId, role }: { organisationId: stri
 
   return (
     <>
-      <p className="eyebrow">Access</p>
-      <h1>People</h1>
+      <p className="eyebrow">Board</p>
+      <h1>Appointments</h1>
       {members === null && !error && <p className="lead">Loading…</p>}
       {members && (
         <ul className="entity-list">
