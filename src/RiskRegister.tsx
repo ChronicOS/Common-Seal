@@ -1,3 +1,4 @@
+import { addRiskFeed, loadRiskFeed, type FeedItem } from "./registers";
 import { has, roleLabels } from "./roles";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { formatDay, loadMembers, type Member } from "./board";
@@ -268,6 +269,20 @@ export default function RiskRegister({ organisationId, organisationName, role, u
     reload().catch((e) => setError(e instanceof Error ? e.message : "Could not load the risk register."));
   }, [reload]);
 
+  // What Key Employees, Key Contracts and Disputes say belongs in the open review
+  const [feed, setFeed] = useState<FeedItem[]>([]);
+  const [feedCategory, setFeedCategory] = useState<Record<string, string>>({});
+  const feedReview = view.kind === "review" ? view.id : null;
+  useEffect(() => {
+    setFeed([]);
+    if (!feedReview || !data || data.reviews.find((x) => x.id === feedReview)?.status !== "collecting") return;
+    let live = true;
+    loadRiskFeed(feedReview).then((f) => live && setFeed(f));
+    return () => {
+      live = false;
+    };
+  }, [feedReview, data]);
+
   async function run(action: () => Promise<void>, done?: string): Promise<boolean> {
     setBusy(true);
     setError(null);
@@ -502,6 +517,53 @@ export default function RiskRegister({ organisationId, organisationName, role, u
                       </button>
                       <button type="button" className="quiet" disabled={busy} onClick={() => void run(() => markRequestSent(q.id, kind))}>
                         Mark as sent
+                      </button>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
+        {canEdit && feed.length > 0 && (
+          <section className="card feed-card">
+            <div className="row spread">
+              <h2>From Key Employees, Key Contracts and Disputes</h2>
+              {feed.some((f) => f.category_id) && (
+                <button type="button" className="quiet" disabled={busy} onClick={() => { let n = 0; void run(async () => { n = await addRiskFeed(r.id, null); }).then((ok) => ok && setNotice(`${n} added to the review. Edit any of them as you would any other risk.`)); }}>
+                  Add all{feed.some((f) => !f.category_id) ? " with a category" : ""}
+                </button>
+              )}
+            </div>
+            <p className="muted">These registers show {feed.length} {feed.length === 1 ? "item" : "items"} not yet in this review. Each is added to its category with a suggested action you can change; it stays linked to its source and carries forward while open.</p>
+            <ul className="plain rows">
+              {feed.map((f) => {
+                const [first, ...rest] = f.title.split("\n");
+                return (
+                  <li key={f.source_id} className="row spread">
+                    <span>
+                      <span className="chip">{f.register}</span> <strong>{first}</strong>
+                      {rest.length > 0 && <span className="muted small"><br />{rest.join(" · ")}</span>}
+                      <br />
+                      <span className="muted small">Suggested action: {f.action}{f.due_on ? ` · by ${formatDay(f.due_on)}` : ""}</span>
+                    </span>
+                    <span className="row">
+                      {f.category_id ? (
+                        <span className="muted small">{f.category_name}</span>
+                      ) : (
+                        <select aria-label={`Category for ${first}`} value={feedCategory[f.source_id] ?? ""} onChange={(e) => setFeedCategory({ ...feedCategory, [f.source_id]: e.target.value })}>
+                          <option value="">Choose a category</option>
+                          {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                      )}
+                      <button
+                        type="button"
+                        className="quiet"
+                        disabled={busy || (!f.category_id && !feedCategory[f.source_id])}
+                        onClick={() => void run(() => addRiskFeed(r.id, f.source_id, f.category_id ? null : feedCategory[f.source_id]).then(() => undefined), "Added to the review.")}
+                      >
+                        Add
                       </button>
                     </span>
                   </li>

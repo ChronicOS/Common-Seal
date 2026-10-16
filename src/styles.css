@@ -1752,3 +1752,16 @@ input.signature { margin-top: 0; font-weight: 400; font-family: "Brush Script MT
 @media print { .no-print, .side-nav, .segmented { display: none !important; } }
 .declaration .detail-list.compact > div { display: block; border: 0; padding: 0; grid-template-columns: none; }
 .declaration .detail-list.compact dd { font-size: 1.05rem; }
+
+/* Key employees, key contracts, disputes */
+.key-card h3 { margin: 0; font-size: 1.05rem; }
+.key-card .row.spread { align-items: flex-start; gap: 1rem; }
+.key-facts { display: flex; flex-wrap: wrap; gap: 0.5rem 2rem; margin: 0.5rem 0; }
+.key-facts > div { display: block; border: 0; padding: 0; }
+.key-facts dt { font-size: 0.78rem; color: var(--muted, #666); }
+.key-facts dd { margin: 0; font-weight: 600; }
+.pre-line { white-space: pre-line; }
+.field.grow { flex: 1; }
+.feed-card { border-left: 4px solid var(--accent, #1f4e79); }
+.feed-card h2 { margin: 0; }
+.feed-card li .row { align-items: center; gap: 0.5rem; flex-shrink: 0; }
