@@ -226,7 +226,7 @@ export default function Disputes({ organisationId, group, canEdit, employeeOnly 
     <>
       {!employeeOnly && (
         <>
-          <p className="eyebrow">Contracts and third parties</p>
+          <p className="eyebrow">Third parties</p>
           <h1>Disputes</h1>
           <p className="lead">Open disputes go into the next risk review: litigation under Legal and Compliance, and customer complaints under Commercial. Employee disputes are under Company, Employees.</p>
         </>

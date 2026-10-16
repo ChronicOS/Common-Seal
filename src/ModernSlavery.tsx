@@ -380,7 +380,7 @@ export default function ModernSlavery({ organisationId, organisationName, role, 
           )}
           {canEdit &&
             (data.suppliers.length === 0 ? (
-              <p className="muted">Add suppliers under Third parties to review them here.</p>
+              <p className="muted">Add suppliers under Third parties, Due Diligence to review them here.</p>
             ) : (
               <form
                 className="card form"

@@ -10,6 +10,7 @@ import Policies from "./Policies";
 import Employees, { type EmployeesSub } from "./Employees";
 import KeyContracts from "./KeyContracts";
 import Disputes from "./Disputes";
+import Sanctions from "./Sanctions";
 import SpeakUp from "./SpeakUp";
 import Expenses from "./Expenses";
 import Horizon from "./Horizon";
@@ -49,8 +50,8 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Tab =
   | "overview" | "company" | "authorities" | "insurance" | "foryou" | "report" | "modernslavery" | "oldregister" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
-  | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "conflicts" | "expenses" | "speakup" | "people" | "keyemployees" | "keycontracts" | "disputes";
-const SECTIONS = ["Company", "Board", "Risk and compliance", "Contracts and third parties", "Conduct"] as const;
+  | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "conflicts" | "expenses" | "speakup" | "people" | "keyemployees" | "keycontracts" | "disputes" | "sanctions";
+const SECTIONS = ["Company", "Board", "Risk and compliance", "Contracts", "Third parties", "Conduct"] as const;
 const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = [
   { id: "foryou", label: "For you" },
   { id: "overview", label: "Overview" },
@@ -68,12 +69,13 @@ const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = 
   { id: "training", label: "Training", section: "Risk and compliance" },
   { id: "workflows", label: "Workflows", section: "Risk and compliance" },
   { id: "horizon", label: "Horizon", section: "Risk and compliance" },
-  { id: "contracts", label: "Contracts", section: "Contracts and third parties" },
-  { id: "keycontracts", label: "Key Contracts", section: "Contracts and third parties" },
-  { id: "intercompany", label: "Intercompany", section: "Contracts and third parties" },
-  { id: "parties", label: "Third parties", section: "Contracts and third parties" },
-  { id: "disputes", label: "Disputes", section: "Contracts and third parties" },
-  { id: "authority", label: "(Old Authority)", section: "Contracts and third parties" },
+  { id: "contracts", label: "Contract Management", section: "Contracts" },
+  { id: "keycontracts", label: "Key Contracts", section: "Contracts" },
+  { id: "intercompany", label: "Intercompany", section: "Contracts" },
+  { id: "sanctions", label: "Sanctions", section: "Contracts" },
+  { id: "authority", label: "(Old Authority)", section: "Contracts" },
+  { id: "parties", label: "Due Diligence", section: "Third parties" },
+  { id: "disputes", label: "Disputes", section: "Third parties" },
   { id: "declarations", label: "Gifts and hospitality", section: "Conduct" },
   { id: "conflicts", label: "Conflicts of interest", section: "Conduct" },
   { id: "expenses", label: "Expenses", section: "Conduct" },
@@ -268,6 +270,17 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
     );
   }
 
+  if (tab === "sanctions") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+          <Sanctions organisationId={organisation.id} role={role} userId={userId} group={data} />
+        </div>
+      </div>
+    );
+  }
+
   if (tab === "insurance") {
     return (
       <div className="workspace">
@@ -328,7 +341,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
       <div className="workspace">
         {nav}
         <div className="workspace-main">
-        <Parties organisationId={organisation.id} role={role} />
+        <Parties organisationId={organisation.id} role={role} userId={userId} />
         </div>
       </div>
     );

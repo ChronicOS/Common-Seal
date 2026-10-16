@@ -89,7 +89,7 @@ export default function KeyContracts({ organisationId, group, canEdit }: Props) 
 
   return (
     <>
-      <p className="eyebrow">Contracts and third parties</p>
+      <p className="eyebrow">Contracts</p>
       <h1>Key Contracts</h1>
       <p className="lead">Contracts the business could not easily do without. A key contract ending or due for notice within six months goes into the next risk review under Commercial.</p>
       {!ready && <p className="card warning">Run migration 0037 to turn on Key Contracts.</p>}

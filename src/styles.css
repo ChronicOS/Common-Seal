@@ -1782,3 +1782,12 @@ input.signature { margin-top: 0; font-weight: 400; font-family: "Brush Script MT
 .org-picker select:focus { outline: 2px solid var(--wax); outline-offset: 2px; }
 .org-picker option { color: var(--ink); background: #fff; }
 @media print { .org-picker { display: none; } }
+
+/* Ratings (due diligence, sanctions) */
+.rating-low { border-left: 4px solid #2f6b47; }
+.rating-medium { border-left: 4px solid #b7791f; }
+.rating-high { border-left: 4px solid var(--wax, #a3392b); }
+.rating-low p, .rating-medium p, .rating-high p { margin: 0 0 0.25rem; }
+.file-button { display: inline-block; cursor: pointer; padding: 8px 14px; border: 1px solid var(--line, #cfc8b8); border-radius: 6px; }
+.file-button:focus-within { outline: 2px solid var(--wax, #a3392b); outline-offset: 2px; }
+.nowrap { white-space: nowrap; }

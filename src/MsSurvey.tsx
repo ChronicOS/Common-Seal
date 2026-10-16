@@ -508,7 +508,7 @@ export default function MsSurvey({ organisationId, organisationName, role, state
               >
                 <h3>Add a third party to survey</h3>
                 {data.suppliers.length === 0 ? (
-                  <p className="muted">Add third parties under Third parties first.</p>
+                  <p className="muted">Add third parties under Third parties, Due Diligence first.</p>
                 ) : (
                   <>
                     <label htmlFor="rc-supplier">Third party</label>
