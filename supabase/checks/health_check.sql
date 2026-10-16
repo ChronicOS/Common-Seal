@@ -18,6 +18,9 @@ checks (check_name, ok, detail) as (
          case when to_regclass('public.' || e.marker) is null then 'Table ' || e.marker || ' is missing' else '' end
   from expected e
   union all
+  select 'Migration 0033 has been run',
+         to_regclass('public.policy_templates') is not null, ''
+  union all
   select 'Migration 0032 has been run',
          to_regclass('public.insurance_policies') is not null, ''
   union all

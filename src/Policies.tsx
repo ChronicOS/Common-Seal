@@ -10,7 +10,11 @@ import {
   loadPolicies,
   POLICY_CATEGORIES,
   POLICY_STARTERS,
+  loadOwnTemplates,
+  removeOwnTemplate,
+  saveOwnTemplate,
   savePolicyDraft,
+  type OwnTemplate,
   STANDARD_SECTIONS,
   updatePolicy,
   type Policy,
@@ -18,8 +22,20 @@ import {
   type PolicyVersion,
 } from "./policies";
 import { createModule, today } from "./training";
+import { fillTemplate, TEMPLATES, type Audience, type Kind } from "./policyTemplates";
 
-type Props = { organisationId: string; role: string; userId: string };
+type Props = { organisationId: string; organisationName: string; role: string; userId: string };
+
+/** A blank external policy: the standard sections, worded for people outside the company */
+const EXTERNAL_BLANK = [
+  "# Purpose\nWhy [Company Name] has this policy and what it expects, in one or two sentences.",
+  "# Who this applies to\n[The suppliers, partners, customers or members of the public it covers.]",
+  "# The rules\nState each requirement as a short sentence saying who must do what.",
+  "# Roles and responsibilities\nWho at [Company Name] communicates this policy and checks it is followed, and what the other party must do.",
+  "# Raising concerns\nConcerns can be raised with your [Company Name] contact, or confidentially through [the external speak-up channel].",
+  "# Breaches\n[Company Name] may ask for corrective action, audit, suspend or end the relationship, depending on the breach.",
+  "# Review\nThe owner reviews this policy at least once in each review cycle.",
+].join("\n\n");
 
 const MANAGE_ROLES = ["owner", "admin", "secretary", "legal", "compliance"];
 
@@ -72,6 +88,16 @@ function Writer({
           {report.words} words · about {report.minutes} {report.minutes === 1 ? "minute" : "minutes"} to read ·{" "}
           {STANDARD_SECTIONS.length - report.missing.length} of {STANDARD_SECTIONS.length} standard sections
         </p>
+        {report.placeholders.length > 0 && (
+          <div className="warning-text">
+            {report.placeholders.length} {report.placeholders.length === 1 ? "placeholder or drafting note" : "placeholders or drafting notes"} in [square brackets] to resolve:
+            <ul>
+              {report.placeholders.slice(0, 8).map((x) => (
+                <li key={x}>{x.length > 120 ? `${x.slice(0, 117)}…]` : x}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         {report.longSentences.length === 0 ? (
           <p className="muted">No sentences over 30 words.</p>
         ) : (
@@ -97,7 +123,7 @@ function Writer({
   );
 }
 
-export default function Policies({ organisationId, role, userId }: Props) {
+export default function Policies({ organisationId, organisationName, role, userId }: Props) {
   const canManage = has(role, ...MANAGE_ROLES);
 
   const [data, setData] = useState<PolicyData | null>(null);
@@ -112,12 +138,19 @@ export default function Policies({ organisationId, role, userId }: Props) {
   const [category, setCategory] = useState("General");
   const [ownerId, setOwnerId] = useState("");
   const [months, setMonths] = useState("12");
-  const [starter, setStarter] = useState(0);
+  const [audience, setAudience] = useState<Audience>("internal");
+  const [kind, setKind] = useState<Kind>("policy");
+  const [appliesTo, setAppliesTo] = useState("");
+  const [startContent, setStartContent] = useState<string | null>(null);
+  const [startName, setStartName] = useState<string | null>(null);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [ownTemplates, setOwnTemplates] = useState<OwnTemplate[]>([]);
 
   const reload = useCallback(async () => {
-    const [policies, people] = await Promise.all([loadPolicies(organisationId), loadMembers(organisationId).catch(() => [])]);
+    const [policies, people, own] = await Promise.all([loadPolicies(organisationId), loadMembers(organisationId).catch(() => []), loadOwnTemplates(organisationId).catch(() => [])]);
     setData(policies);
     setMembers(people);
+    setOwnTemplates(own);
   }, [organisationId]);
 
   useEffect(() => {
@@ -200,7 +233,10 @@ export default function Policies({ organisationId, role, userId }: Props) {
             ← Back to policies
           </button>
         </p>
-        <p className="eyebrow">{policy.category}</p>
+        <p className="eyebrow">
+          {(policy.audience ?? "internal") === "external" ? "External" : "Internal"} {policy.kind === "code" ? "code of conduct" : "policy"} · {policy.category}
+          {policy.applies_to ? ` · for ${policy.applies_to}` : ""}
+        </p>
         <h1>{policy.title}</h1>
         <p className="lead">
           <span className={overdue(policy) && !policy.is_retired ? "chip chip-alert" : "chip"}>{statusOf(policy)}</span> Owner: {nameOf(policy.owner_user_id)}
@@ -237,6 +273,8 @@ export default function Policies({ organisationId, role, userId }: Props) {
                   className="quiet"
                   disabled={busy}
                   onClick={() => {
+                    const left = checkWording(draft.content).placeholders;
+                    if (left.length && !window.confirm(`The draft still has ${left.length} placeholder${left.length === 1 ? "" : "s"} or drafting note${left.length === 1 ? "" : "s"} in [square brackets], such as ${left[0]}. Approve anyway?`)) return;
                     if (window.confirm("Approve the saved draft? It becomes the version in force and replaces the current one.")) {
                       void run(() => approvePolicyDraft(policy.id), "Approved. This version is now in force.");
                     }
@@ -303,16 +341,43 @@ export default function Policies({ organisationId, role, userId }: Props) {
                 </option>
               ))}
             </select>
-            <button
-              type="button"
-              className="quiet"
-              disabled={busy}
-              onClick={() => {
-                if (window.confirm("Retire this policy? It stays on record but is no longer in force.")) void run(() => updatePolicy(policy.id, { is_retired: true }));
-              }}
-            >
-              Retire this policy
-            </button>
+            <fieldset className="plain-fieldset">
+              <legend>Who it is for</legend>
+              <label className="check">
+                <input type="radio" name="pol-audience" checked={(policy.audience ?? "internal") === "internal"} disabled={busy} onChange={() => void run(() => updatePolicy(policy.id, { audience: "internal" }))} /> Internal policy
+              </label>
+              <label className="check">
+                <input type="radio" name="pol-audience" checked={policy.audience === "external"} disabled={busy} onChange={() => void run(() => updatePolicy(policy.id, { audience: "external" }))} /> External policy
+              </label>
+              <label className="check">
+                <input type="checkbox" checked={policy.kind === "code"} disabled={busy} onChange={(e) => void run(() => updatePolicy(policy.id, { kind: e.target.checked ? "code" : "policy" }))} /> This is a code of conduct
+              </label>
+            </fieldset>
+            <div className="row">
+              <button
+                type="button"
+                className="quiet"
+                disabled={busy}
+                onClick={() => {
+                  const content = (draft ?? approved)?.content ?? "";
+                  const name = window.prompt("Name for the template (it can be reused for other policies or companies)", policy.title);
+                  if (name && name.trim().length >= 3)
+                    void run(() => saveOwnTemplate(organisationId, { name: name.trim(), category: policy.category, audience: policy.audience ?? "internal", kind: policy.kind ?? "policy", summary: `Saved from ${policy.title}`, content: content.split(organisationName).join("[Company Name]") }), "Saved to your templates. It now appears under Use Policy Templates.");
+                }}
+              >
+                Save as a template
+              </button>
+              <button
+                type="button"
+                className="quiet"
+                disabled={busy}
+                onClick={() => {
+                  if (window.confirm("Retire this policy? It stays on record but is no longer in force.")) void run(() => updatePolicy(policy.id, { is_retired: true }));
+                }}
+              >
+                Retire this policy
+              </button>
+            </div>
           </section>
         )}
 
@@ -357,25 +422,47 @@ export default function Policies({ organisationId, role, userId }: Props) {
     if (!ownerId) return setError("Choose the owner. Every policy has a named owner.");
     if (!Number.isInteger(n) || n < 1 || n > 60) return setError("Review every 1 to 60 months.");
     let id = "";
+    const content = startContent ?? (audience === "external" ? EXTERNAL_BLANK : POLICY_STARTERS[0].content);
     const ok = await run(async () => {
-      id = await createPolicy(organisationId, { title, category, ownerId, reviewMonths: n, content: POLICY_STARTERS[starter].content });
+      id = await createPolicy(organisationId, { title, category, ownerId, reviewMonths: n, content: fillTemplate(content, organisationName), audience, kind, appliesTo });
     });
     if (ok) {
       setTitle("");
+      setStartContent(null);
+      setStartName(null);
+      setAppliesTo("");
+      setKind("policy");
       setOpenId(id);
     }
   }
 
+  const useTemplate = (t: { name: string; category: string; audience: Audience; kind: Kind; appliesTo?: string; content: string }) => {
+    setTitle(t.name.replace(/ \(published\)$/, ""));
+    setCategory(POLICY_CATEGORIES.includes(t.category) ? t.category : "General");
+    setAudience(t.audience);
+    setKind(t.kind);
+    setAppliesTo(t.appliesTo ?? "");
+    setStartContent(t.content);
+    setStartName(t.name);
+    setShowLibrary(false);
+    setNotice(`"${t.name}" is ready below. Choose the owner, then add it and start writing.`);
+    window.setTimeout(() => document.getElementById("pn-title")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
+  };
+
   const current = data.policies.filter((p) => !p.is_retired);
   const retired = data.policies.filter((p) => p.is_retired);
+  const internal = current.filter((p) => (p.audience ?? "internal") === "internal");
+  const external = current.filter((p) => p.audience === "external");
   const row = (p: Policy) => (
     <li key={p.id}>
       <button type="button" className="entity-row" onClick={() => setOpenId(p.id)}>
         <span>
           <span className="entity-name">{p.title}</span>
+          {p.kind === "code" && <span className="chip chip-inline">Code of conduct</span>}
           <br />
           <span className="muted">
             {p.category} · owner {nameOf(p.owner_user_id)}
+            {p.applies_to ? ` · for ${p.applies_to}` : ""}
             {p.next_review_on && !p.is_retired ? ` · review due ${formatDay(p.next_review_on)}` : ""}
           </span>
         </span>
@@ -383,18 +470,99 @@ export default function Policies({ organisationId, role, userId }: Props) {
       </button>
     </li>
   );
+  const inUse = (name: string) => current.some((p) => p.title.toLowerCase() === name.replace(/ \(published\)$/, "").toLowerCase());
+  const templateEntry = (t: { key: string; name: string; summary: string | null; whyNeeded?: string; appliesTo?: string; kind: Kind; content: string; own?: string }, use: () => void) => (
+    <details key={t.key} className="card template">
+      <summary>
+        <strong>{t.name}</strong>
+        {t.kind === "code" && <span className="chip">Code of conduct</span>}
+        {t.own && <span className="chip">Your template</span>}
+        {inUse(t.name) && <span className="chip">Already in your policies</span>}
+        <br />
+        <span className="muted">{t.summary}</span>
+      </summary>
+      {t.whyNeeded && (
+        <p>
+          <strong>Why you may need it: </strong>
+          {t.whyNeeded}
+        </p>
+      )}
+      {t.appliesTo && <p className="muted">For: {t.appliesTo}</p>}
+      <div className="template-preview">
+        <Wording content={fillTemplate(t.content, organisationName)} />
+      </div>
+      <div className="row">
+        <button type="button" onClick={use}>
+          Use this template
+        </button>
+        {t.own && (
+          <button type="button" className="link-dark" disabled={busy} onClick={() => { if (window.confirm(`Remove your template "${t.name}"?`)) void run(() => removeOwnTemplate(t.own!), "Template removed."); }}>
+            Remove this template
+          </button>
+        )}
+      </div>
+    </details>
+  );
+
+  if (showLibrary) {
+    const group = (aud: Audience) => (
+      <>
+        {ownTemplates.filter((t) => t.audience === aud).map((t) => templateEntry({ key: t.id, name: t.name, summary: t.summary, kind: t.kind, content: t.content, own: t.id }, () => useTemplate({ ...t, appliesTo: undefined })))}
+        {TEMPLATES.filter((t) => t.audience === aud).map((t) => templateEntry({ key: t.id, name: t.name, summary: t.summary, whyNeeded: t.whyNeeded, appliesTo: t.appliesTo, kind: t.kind, content: t.content }, () => useTemplate(t)))}
+      </>
+    );
+    return (
+      <>
+        <p>
+          <button type="button" className="link-dark" onClick={() => setShowLibrary(false)}>
+            ← Back to policies
+          </button>
+        </p>
+        <p className="eyebrow">Policy repository</p>
+        <h1>Policy templates</h1>
+        <p className="lead">Starting points for common policies, written for Australian companies. Open one to read it, then use it to start a draft.</p>
+        <p className="muted">
+          {organisationName} is filled in for you. Anything else in [square brackets] is a placeholder or a drafting note; the draft flags them until each one is resolved. Templates are general and are not legal advice: tailor them to the business and check them against current law.
+        </p>
+        {messages}
+        <section className="block">
+          <h2>Internal policies</h2>
+          <p className="muted">For people who work for the company: directors, employees and contractors.</p>
+          {group("internal")}
+        </section>
+        <section className="block">
+          <h2>External policies</h2>
+          <p className="muted">For people outside the company: suppliers, partners, customers and the public.</p>
+          {group("external")}
+        </section>
+        <p className="muted">To add your own, open any policy and choose "Save as a template".</p>
+      </>
+    );
+  }
 
   return (
     <>
       <p className="eyebrow">Policy repository</p>
       <h1>Policies</h1>
       {messages}
+      {canManage && (
+        <p>
+          <button type="button" className="quiet" onClick={() => { setShowLibrary(true); setNotice(null); setError(null); }}>
+            Use Policy Templates
+          </button>
+        </p>
+      )}
       <section className="block">
-        {current.length === 0 ? (
-          <p className="muted">{canManage ? "No policies yet. Add the first one below." : "No policies have been added."}</p>
+        <h2>Internal policies</h2>
+        {internal.length === 0 ? (
+          <p className="muted">{canManage ? "None yet. Add one below, or start from a template." : "None have been added."}</p>
         ) : (
-          <ul className="entity-list">{current.map(row)}</ul>
+          <ul className="entity-list">{internal.map(row)}</ul>
         )}
+      </section>
+      <section className="block">
+        <h2>External policies</h2>
+        {external.length === 0 ? <p className="muted">None yet. External policies are for suppliers, partners, customers and the public, such as a Supplier Code of Conduct.</p> : <ul className="entity-list">{external.map(row)}</ul>}
       </section>
       {retired.length > 0 && (
         <section className="block">
@@ -406,6 +574,26 @@ export default function Policies({ organisationId, role, userId }: Props) {
       {canManage && (
         <form className="card form" onSubmit={submit}>
           <h2>Add a policy</h2>
+          <fieldset className="plain-fieldset">
+            <legend>Who is it for?</legend>
+            <label className="check">
+              <input type="radio" name="pn-audience" checked={audience === "internal"} onChange={() => setAudience("internal")} /> <strong>Internal policy</strong>
+              <span className="muted"> · for people who work for the company, e.g. the Employee Code of Conduct</span>
+            </label>
+            <label className="check">
+              <input type="radio" name="pn-audience" checked={audience === "external"} onChange={() => setAudience("external")} /> <strong>External policy</strong>
+              <span className="muted"> · for people outside the company, e.g. the Supplier Code of Conduct or the published privacy policy</span>
+            </label>
+          </fieldset>
+          <label className="check">
+            <input type="checkbox" checked={kind === "code"} onChange={(e) => setKind(e.target.checked ? "code" : "policy")} /> This is a code of conduct
+          </label>
+          {audience === "external" && (
+            <>
+              <label htmlFor="pn-applies">Who it applies to</label>
+              <input id="pn-applies" placeholder="e.g. Suppliers, contract manufacturers and their subcontractors" value={appliesTo} onChange={(e) => setAppliesTo(e.target.value)} />
+            </>
+          )}
           <label htmlFor="pn-title">Title</label>
           <input id="pn-title" value={title} onChange={(e) => setTitle(e.target.value)} />
           <div className="row">
@@ -433,23 +621,18 @@ export default function Policies({ organisationId, role, userId }: Props) {
               <input id="pn-months" className="short" inputMode="numeric" value={months} onChange={(e) => setMonths(e.target.value)} />
             </span>
           </div>
-          <label htmlFor="pn-starter">Start from</label>
-          <select
-            id="pn-starter"
-            value={starter}
-            onChange={(e) => {
-              const i = Number(e.target.value);
-              setStarter(i);
-              if (i > 0) setCategory(POLICY_STARTERS[i].category);
-            }}
-          >
-            {POLICY_STARTERS.map((s, i) => (
-              <option key={s.name} value={i}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-          <p className="muted">Starters are skeletons with the standard sections and a few example rules. You rewrite them before approval.</p>
+          <p className="muted">
+            Starting from: <strong>{startName ?? (audience === "external" ? "a blank external policy with the standard sections" : "a blank policy with the standard sections")}</strong>.{" "}
+            {startName ? (
+              <button type="button" className="link-dark" onClick={() => { setStartContent(null); setStartName(null); }}>
+                Start blank instead
+              </button>
+            ) : (
+              <button type="button" className="link-dark" onClick={() => setShowLibrary(true)}>
+                Choose a template
+              </button>
+            )}
+          </p>
           <button type="submit" disabled={busy}>
             Add and start writing
           </button>

@@ -9,6 +9,10 @@ export type Policy = {
   next_review_on: string | null;
   last_reviewed_on: string | null;
   is_retired: boolean;
+  /** internal (for people who work for us) or external (for suppliers, customers and others); missing before migration 0033 */
+  audience?: "internal" | "external";
+  kind?: "policy" | "code";
+  applies_to?: string | null;
 };
 export type PolicyVersion = {
   id: string;
@@ -80,7 +84,7 @@ export const POLICY_STARTERS: { name: string; category: string; content: string 
   },
 ];
 
-export type Readability = { words: number; minutes: number; longSentences: string[]; missing: string[] };
+export type Readability = { words: number; minutes: number; longSentences: string[]; missing: string[]; placeholders: string[] };
 
 /** A plain-English check. Flags sentences over 30 words and standard sections that are missing. */
 export function checkWording(content: string): Readability {
@@ -102,6 +106,8 @@ export function checkWording(content: string): Readability {
     minutes: Math.max(1, Math.round(words.length / 200)),
     longSentences: sentences.filter((s) => s.split(/\s+/).length > 30),
     missing: STANDARD_SECTIONS.filter((s) => !headings.includes(s.toLowerCase())),
+    // Anything still in [square brackets]: placeholders and drafting notes from a template
+    placeholders: [...new Set([...content.matchAll(/\[[^\]\n]{2,200}\]/g)].map((m) => m[0]))],
   };
 }
 
@@ -123,17 +129,29 @@ export async function loadPolicies(organisationId: string): Promise<PolicyData> 
   return { policies: (policies.data ?? []) as Policy[], versions: (versions.data ?? []) as PolicyVersion[] };
 }
 
-export async function createPolicy(organisationId: string, p: { title: string; category: string; ownerId: string; reviewMonths: number; content: string }) {
-  const { data, error } = await db().rpc("create_policy", {
-    p_org: organisationId,
-    p_title: p.title,
-    p_category: p.category,
-    p_owner: p.ownerId,
-    p_review_months: p.reviewMonths,
-    p_content: p.content,
-  });
+export async function createPolicy(
+  organisationId: string,
+  p: { title: string; category: string; ownerId: string; reviewMonths: number; content: string; audience: "internal" | "external"; kind: "policy" | "code"; appliesTo: string },
+) {
+  const base = { p_org: organisationId, p_title: p.title, p_category: p.category, p_owner: p.ownerId, p_review_months: p.reviewMonths, p_content: p.content };
+  let { data, error } = await db().rpc("create_policy", { ...base, p_audience: p.audience, p_kind: p.kind, p_applies_to: p.appliesTo || null });
+  // Before migration 0033 the function has no audience; save without it rather than fail
+  if (error && /p_audience|function/i.test(error.message)) ({ data, error } = await db().rpc("create_policy", base));
   check(error);
   return data as string;
+}
+
+// ---- The organisation's own templates (migration 0033) ----
+export type OwnTemplate = { id: string; name: string; category: string; audience: "internal" | "external"; kind: "policy" | "code"; summary: string | null; content: string };
+export async function loadOwnTemplates(organisationId: string): Promise<OwnTemplate[]> {
+  const { data, error } = await db().from("policy_templates").select("id, name, category, audience, kind, summary, content").eq("organisation_id", organisationId).order("name");
+  return error ? [] : ((data ?? []) as OwnTemplate[]);
+}
+export async function saveOwnTemplate(organisationId: string, t: Omit<OwnTemplate, "id">) {
+  check((await db().from("policy_templates").insert({ organisation_id: organisationId, ...t })).error);
+}
+export async function removeOwnTemplate(id: string) {
+  check((await db().from("policy_templates").delete().eq("id", id)).error);
 }
 
 export async function savePolicyDraft(policyId: string, content: string, changeNote: string) {
@@ -145,7 +163,7 @@ export async function approvePolicyDraft(policyId: string) {
 export async function confirmPolicyReview(policyId: string) {
   check((await db().rpc("confirm_policy_review", { p_policy: policyId })).error);
 }
-export async function updatePolicy(policyId: string, patch: Partial<Pick<Policy, "owner_user_id" | "is_retired" | "review_every_months">>) {
+export async function updatePolicy(policyId: string, patch: Partial<Pick<Policy, "owner_user_id" | "is_retired" | "review_every_months" | "audience" | "kind" | "applies_to">>) {
   check((await db().from("policies").update(patch).eq("id", policyId)).error);
 }
 
