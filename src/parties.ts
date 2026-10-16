@@ -315,17 +315,44 @@ export type QAnswers = {
   insolvency: YesNoDetails;
   press: YesNoDetails;
   licences: { confirmed: "yes" | "no" | ""; details: string; items: { name: string; number: string; issuer: string; expires_on: string }[] };
+  connections: YesNoDetails;
+  government: YesNoDetails;
+  sanctions: YesNoDetails;
+  ubos: { name: string; percent: string; via: string }[];
+  ubo_none: string;
+  bank: { country: string; own_name: "yes" | "no" | ""; details: string };
+  trading_names: string;
+  sub_contractors: YesNoDetails;
+  data: { answer: "yes" | "no" | ""; details: string; security: "yes" | "no" | "" };
+  /** Agents and introducers only */
+  compensation?: { basis: string; rate: string; details: string };
+  abc_policy?: { answer: "yes" | "no" | "" };
   declaration: { agreed: string; signed_name: string; position: string };
 };
+export type Upload = { path: string; kind: "company_extract" | "licence" | "insurance" | "other"; file_name: string };
+export const UPLOAD_KINDS: { id: Upload["kind"]; label: string }[] = [
+  { id: "company_extract", label: "Current company extract or registration certificate" },
+  { id: "licence", label: "Licence, permit or membership" },
+  { id: "insurance", label: "Certificate of insurance" },
+  { id: "other", label: "Other" },
+];
 export type Questionnaire = { id: string; case_id: string; contact_name: string | null; contact_email: string | null; status: "sent" | "submitted" | "cancelled"; sent_at: string | null; opened_at: string | null; submitted_at: string | null; answers: QAnswers | null };
-export type PublicQuestionnaire = { organisation: string; party_name: string; country: string | null; countries: string[] | null; registration_number: string | null; website: string | null; description: string | null; contact_name: string | null; submitted_at: string | null; answers: QAnswers | null };
+export type PublicQuestionnaire = { organisation: string; party_name: string; party_type: PartyType | null; uploads: Upload[]; country: string | null; countries: string[] | null; registration_number: string | null; website: string | null; description: string | null; contact_name: string | null; submitted_at: string | null; answers: QAnswers | null };
 
 export const Q_TEXT = {
   litigation: "Is the company, or any of its directors, involved in any active or threatened litigation, arbitration or regulatory proceedings?",
   insolvency: "Has the company, or any of its directors, been insolvent, bankrupt, or in administration, receivership or liquidation, or entered a scheme with creditors, in the last ten years?",
   press: "Has there been any press or media coverage alleging wrongdoing by the company or any of its directors (for example bribery, fraud, sanctions, money laundering, human rights, labour or environmental issues)?",
   licences: "Does the company hold all the licences, authorisations, permits, registrations and professional memberships it needs to operate its business in the jurisdictions where it proposes to work with us?",
+  connections: "Is any director, shareholder or employee of the company related to, or in business with, anyone who works for us or sits on our board?",
+  government: "Is any director, shareholder or owner a government official or politically exposed person (or a close family member or associate of one), or is the company owned or controlled by a government?",
+  sanctions: "Is the company, or any of its owners or directors, on a sanctions list, or does the company do business in or with countries subject to sanctions?",
+  sub_contractors: "Will you use sub-contractors for any of the work you do for us?",
+  data: "Will you handle personal information for us, or have access to our IT systems?",
+  security: "Do you have written privacy and information security policies, and will you tell us promptly of any data breach affecting us?",
+  abc_policy: "Do you have a written anti-bribery and corruption policy that your staff follow?",
 };
+export const AGENT_TYPES: PartyType[] = ["sales_agent", "process_agent"];
 
 export const blankQAnswers = (p?: { party_name?: string; registration_number?: string | null; website?: string | null }): QAnswers => ({
   company: { legal_name: p?.party_name ?? "", registration_number: p?.registration_number ?? "", incorporated_on: "", registered_address: "", website: p?.website ?? "", is_corporation: "" },
@@ -335,6 +362,17 @@ export const blankQAnswers = (p?: { party_name?: string; registration_number?: s
   insolvency: { answer: "", details: "" },
   press: { answer: "", details: "" },
   licences: { confirmed: "", details: "", items: [{ name: "", number: "", issuer: "", expires_on: "" }] },
+  connections: { answer: "", details: "" },
+  government: { answer: "", details: "" },
+  sanctions: { answer: "", details: "" },
+  ubos: [{ name: "", percent: "", via: "" }],
+  ubo_none: "",
+  bank: { country: "", own_name: "", details: "" },
+  trading_names: "",
+  sub_contractors: { answer: "", details: "" },
+  data: { answer: "", details: "", security: "" },
+  compensation: { basis: "", rate: "", details: "" },
+  abc_policy: { answer: "" },
   declaration: { agreed: "", signed_name: "", position: "" },
 });
 
@@ -368,6 +406,26 @@ export async function submitPublicQuestionnaire(token: string, a: QAnswers) {
     officers: a.officers.filter((o) => o.name.trim()),
     shareholders: a.company.is_corporation === "yes" ? a.shareholders.filter((s) => s.name.trim()) : [],
     licences: { ...a.licences, items: a.licences.items.filter((i) => i.name.trim()) },
+    ubos: a.company.is_corporation === "yes" && a.ubo_none !== "true" ? a.ubos.filter((u) => u.name.trim()) : [],
   };
   check((await db().rpc("submit_dd_questionnaire", { p_token: token, p_answers: clean })).error);
+}
+
+/** The third party uploads a file: a slot is registered first, then the file is stored at its path */
+export async function uploadForQuestionnaire(token: string, kind: Upload["kind"], file: File): Promise<string> {
+  if (file.size > 10 * 1024 * 1024) throw new Error("Files can be up to 10 MB.");
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  const sha = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const { data, error } = await db().rpc("register_dd_upload", { p_token: token, p_kind: kind, p_file_name: file.name, p_mime: file.type, p_size: file.size, p_sha256: sha });
+  check(error);
+  const path = data as string;
+  const stored = await db().storage.from("documents").upload(path, file, { contentType: file.type || undefined, upsert: false });
+  if (stored.error) {
+    await db().rpc("remove_dd_upload", { p_token: token, p_path: path });
+    throw new Error(`The file could not be stored: ${stored.error.message}`);
+  }
+  return path;
+}
+export async function removeQuestionnaireUpload(token: string, path: string) {
+  check((await db().rpc("remove_dd_upload", { p_token: token, p_path: path })).error);
 }

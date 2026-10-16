@@ -418,6 +418,11 @@ export default function Parties({ organisationId, role, userId = "" }: Props) {
                     {returned.contact_name ? ` by ${returned.contact_name}` : ""}.
                   </p>
                   <QuestionnaireAnswers a={returned.answers} submittedAt={returned.submitted_at} />
+                  {["supplier", "service_provider", "sub_contractor", "distributor"].includes(party.party_type ?? "") && (
+                    <p className="note small">
+                      Next step for a supplier: send the modern slavery supplier questionnaire too (Risk and compliance → Modern slavery). It covers labour practices and supply chains, which this questionnaire does not.
+                    </p>
+                  )}
                 </>
               ) : sent ? (
                 <>

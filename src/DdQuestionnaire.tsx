@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { blankQAnswers, openPublicQuestionnaire, Q_TEXT, submitPublicQuestionnaire, type PublicQuestionnaire, type QAnswers, type YesNoDetails } from "./parties";
+import { AGENT_TYPES, blankQAnswers, openPublicQuestionnaire, Q_TEXT, removeQuestionnaireUpload, submitPublicQuestionnaire, UPLOAD_KINDS, uploadForQuestionnaire, type PublicQuestionnaire, type QAnswers, type Upload, type YesNoDetails } from "./parties";
 
 const day = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
 
 /** The third party's answers, read-only (for the case page) */
 export function QuestionnaireAnswers({ a, submittedAt }: { a: QAnswers; submittedAt: string | null }) {
-  const yn = (k: "litigation" | "insolvency" | "press", label: string) => {
+  const yn = (k: "litigation" | "insolvency" | "press" | "connections" | "government" | "sanctions" | "sub_contractors", label: string) => {
     const v = a[k];
+    if (!v) return null;
     return (
       <li key={k}>
         {label}: <strong className={v.answer === "yes" ? "warning-text" : undefined}>{v.answer === "yes" ? "Yes" : "No"}</strong>
@@ -45,11 +46,55 @@ export function QuestionnaireAnswers({ a, submittedAt }: { a: QAnswers; submitte
           </ul>
         </>
       )}
+      {a.company.is_corporation === "yes" && (a.ubos?.length || a.ubo_none === "true") && (
+        <>
+          <h3>Ultimate owners (25% or more)</h3>
+          <ul className="plain small">
+            {a.ubo_none === "true" ? <li>No one owns or controls 25% or more</li> : a.ubos.map((u, i) => (
+              <li key={i}>
+                {u.name}
+                {u.percent ? ` · ${u.percent}%` : ""}
+                {u.via ? ` · through ${u.via}` : ""}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {a.trading_names && <p className="small">Trading or former names: {a.trading_names}</p>}
       <h3>Disclosures</h3>
       <ul className="plain small">
+        {yn("connections", "Links to our people")}
+        {yn("government", "Government or politically exposed links")}
+        {yn("sanctions", "Sanctions connection")}
         {yn("litigation", "Litigation")}
         {yn("insolvency", "Insolvency")}
         {yn("press", "Adverse press")}
+        {yn("sub_contractors", "Sub-contractors")}
+        {a.data && (
+          <li>
+            Handles our data or systems: <strong>{a.data.answer === "yes" ? "Yes" : "No"}</strong>
+            {a.data.answer === "yes" ? <> · policies and breach notice: <strong className={a.data.security === "no" ? "warning-text" : undefined}>{a.data.security === "yes" ? "Yes" : "No"}</strong></> : null}
+            {a.data.details ? ` · ${a.data.details}` : ""}
+          </li>
+        )}
+        {a.bank && (
+          <li>
+            Payment: bank in {a.bank.country}, account <strong className={a.bank.own_name === "no" ? "warning-text" : undefined}>{a.bank.own_name === "yes" ? "in its own name" : "not in its own name"}</strong>
+            {a.bank.details ? ` · ${a.bank.details}` : ""}
+          </li>
+        )}
+        {a.compensation?.basis && (
+          <li>
+            Paid by: {a.compensation.basis}
+            {a.compensation.rate ? ` · ${a.compensation.rate}` : ""}
+            {a.compensation.details ? ` · ${a.compensation.details}` : ""}
+          </li>
+        )}
+        {a.abc_policy?.answer && (
+          <li>
+            Anti-bribery policy: <strong className={a.abc_policy.answer === "no" ? "warning-text" : undefined}>{a.abc_policy.answer === "yes" ? "Yes" : "No"}</strong>
+          </li>
+        )}
         <li>
           Licences and permits held: <strong className={a.licences.confirmed === "no" ? "warning-text" : undefined}>{a.licences.confirmed === "yes" ? "Confirmed" : "Not confirmed"}</strong>
           {a.licences.details ? ` · ${a.licences.details}` : ""}
@@ -104,17 +149,21 @@ export default function DdQuestionnaire({ token }: { token: string }) {
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
+  const [uploads, setUploads] = useState<Upload[]>([]);
+  const [uploadKind, setUploadKind] = useState<Upload["kind"]>("company_extract");
 
   useEffect(() => {
     openPublicQuestionnaire(token).then(
       (q) => {
         setInfo(q);
+        setUploads(q.uploads ?? []);
         setA(blankQAnswers({ party_name: q.party_name, registration_number: q.registration_number, website: q.website }));
       },
       (e) => setError(e instanceof Error ? e.message : "This link could not be opened."),
     );
   }, [token]);
 
+  const agent = Boolean(info?.party_type && AGENT_TYPES.includes(info.party_type));
   const company = (patch: Partial<QAnswers["company"]>) => setA({ ...a, company: { ...a.company, ...patch } });
   const submit = () => {
     setProblem(null);
@@ -122,14 +171,22 @@ export default function DdQuestionnaire({ token }: { token: string }) {
     if (!a.company.is_corporation) return setProblem("Say whether it is a company (corporation).");
     if (!a.officers.some((o) => o.name.trim())) return setProblem("List at least one current office holder.");
     if (a.company.is_corporation === "yes" && !a.shareholders.some((s) => s.name.trim())) return setProblem("List the shareholders.");
-    for (const k of ["litigation", "insolvency", "press"] as const) {
+    if (a.company.is_corporation === "yes" && a.ubo_none !== "true" && !a.ubos.some((u) => u.name.trim())) return setProblem("List who ultimately owns or controls 25% or more, or tick that no one does.");
+    for (const k of ["connections", "government", "sanctions", "litigation", "insolvency", "press", "sub_contractors"] as const) {
       if (!a[k].answer) return setProblem("Answer every question.");
       if (a[k].answer === "yes" && a[k].details.trim().length < 5) return setProblem('Give details for each "yes" answer.');
     }
     if (!a.licences.confirmed) return setProblem("Confirm whether you hold the licences and permits needed.");
+    if (!a.data.answer) return setProblem("Answer every question.");
+    if (a.data.answer === "yes" && !a.data.security) return setProblem("Say whether you have privacy and security policies.");
+    if (a.bank.country.trim().length < 2) return setProblem("Give the country of the bank account we would pay.");
+    if (!a.bank.own_name) return setProblem("Say whether the account is in the company's own name.");
+    if (a.bank.own_name === "no" && a.bank.details.trim().length < 5) return setProblem("Say whose name the account is in, and why.");
+    if (agent && !a.compensation?.basis) return setProblem("Say how you would be paid.");
+    if (agent && !a.abc_policy?.answer) return setProblem("Say whether you have an anti-bribery policy.");
     if (a.declaration.agreed !== "true" || a.declaration.signed_name.trim().length < 3 || a.declaration.position.trim().length < 2) return setProblem("Complete the declaration: tick it, and give your name and position.");
     setBusy(true);
-    submitPublicQuestionnaire(token, a).then(
+    submitPublicQuestionnaire(token, agent ? a : { ...a, compensation: undefined, abc_policy: undefined }).then(
       () => { setDone(true); setBusy(false); window.scrollTo(0, 0); },
       (e) => { setProblem(e instanceof Error ? e.message : "It could not be sent."); setBusy(false); },
     );
@@ -193,6 +250,8 @@ export default function DdQuestionnaire({ token }: { token: string }) {
               </div>
               <label htmlFor="q-addr">Registered address</label>
               <input id="q-addr" value={a.company.registered_address} onChange={(e) => company({ registered_address: e.target.value })} />
+              <label htmlFor="q-names">Trading names, and any former names in the last five years (optional)</label>
+              <input id="q-names" value={a.trading_names} onChange={(e) => setA({ ...a, trading_names: e.target.value })} />
             </section>
 
             <section className="card form">
@@ -237,11 +296,33 @@ export default function DdQuestionnaire({ token }: { token: string }) {
                 <button type="button" className="link-dark small" onClick={() => setA({ ...a, shareholders: [...a.shareholders, { name: "", percent: "" }] })}>
                   Add another
                 </button>
+                <h3>Who ultimately owns or controls it?</h3>
+                <p className="muted small">The people who in the end own or control 25% or more, looking through any companies or trusts in between.</p>
+                <label className="check">
+                  <input type="checkbox" checked={a.ubo_none === "true"} onChange={(e) => setA({ ...a, ubo_none: e.target.checked ? "true" : "" })} /> No one owns or controls 25% or more
+                </label>
+                {a.ubo_none !== "true" && (
+                  <>
+                    {a.ubos.map((u, i) => (
+                      <div key={i} className="row wrap">
+                        <input className="grow" aria-label={`Ultimate owner ${i + 1} name`} placeholder="Full name of the person" value={u.name} onChange={(e) => setA({ ...a, ubos: a.ubos.map((x, n) => (n === i ? { ...x, name: e.target.value } : x)) })} />
+                        <input className="short" aria-label={`Ultimate owner ${i + 1} percentage`} placeholder="%" value={u.percent} onChange={(e) => setA({ ...a, ubos: a.ubos.map((x, n) => (n === i ? { ...x, percent: e.target.value } : x)) })} />
+                        <input aria-label={`Ultimate owner ${i + 1} through`} placeholder="Held through (company or trust)" value={u.via} onChange={(e) => setA({ ...a, ubos: a.ubos.map((x, n) => (n === i ? { ...x, via: e.target.value } : x)) })} />
+                      </div>
+                    ))}
+                    <button type="button" className="link-dark small" onClick={() => setA({ ...a, ubos: [...a.ubos, { name: "", percent: "", via: "" }] })}>
+                      Add another
+                    </button>
+                  </>
+                )}
               </section>
             )}
 
             <section className="card form">
               <h2>{a.company.is_corporation === "yes" ? "4" : "3"}. Questions</h2>
+              <YesNo id="q-con" text={Q_TEXT.connections} value={a.connections} onChange={(v) => setA({ ...a, connections: v })} />
+              <YesNo id="q-gov" text={Q_TEXT.government} value={a.government} onChange={(v) => setA({ ...a, government: v })} />
+              <YesNo id="q-san" text={Q_TEXT.sanctions} value={a.sanctions} onChange={(v) => setA({ ...a, sanctions: v })} />
               <YesNo id="q-lit" text={Q_TEXT.litigation} value={a.litigation} onChange={(v) => setA({ ...a, litigation: v })} />
               <YesNo id="q-ins" text={Q_TEXT.insolvency} value={a.insolvency} onChange={(v) => setA({ ...a, insolvency: v })} />
               <YesNo id="q-press" text={Q_TEXT.press} value={a.press} onChange={(v) => setA({ ...a, press: v })} />
@@ -276,6 +357,142 @@ export default function DdQuestionnaire({ token }: { token: string }) {
                   Add another
                 </button>
               </fieldset>
+              <YesNo id="q-sub" text={Q_TEXT.sub_contractors} value={a.sub_contractors} onChange={(v) => setA({ ...a, sub_contractors: v })} />
+              {a.sub_contractors.answer === "yes" && <p className="muted small">Please include their names and what they will do. We will need to carry out due diligence on them too.</p>}
+              <fieldset className="plain-fieldset question">
+                <legend>{Q_TEXT.data}</legend>
+                <div className="row">
+                  {(["no", "yes"] as const).map((v) => (
+                    <label key={v} className="check">
+                      <input type="radio" name="q-data" checked={a.data.answer === v} onChange={() => setA({ ...a, data: { ...a.data, answer: v } })} /> {v === "yes" ? "Yes" : "No"}
+                    </label>
+                  ))}
+                </div>
+                {a.data.answer === "yes" && (
+                  <>
+                    <p className="small">{Q_TEXT.security}</p>
+                    <div className="row">
+                      {(["yes", "no"] as const).map((v) => (
+                        <label key={v} className="check">
+                          <input type="radio" name="q-sec" checked={a.data.security === v} onChange={() => setA({ ...a, data: { ...a.data, security: v } })} /> {v === "yes" ? "Yes" : "No"}
+                        </label>
+                      ))}
+                    </div>
+                    <label htmlFor="q-data-d">What data or systems (optional)</label>
+                    <input id="q-data-d" value={a.data.details} onChange={(e) => setA({ ...a, data: { ...a.data, details: e.target.value } })} />
+                  </>
+                )}
+              </fieldset>
+            </section>
+
+            <section className="card form">
+              <h2>Payment</h2>
+              <p className="muted small">We do not need your account number here. Our finance team collects payment details separately.</p>
+              <div className="row wrap">
+                <span className="field">
+                  <label htmlFor="q-bank">Country of the bank account we would pay</label>
+                  <input id="q-bank" value={a.bank.country} onChange={(e) => setA({ ...a, bank: { ...a.bank, country: e.target.value } })} />
+                </span>
+              </div>
+              <fieldset className="plain-fieldset">
+                <legend>Is the account in the company's own name?</legend>
+                <div className="row">
+                  {(["yes", "no"] as const).map((v) => (
+                    <label key={v} className="check">
+                      <input type="radio" name="q-own" checked={a.bank.own_name === v} onChange={() => setA({ ...a, bank: { ...a.bank, own_name: v } })} /> {v === "yes" ? "Yes" : "No"}
+                    </label>
+                  ))}
+                </div>
+                {a.bank.own_name === "no" && (
+                  <>
+                    <label htmlFor="q-own-d">Whose name is it in, and why?</label>
+                    <input id="q-own-d" value={a.bank.details} onChange={(e) => setA({ ...a, bank: { ...a.bank, details: e.target.value } })} />
+                  </>
+                )}
+              </fieldset>
+            </section>
+
+            {agent && (
+              <section className="card form">
+                <h2>How you would be paid</h2>
+                <div className="row wrap">
+                  <span className="field">
+                    <label htmlFor="q-basis">Basis</label>
+                    <select id="q-basis" value={a.compensation?.basis ?? ""} onChange={(e) => setA({ ...a, compensation: { rate: "", details: "", ...a.compensation, basis: e.target.value } })}>
+                      <option value="">Choose</option>
+                      {["Commission", "Success fee", "Fixed fee", "Retainer", "Hourly or daily rate", "Other"].map((b) => (
+                        <option key={b}>{b}</option>
+                      ))}
+                    </select>
+                  </span>
+                  <span className="field">
+                    <label htmlFor="q-rate">Rate or amount</label>
+                    <input id="q-rate" placeholder="e.g. 5% of sales" value={a.compensation?.rate ?? ""} onChange={(e) => setA({ ...a, compensation: { basis: "", details: "", ...a.compensation, rate: e.target.value } })} />
+                  </span>
+                  <span className="field grow">
+                    <label htmlFor="q-comp-d">Anything else (expenses, bonuses)</label>
+                    <input id="q-comp-d" value={a.compensation?.details ?? ""} onChange={(e) => setA({ ...a, compensation: { basis: "", rate: "", ...a.compensation, details: e.target.value } })} />
+                  </span>
+                </div>
+                <fieldset className="plain-fieldset">
+                  <legend>{Q_TEXT.abc_policy}</legend>
+                  <div className="row">
+                    {(["yes", "no"] as const).map((v) => (
+                      <label key={v} className="check">
+                        <input type="radio" name="q-abc" checked={a.abc_policy?.answer === v} onChange={() => setA({ ...a, abc_policy: { answer: v } })} /> {v === "yes" ? "Yes" : "No"}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              </section>
+            )}
+
+            <section className="card form">
+              <h2>Documents</h2>
+              <p className="muted small">Please upload a current company extract (or registration certificate), copies of your key licences, and your certificate of insurance. PDF or image, up to 10 MB each.</p>
+              {uploads.length > 0 && (
+                <ul className="plain rows small">
+                  {uploads.map((u) => (
+                    <li key={u.path} className="row spread">
+                      <span>
+                        {u.file_name} <span className="muted">· {UPLOAD_KINDS.find((k) => k.id === u.kind)?.label}</span>
+                      </span>
+                      <button type="button" className="link-dark small" disabled={busy} onClick={() => { setBusy(true); removeQuestionnaireUpload(token, u.path).then(() => { setUploads(uploads.filter((x) => x.path !== u.path)); setBusy(false); }, (e) => { setProblem(e.message); setBusy(false); }); }}>
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="row wrap">
+                <select aria-label="What the file is" value={uploadKind} onChange={(e) => setUploadKind(e.target.value as Upload["kind"])}>
+                  {UPLOAD_KINDS.map((k) => (
+                    <option key={k.id} value={k.id}>
+                      {k.label}
+                    </option>
+                  ))}
+                </select>
+                <label className="quiet file-button">
+                  {busy ? "Uploading…" : "Choose a file"}
+                  <input
+                    type="file"
+                    hidden
+                    accept=".pdf,image/*"
+                    disabled={busy}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!f) return;
+                      setBusy(true);
+                      setProblem(null);
+                      uploadForQuestionnaire(token, uploadKind, f).then(
+                        (path) => { setUploads([...uploads, { path, kind: uploadKind, file_name: f.name.replace(/[^A-Za-z0-9._ -]/g, "_") }]); setBusy(false); },
+                        (err) => { setProblem(err instanceof Error ? err.message : "The file could not be uploaded."); setBusy(false); },
+                      );
+                    }}
+                  />
+                </label>
+              </div>
             </section>
 
             <section className="card form declaration">
