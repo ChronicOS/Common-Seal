@@ -16,6 +16,8 @@ import {
   setPolicyStatus,
   standing,
   updatePolicy,
+  downloadCertificate,
+  type Certificate,
   type Contact,
   type Policy,
   type PolicyValues,
@@ -236,6 +238,7 @@ function PolicyForm({
 export default function Insurance({ organisationId, organisationName, group, canEdit, userId }: Props) {
   const [policies, setPolicies] = useState<Policy[] | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -252,6 +255,7 @@ export default function Insurance({ organisationId, organisationName, group, can
       const [d, m] = await Promise.all([loadInsurance(organisationId), loadMembers(organisationId).catch(() => [])]);
       setPolicies(d.policies);
       setContacts(d.contacts);
+      setCertificates(d.certificates);
       setMembers(m);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load the insurance register.");
@@ -360,18 +364,29 @@ export default function Insurance({ organisationId, organisationName, group, can
     return <span className="chip">Current to {day(p.period_to)}</span>;
   };
 
-  const card = (p: Policy) => (
+  const card = (p: Policy) => {
+    const cert = certificates.find((c) => c.policy_id === p.id);
+    return (
     <section key={p.id} className="card insurance">
       <div className="row spread">
         <h3>{p.policy_type}</h3>
-        {chip(p)}
+        <span className="row">
+          {cert ? (
+            <button type="button" className="quiet small" title={cert.file_name} onClick={() => void downloadCertificate(cert).catch((e) => setError(e instanceof Error ? e.message : "Could not download."))}>
+              ⤓ Certificate of currency
+            </button>
+          ) : (
+            p.status === "current" && <span className="chip chip-warn">No certificate on file</span>
+          )}
+          {chip(p)}
+        </span>
       </div>
       <dl className="detail-list compact">
         <div>
           <dt>Insured</dt>
           <dd>
             {entityName(p.entity_id)}
-            {p.insured_name ? <span className="muted"> ({p.insured_name})</span> : null}
+            {p.insured_name && p.insured_name.toLowerCase() !== entityName(p.entity_id).toLowerCase() ? <span className="muted"> ({p.insured_name})</span> : null}
           </dd>
         </div>
         <div>
@@ -427,7 +442,7 @@ export default function Insurance({ organisationId, organisationName, group, can
           </div>
         )}
       </dl>
-      <Attachments subjectTable="insurance_policies" subjectId={p.id} canAttach={canEdit && p.status === "current"} label="Certificates of currency" />
+      <Attachments subjectTable="insurance_policies" subjectId={p.id} canAttach={canEdit && p.status === "current"} label="All certificates and files" />
       {canEdit && p.status === "current" && (
         <div className="row">
           <button type="button" className="link-dark" onClick={() => { setForm({ id: p.id, initial: { ...p }, found: null, file: null, renewalOf: null }); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
@@ -463,7 +478,8 @@ export default function Insurance({ organisationId, organisationName, group, can
         </div>
       )}
     </section>
-  );
+    );
+  };
 
   return (
     <>

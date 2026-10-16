@@ -4,6 +4,7 @@ import { loadMsSummary, MS_STATUS, type MsSummary } from "./modernslavery";
 import { loadPartySummary, type PartySummary } from "./parties";
 import { loadPolicySummary, type PolicySummary } from "./policies";
 import { loadRiskSummary, type RiskSummary } from "./risk";
+import { day as insDay, loadInsuranceSummary, type InsuranceSummary } from "./insurance";
 import { loadSpeakUpSummary, type SpeakUpSummary } from "./speakup";
 import { loadTrainingSummary, today, type TrainingSummary } from "./training";
 import { loadWorkflowSummary, type WorkflowSummary } from "./workflows";
@@ -11,6 +12,7 @@ import { loadWorkflowSummary, type WorkflowSummary } from "./workflows";
 type Loaded = {
   assurance: AssuranceSummary | null;
   risk: RiskSummary | null;
+  insurance: InsuranceSummary | null;
   parties: PartySummary | null;
   training: TrainingSummary | null;
   workflows: WorkflowSummary | null;
@@ -40,7 +42,7 @@ export default function Report({ organisationId, organisationName }: { organisat
   useEffect(() => {
     let live = true;
     void (async () => {
-      const [assurance, risk, parties, training, workflows, policies, speakUp, ms] = await Promise.all([
+      const [assurance, risk, parties, training, workflows, policies, speakUp, ms, insurance] = await Promise.all([
         quiet(loadAssurance(organisationId)),
         quiet(loadRiskSummary(organisationId)),
         quiet(loadPartySummary(organisationId)),
@@ -49,8 +51,9 @@ export default function Report({ organisationId, organisationName }: { organisat
         quiet(loadPolicySummary(organisationId, today())),
         quiet(loadSpeakUpSummary(organisationId)),
         quiet(loadMsSummary(organisationId)),
+        quiet(loadInsuranceSummary(organisationId)),
       ]);
-      if (live) setD({ assurance, risk, parties, training, workflows, policies, speakUp, ms });
+      if (live) setD({ assurance, risk, parties, training, workflows, policies, speakUp, ms, insurance });
     })();
     return () => {
       live = false;
@@ -59,7 +62,7 @@ export default function Report({ organisationId, organisationName }: { organisat
 
   if (!d) return <p className="lead">Preparing the report…</p>;
 
-  const { assurance: a, risk: r, parties: p, training: t, workflows: w, policies: pol, speakUp: su, ms } = d;
+  const { assurance: a, risk: r, parties: p, training: t, workflows: w, policies: pol, speakUp: su, ms, insurance: ins } = d;
   const stmt = ms?.latest ?? null;
 
   return (
@@ -104,6 +107,15 @@ export default function Report({ organisationId, organisationName }: { organisat
                 : "No risk review has been run"
             }
             status={!r?.review ? "unknown" : r.overdueActions > 0 || (r.review.status !== "final" && r.review.forum_on < today()) ? "attention" : "ok"}
+          />
+          <Line
+            area="Insurance"
+            finding={
+              ins && ins.current + ins.expired > 0
+                ? `${ins.current} current · ${ins.expired} expired · ${ins.expiringSoon} expiring within 3 months · ${ins.withoutCertificate} without a certificate of currency${ins.nextExpiry ? ` · next expiry ${ins.nextExpiry.policy_type}, ${insDay(ins.nextExpiry.period_to)}` : ""}`
+                : "No insurance policies are recorded"
+            }
+            status={!ins || ins.current + ins.expired === 0 ? "unknown" : ins.expired + ins.withoutCertificate > 0 ? "attention" : "ok"}
           />
           <Line
             area="Policies"

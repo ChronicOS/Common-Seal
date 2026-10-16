@@ -36,6 +36,7 @@ import Parties from "./Parties";
 import { loadPartySummary, type PartySummary } from "./parties";
 import Register from "./Register";
 import { loadRiskSummary, type RiskSummary } from "./risk";
+import { day as insDay, loadInsuranceSummary, type InsuranceSummary } from "./insurance";
 import type { GroupData, Membership } from "./types";
 
 const RECORDS_ROLES = ["owner", "admin", "secretary", "legal", "compliance"];
@@ -83,6 +84,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
   const [data, setData] = useState<GroupData | null>(null);
   const [assurance, setAssurance] = useState<AssuranceSummary | null>(null);
   const [riskSummary, setRiskSummary] = useState<RiskSummary | null>(null);
+  const [insurance, setInsurance] = useState<InsuranceSummary | null>(null);
   const [partySummary, setPartySummary] = useState<PartySummary | null>(null);
   const [trainingSummary, setTrainingSummary] = useState<TrainingSummary | null>(null);
   const [workflowSummary, setWorkflowSummary] = useState<WorkflowSummary | null>(null);
@@ -120,6 +122,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
       .then(setAssurance)
       .catch(() => setAssurance(null));
     void loadRiskSummary(organisation.id).then(setRiskSummary, () => setRiskSummary(null));
+    void loadInsuranceSummary(organisation.id).then(setInsurance, () => setInsurance(null));
     void loadPartySummary(organisation.id).then(setPartySummary);
     void loadTrainingSummary(organisation.id).then(setTrainingSummary, () => setTrainingSummary(null));
     void loadWorkflowSummary(organisation.id, today()).then(setWorkflowSummary, () => setWorkflowSummary(null));
@@ -615,6 +618,29 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
               "No due diligence open"
             )}
           </p>
+        </section>
+        <section className="card">
+          <h2>Insurance</h2>
+          {!insurance || insurance.current + insurance.expired === 0 ? (
+            <>
+              <p className="status-unknown">Unknown</p>
+              <p>No insurance policies are recorded, so cover cannot be confirmed.</p>
+            </>
+          ) : (
+            <>
+              <p className="status-unknown">{insurance.expired > 0 ? "Attention" : insurance.expiringSoon > 0 ? "Renewals due" : "Current"}</p>
+              <p>
+                {insurance.current} current {insurance.current === 1 ? "policy" : "policies"}
+                {insurance.expired > 0 ? <> · <strong className="warning-text">{insurance.expired} expired</strong></> : ""}
+                {insurance.expiringSoon > 0 ? ` · ${insurance.expiringSoon} expiring within 3 months` : ""}
+                {insurance.withoutCertificate > 0 ? ` · ${insurance.withoutCertificate} without a certificate of currency` : ""}
+                {insurance.nextExpiry ? ` · next expiry ${insurance.nextExpiry.policy_type}, ${insDay(insurance.nextExpiry.period_to)}` : ""}
+              </p>
+              <button type="button" className="link-dark" onClick={() => go("insurance")}>
+                Open Insurance
+              </button>
+            </>
+          )}
         </section>
         <section className="card">
           <h2>Risk review</h2>
