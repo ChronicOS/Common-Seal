@@ -22,7 +22,7 @@ import {
   type SpeakUpData,
 } from "./speakup";
 
-type Props = { organisationId: string; role: string };
+type Props = { organisationId: string; role: string; embedded?: boolean };
 
 function CaseForm({ c, team, busy, onSave }: { c: SpeakUpCase; team: Member[]; busy: boolean; onSave: (patch: Parameters<typeof updateCase>[1]) => void }) {
   const [status, setStatus] = useState<CaseStatus>(c.status);
@@ -83,7 +83,7 @@ function CaseForm({ c, team, busy, onSave }: { c: SpeakUpCase; team: Member[]; b
   );
 }
 
-export default function SpeakUp({ organisationId, role }: Props) {
+export default function SpeakUp({ organisationId, role, embedded = false }: Props) {
   const isAdmin = has(role, "owner") || has(role, "admin");
 
   const [data, setData] = useState<SpeakUpData | null>(null);
@@ -338,8 +338,8 @@ export default function SpeakUp({ organisationId, role }: Props) {
 
   return (
     <>
-      <p className="eyebrow">Confidential</p>
-      <h1>Investigations</h1>
+      {!embedded && <p className="eyebrow">Confidential</p>}
+      {!embedded && <h1>Investigations</h1>}
       <p className="lead">Raise a concern about something that is wrong, or looks wrong. You do not need proof.</p>
       {errorBlock}
 

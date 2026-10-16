@@ -1,26 +1,32 @@
-import { useState } from "react";
 import Disputes from "./Disputes";
 import KeyEmployees from "./KeyEmployees";
+import SpeakUp from "./SpeakUp";
 import type { GroupData } from "./types";
 
-type Props = { organisationId: string; group: GroupData | null; canEdit: boolean };
+export type EmployeesSub = "key" | "disputes" | "investigations";
+type Props = { organisationId: string; role: string; group: GroupData | null; canEdit: boolean; sub: EmployeesSub; onSub: (s: EmployeesSub) => void };
+const SUBS: { id: EmployeesSub; label: string }[] = [
+  { id: "key", label: "Key Employees" },
+  { id: "disputes", label: "Employee Disputes" },
+  { id: "investigations", label: "Investigations" },
+];
 
-/** Company, Employees: key employees, and employee disputes (active and potential) */
-export default function Employees({ organisationId, group, canEdit }: Props) {
-  const [sub, setSub] = useState<"key" | "disputes">("key");
+/** Company, Employees: key employees, employee disputes (active and potential), and investigations */
+export default function Employees({ organisationId, role, group, canEdit, sub, onSub }: Props) {
   return (
     <>
-      <p className="eyebrow">Company</p>
+      <p className="eyebrow">{sub === "investigations" ? "Company · Confidential" : "Company"}</p>
       <h1>Employees</h1>
       <span className="segmented block-gap" role="group" aria-label="Employees sections">
-        <button type="button" className={sub === "key" ? "on" : undefined} aria-pressed={sub === "key"} onClick={() => setSub("key")}>
-          Key Employees
-        </button>
-        <button type="button" className={sub === "disputes" ? "on" : undefined} aria-pressed={sub === "disputes"} onClick={() => setSub("disputes")}>
-          Employee Disputes
-        </button>
+        {SUBS.map((x) => (
+          <button key={x.id} type="button" className={sub === x.id ? "on" : undefined} aria-pressed={sub === x.id} onClick={() => onSub(x.id)}>
+            {x.label}
+          </button>
+        ))}
       </span>
-      {sub === "key" ? <KeyEmployees organisationId={organisationId} group={group} canEdit={canEdit} embedded /> : <Disputes organisationId={organisationId} group={group} canEdit={canEdit} employeeOnly />}
+      {sub === "key" && <KeyEmployees organisationId={organisationId} group={group} canEdit={canEdit} embedded />}
+      {sub === "disputes" && <Disputes organisationId={organisationId} group={group} canEdit={canEdit} employeeOnly />}
+      {sub === "investigations" && <SpeakUp organisationId={organisationId} role={role} embedded />}
     </>
   );
 }

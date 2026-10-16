@@ -7,7 +7,7 @@ import Declarations from "./Declarations";
 import Training from "./Training";
 import Workflows from "./Workflows";
 import Policies from "./Policies";
-import Employees from "./Employees";
+import Employees, { type EmployeesSub } from "./Employees";
 import KeyContracts from "./KeyContracts";
 import Disputes from "./Disputes";
 import SpeakUp from "./SpeakUp";
@@ -77,7 +77,6 @@ const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = 
   { id: "declarations", label: "Gifts and hospitality", section: "Conduct" },
   { id: "conflicts", label: "Conflicts of interest", section: "Conduct" },
   { id: "expenses", label: "Expenses", section: "Conduct" },
-  { id: "speakup", label: "Investigations", section: "Conduct" },
 ];
 
 export default function Workspace({ membership, userId, userName, onPassword }: { membership: Membership; userId: string; userName: string; onPassword: () => void }) {
@@ -86,10 +85,11 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
 
   const [tab, setTab] = useState<Tab>("overview");
   const [trainingModule, setTrainingModule] = useState<string | null>(null);
+  const [employeesSub, setEmployeesSub] = useState<EmployeesSub>("key");
   // Sections the person has opened by clicking. All start closed; the one holding the current page is marked.
   const [openSections, setOpenSections] = useState<string[]>([]);
   // Speak up is never shown to others: being seen there could identify a reporter or a handler
-  const others = usePresence(organisation.id, userId, userName, tab === "speakup" ? null : tab);
+  const others = usePresence(organisation.id, userId, userName, tab === "speakup" || (tab === "keyemployees" && employeesSub === "investigations") ? null : tab);
   const [data, setData] = useState<GroupData | null>(null);
   const [assurance, setAssurance] = useState<AssuranceSummary | null>(null);
   const [riskSummary, setRiskSummary] = useState<RiskSummary | null>(null);
@@ -158,7 +158,9 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
   };
 
   const go = (next: Tab) => {
-    setTab(next);
+    // Investigations live under Company, Employees
+    setEmployeesSub(next === "speakup" ? "investigations" : "key");
+    setTab(next === "speakup" ? "keyemployees" : next);
     setTrainingModule(null);
     setEntityId(null);
     setMeetingId(null);
@@ -255,7 +257,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
         {nav}
         <div className="workspace-main">
           {tab === "keyemployees" ? (
-            <Employees organisationId={organisation.id} group={data} canEdit={canEdit} />
+            <Employees organisationId={organisation.id} role={role} group={data} canEdit={canEdit} sub={employeesSub} onSub={setEmployeesSub} />
           ) : tab === "keycontracts" ? (
             <KeyContracts organisationId={organisation.id} group={data} canEdit={canEdit} />
           ) : (
