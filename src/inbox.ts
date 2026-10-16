@@ -120,6 +120,20 @@ export async function loadInbox(organisationId: string, role: string, userId: st
         if (r.escalate_on <= t) add("register", "Risk report to review and finalise", r.id, r.name, r.forum_on);
       }
     }),    safely(async () => {
+      // Company register: changes to check, and ASIC filings due within 14 days or overdue
+      if (!supabase || !manage) return;
+      const [filings, ents] = await Promise.all([
+        supabase.from("asic_filings").select("id, entity_id, form, title, status, due_on").eq("organisation_id", organisationId).in("status", ["to_check", "to_lodge"]),
+        supabase.from("entities").select("id, name").eq("organisation_id", organisationId),
+      ]);
+      if (filings.error) return;
+      const name = (id: string) => ((ents.data ?? []) as { id: string; name: string }[]).find((e) => e.id === id)?.name ?? "";
+      for (const f of (filings.data ?? []) as { id: string; entity_id: string; form: string; title: string; status: string; due_on: string | null }[]) {
+        if (f.status === "to_check") add("companyregister", "Check whether ASIC needs telling", f.id, `${name(f.entity_id)}: ${f.title}`, null);
+        else if (soon(f.due_on, 14)) add("companyregister", `ASIC Form ${f.form} to lodge`, f.id, `${name(f.entity_id)}: ${f.title}`, f.due_on);
+      }
+    }),
+    safely(async () => {
       // Finance details: bank details to confirm, facilities maturing, reviews and covenant tests
       if (!supabase || !manage) return;
       const [accts, facs] = await Promise.all([

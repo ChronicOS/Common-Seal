@@ -27,6 +27,13 @@ export type Entity = {
   region?: string | null;
   /** Set by the ownership migration (0044). */
   startup_mode?: boolean;
+  /** Set by the company register migration (0047). */
+  principal_place?: string | null;
+  ultimate_holding_name?: string | null;
+  ultimate_holding_acn?: string | null;
+  ultimate_holding_country?: string | null;
+  constitution_kind?: "own" | "replaceable_rules" | null;
+  former_names?: string[];
 };
 
 export type Relationship = {

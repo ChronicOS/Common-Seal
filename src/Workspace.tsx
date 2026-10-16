@@ -39,6 +39,7 @@ import GroupChart from "./GroupChart";
 import MeetingPage from "./MeetingPage";
 import Meetings from "./Meetings";
 import Members from "./Members";
+import CompanyRegister from "./CompanyRegister";
 import Ownership from "./Ownership";
 import Parties from "./Parties";
 import { loadPartySummary, type PartySummary } from "./parties";
@@ -53,13 +54,14 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Tab =
   | "overview" | "company" | "authorities" | "insurance" | "foryou" | "report" | "modernslavery" | "oldregister" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
-  | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "conflicts" | "expenses" | "speakup" | "people" | "keyemployees" | "keycontracts" | "disputes" | "sanctions" | "legalaudit" | "ip" | "ownership";
+  | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "conflicts" | "expenses" | "speakup" | "people" | "keyemployees" | "keycontracts" | "disputes" | "sanctions" | "legalaudit" | "ip" | "ownership" | "companyregister";
 const SECTIONS = ["Company", "Board", "Risk and compliance", "Contracts", "Third parties", "Conduct"] as const;
 const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = [
   { id: "foryou", label: "For you" },
   { id: "overview", label: "Overview" },
   { id: "company", label: "Company Info", section: "Company" },
   { id: "ownership", label: "Ownership", section: "Company" },
+  { id: "companyregister", label: "Company register", section: "Company" },
   { id: "insurance", label: "Insurance", section: "Company" },
   { id: "keyemployees", label: "Employees", section: "Company" },
   { id: "ip", label: "IP Register", section: "Company" },
@@ -343,6 +345,12 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
           </form>
   );
 
+  // Take them to the Add an entity form at the top of Company Info
+  const addEntityJump = () => {
+    go("company");
+    setTimeout(() => { const f = document.getElementById("entity-name"); f?.scrollIntoView({ block: "center" }); f?.focus(); }, 50);
+  };
+
   if (tab === "authorities") {
     return (
       <div className="workspace">
@@ -365,16 +373,23 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
     );
   }
 
+  if (tab === "companyregister") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+          <CompanyRegister organisationId={organisation.id} group={data} canEdit={canEdit} onChanged={reload} onAddEntity={addEntityJump} />
+        </div>
+      </div>
+    );
+  }
+
   if (tab === "ownership") {
     return (
       <div className="workspace">
         {nav}
         <div className="workspace-main">
-          <Ownership organisationId={organisation.id} group={data} canEdit={canEdit} onChanged={reload} onAddEntity={() => {
-            go("company");
-            // Take them to the Add an entity form at the top of Company Info
-            setTimeout(() => { const f = document.getElementById("entity-name"); f?.scrollIntoView({ block: "center" }); f?.focus(); }, 50);
-          }} />
+          <Ownership organisationId={organisation.id} group={data} canEdit={canEdit} onChanged={reload} onAddEntity={addEntityJump} />
         </div>
       </div>
     );
