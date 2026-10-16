@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { FinanceSummary } from "./FinanceDetails";
+import { loadFinance, type FinanceData } from "./finance";
 import { applies, FIELD_LABELS, progress, type FieldKey } from "./checks";
 import { displayValue } from "./EntityDetail";
 import type { GroupData, OfficeRole } from "./types";
@@ -16,6 +18,11 @@ const share = (pct: number | null) => (pct === null ? "" : ` (${Number(pct)}%)`)
 /** Every company in the group on one page: details, officers and ownership. Changes are made on the company's own page. */
 export default function CompanyInfo({ data, canEdit, onOpen, addSlot }: { data: GroupData; canEdit: boolean; onOpen: (entityId: string) => void; addSlot?: ReactNode }) {
   const nameOf = (id: string) => data.entities.find((e) => e.id === id)?.name ?? "Unknown entity";
+  const orgId = data.entities[0]?.organisation_id ?? null;
+  const [finance, setFinance] = useState<FinanceData | null>(null);
+  useEffect(() => {
+    if (orgId) loadFinance(orgId, null).then(setFinance, () => setFinance(null));
+  }, [orgId, data]);
   return (
     <>
       <p className="eyebrow">Company</p>
@@ -101,6 +108,7 @@ export default function CompanyInfo({ data, canEdit, onOpen, addSlot }: { data: 
                 </dd>
               </div>
             </dl>
+            <FinanceSummary data={finance} entityId={entity.id} />
           </section>
         );
       })}

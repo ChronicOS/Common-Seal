@@ -120,6 +120,24 @@ export async function loadInbox(organisationId: string, role: string, userId: st
         if (r.escalate_on <= t) add("register", "Risk report to review and finalise", r.id, r.name, r.forum_on);
       }
     }),    safely(async () => {
+      // Finance details: bank details to confirm, facilities maturing, reviews and covenant tests
+      if (!supabase || !manage) return;
+      const [accts, facs] = await Promise.all([
+        supabase.from("bank_accounts").select("id, account_name, bank, details_changed_by, details_changed_at").eq("organisation_id", organisationId).eq("status", "open").is("verified_at", null),
+        supabase.from("credit_facilities").select("id, lender, kind, maturity_on, review_on, next_covenant_test_on").eq("organisation_id", organisationId).eq("status", "active"),
+      ]);
+      if (accts.error) return;
+      for (const a of (accts.data ?? []) as { id: string; account_name: string; bank: string; details_changed_by: string | null; details_changed_at: string | null }[]) {
+        if (a.details_changed_by !== userId) add("company", "Bank details to confirm with the bank", a.id, `${a.account_name} (${a.bank})`, null);
+      }
+      for (const f of (facs.data ?? []) as { id: string; lender: string; kind: string; maturity_on: string | null; review_on: string | null; next_covenant_test_on: string | null }[]) {
+        const what = `${f.lender} ${f.kind.replace("_", " ")}`;
+        if (soon(f.maturity_on, 90)) add("company", "Facility maturing", `m-${f.id}`, what, f.maturity_on);
+        if (soon(f.review_on, 14)) add("company", "Facility review due", `r-${f.id}`, what, f.review_on);
+        if (soon(f.next_covenant_test_on, 14)) add("company", "Covenant test due", `c-${f.id}`, what, f.next_covenant_test_on);
+      }
+    }),
+    safely(async () => {
       // Ownership: ASIC notices of share changes, and employee share scheme reporting
       if (!supabase || !manage) return;
       const [moves, grants, ess, ents] = await Promise.all([

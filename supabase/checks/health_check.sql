@@ -18,6 +18,9 @@ checks (check_name, ok, detail) as (
          case when to_regclass('public.' || e.marker) is null then 'Table ' || e.marker || ' is missing' else '' end
   from expected e
   union all
+  select 'Migration 0046 has been run',
+         to_regclass('public.bank_accounts') is not null and to_regclass('public.credit_facilities') is not null, ''
+  union all
   select 'Migration 0045 has been run',
          exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'esop_plans' and column_name = 'plan_type'), ''
   union all

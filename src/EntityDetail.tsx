@@ -11,6 +11,7 @@ import {
   type FieldKey,
   type FieldState,
 } from "./checks";
+import FinanceDetails from "./FinanceDetails";
 import { addOfficeholder, addOwner, ceaseOfficeholder, createEntity, renamePerson, setPrompt, updateEntity } from "./data";
 import { FORM_LABELS, type Entity, type EntityForm, type GroupData } from "./types";
 
@@ -431,6 +432,8 @@ export default function EntityDetail({ organisationId, entity, data, canEdit, re
             </div>
         ))}
       </dl>
+
+      <FinanceDetails organisationId={organisationId} entityId={entity.id} canEdit={canEdit} />
     </>
   );
 }
