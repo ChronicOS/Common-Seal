@@ -39,6 +39,7 @@ import GroupChart from "./GroupChart";
 import MeetingPage from "./MeetingPage";
 import Meetings from "./Meetings";
 import Members from "./Members";
+import Ownership from "./Ownership";
 import Parties from "./Parties";
 import { loadPartySummary, type PartySummary } from "./parties";
 import Register from "./Register";
@@ -52,12 +53,13 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Tab =
   | "overview" | "company" | "authorities" | "insurance" | "foryou" | "report" | "modernslavery" | "oldregister" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
-  | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "conflicts" | "expenses" | "speakup" | "people" | "keyemployees" | "keycontracts" | "disputes" | "sanctions" | "legalaudit" | "ip";
+  | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "conflicts" | "expenses" | "speakup" | "people" | "keyemployees" | "keycontracts" | "disputes" | "sanctions" | "legalaudit" | "ip" | "ownership";
 const SECTIONS = ["Company", "Board", "Risk and compliance", "Contracts", "Third parties", "Conduct"] as const;
 const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = [
   { id: "foryou", label: "For you" },
   { id: "overview", label: "Overview" },
   { id: "company", label: "Company Info", section: "Company" },
+  { id: "ownership", label: "Ownership", section: "Company" },
   { id: "insurance", label: "Insurance", section: "Company" },
   { id: "keyemployees", label: "Employees", section: "Company" },
   { id: "ip", label: "IP Register", section: "Company" },
@@ -335,6 +337,17 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
         {nav}
         <div className="workspace-main">
           <CompanyInfo data={data} canEdit={canEdit} onOpen={openEntity} />
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === "ownership") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+          <Ownership organisationId={organisation.id} group={data} canEdit={canEdit} onChanged={() => void reload()} />
         </div>
       </div>
     );

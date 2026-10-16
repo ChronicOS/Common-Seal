@@ -55,7 +55,25 @@ export type ContractsData = {
   sanctions: { counterparty_id: string; status: string; outcome: string | null; licence_reference: string | null; next_screen_on: string | null; risk_level: string }[];
   /** Third parties recorded as out of scope for due diligence */
   exempt: string[];
+  /** Investor reserved matters for companies in startup mode (empty before migration 0044) */
+  reserved: { id: string; entity_id: string; matter: string; consent_from: string; all_contracts: boolean; contracts_from: number | null; related_party: boolean }[];
+  consents: { matter_id: string; subject_id: string; given_by: string; given_on: string }[];
 };
+
+/** Reserved matters a contract falls within that have no investor consent yet. Mirrors app.contract_consents_missing. */
+export function consentGate(data: ContractsData, c: { id: string; entity_id: string; value_amount: number | null; is_intragroup?: boolean }) {
+  return data.reserved
+    .filter((m) => m.entity_id === c.entity_id)
+    .filter((m) => m.all_contracts || (m.related_party && c.is_intragroup) || (m.contracts_from != null && (c.value_amount == null || c.value_amount >= m.contracts_from)))
+    .filter((m) => !data.consents.some((x) => x.matter_id === m.id && x.subject_id === c.id))
+    .map((m) => ({
+      ...m,
+      reason: m.all_contracts ? "every contract" : m.related_party && c.is_intragroup ? "a contract with a group company"
+        : c.value_amount == null ? `contracts of $${m.contracts_from!.toLocaleString("en-AU")} or more, and this contract has no value recorded` : `contracts of $${m.contracts_from!.toLocaleString("en-AU")} or more`,
+    }));
+}
+export const consentsGiven = (data: ContractsData, contractId: string) =>
+  data.consents.filter((x) => x.subject_id === contractId).map((x) => ({ ...x, matter: data.reserved.find((m) => m.id === x.matter_id)?.matter ?? "Reserved matter" }));
 
 /** What stands between a contract and its approval: blocks (the database refuses) and flags (warnings) */
 export function partyGate(data: ContractsData, partyId: string | undefined, today: string): { blocks: string[]; flags: string[]; cleared: string[] } {
@@ -129,10 +147,14 @@ export async function loadContracts(organisationId: string): Promise<ContractsDa
     client.from("counterparties").select("*").eq("organisation_id", organisationId).order("name"),
     client.from("people").select("user_id, full_name").eq("organisation_id", organisationId),
   ]);
-  const [sanctions, exempt] = await Promise.all([
+  const [sanctions, exempt, startupEntities, reserved, consents] = await Promise.all([
     client.from("sanctions_assessments").select("counterparty_id, status, outcome, licence_reference, next_screen_on, risk_level, created_at").eq("organisation_id", organisationId).neq("status", "withdrawn").not("counterparty_id", "is", null).order("created_at", { ascending: false }),
     client.from("dd_exemptions").select("counterparty_id").eq("organisation_id", organisationId),
+    client.from("entities").select("id").eq("organisation_id", organisationId).eq("startup_mode", true),
+    client.from("reserved_matters").select("id, entity_id, matter, consent_from, all_contracts, contracts_from, related_party").eq("organisation_id", organisationId).eq("is_active", true),
+    client.from("investor_consents").select("matter_id, subject_id, given_by, given_on").eq("organisation_id", organisationId).eq("subject_table", "contracts"),
   ]);
+  const startupIds = new Set(((startupEntities.data ?? []) as { id: string }[]).map((e) => e.id));
   const latest = new Map<string, ContractsData["sanctions"][number]>();
   for (const r of (sanctions.data ?? []) as ContractsData["sanctions"]) if (!latest.has(r.counterparty_id)) latest.set(r.counterparty_id, r);
   check(
@@ -157,6 +179,8 @@ export async function loadContracts(organisationId: string): Promise<ContractsDa
     people: (people.data ?? []) as { user_id: string | null; full_name: string }[],
     sanctions: [...latest.values()],
     exempt: ((exempt.data ?? []) as { counterparty_id: string }[]).map((x) => x.counterparty_id),
+    reserved: ((reserved.data ?? []) as ContractsData["reserved"]).filter((m) => startupIds.has(m.entity_id)).map((m) => ({ ...m, contracts_from: m.contracts_from == null ? null : Number(m.contracts_from) })),
+    consents: (consents.data ?? []) as ContractsData["consents"],
   };
 }
 

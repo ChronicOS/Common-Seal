@@ -1819,3 +1819,20 @@ tr.clickable:hover { background: #f6f3ea; }
 a.button-link { display: inline-block; padding: 10px 18px; border-radius: 6px; background: var(--ink); color: var(--paper); text-decoration: none; font-weight: 600; }
 a.button-link:focus { outline: 2px solid var(--wax, #a3392b); outline-offset: 2px; }
 .q-answers h3 { margin: 0.75rem 0 0.25rem; font-size: 0.95rem; }
+
+/* Ownership */
+.report-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.report-table tfoot th, .report-table tfoot td { border-top: 2px solid var(--line, #cfc8b8); font-weight: 600; }
+li.voided > *:not(.card):not(.warning-text) { text-decoration: line-through; opacity: 0.6; }
+/* Long segmented controls wrap instead of pushing the page sideways */
+.segmented { flex-wrap: wrap; max-width: 100%; }
+/* Tables of figures keep their columns on a phone and scroll inside their box */
+@media (max-width: 800px) {
+  .report-table.wide { display: table; width: 100%; }
+  .report-table.wide thead { display: table-header-group; }
+  .report-table.wide tbody { display: table-row-group; }
+  .report-table.wide tfoot { display: table-footer-group; }
+  .report-table.wide tr { display: table-row; }
+  .report-table.wide th, .report-table.wide td { display: table-cell; padding-top: 8px; border-top: 1px solid var(--line, #e2dccf); }
+}
+.report-table.wide th .link-dark { text-align: left; }

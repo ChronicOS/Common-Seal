@@ -25,6 +25,8 @@ export type Entity = {
   created_at: string;
   /** Set by the register migration; undefined until it has been run. */
   region?: string | null;
+  /** Set by the ownership migration (0044). */
+  startup_mode?: boolean;
 };
 
 export type Relationship = {

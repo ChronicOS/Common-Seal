@@ -119,6 +119,27 @@ export async function loadInbox(organisationId: string, role: string, userId: st
       for (const r of (data ?? []) as { id: string; name: string; forum_on: string; escalate_on: string }[]) {
         if (r.escalate_on <= t) add("register", "Risk report to review and finalise", r.id, r.name, r.forum_on);
       }
+    }),    safely(async () => {
+      // Ownership: ASIC notices of share changes, and employee share scheme reporting
+      if (!supabase || !manage) return;
+      const [moves, grants, ess, ents] = await Promise.all([
+        supabase.from("share_movements").select("id, kind, effective_on, asic_due_on, entity_id").eq("organisation_id", organisationId).is("voided_at", null).is("asic_lodged_on", null).not("asic_due_on", "is", null),
+        supabase.from("esop_grants").select("entity_id, granted_on").eq("organisation_id", organisationId),
+        supabase.from("ess_reports").select("entity_id, fy_end, statements_given_on, ato_lodged_on").eq("organisation_id", organisationId),
+        supabase.from("entities").select("id, name").eq("organisation_id", organisationId),
+      ]);
+      if (moves.error) return;
+      const name = (id: string) => ((ents.data ?? []) as { id: string; name: string }[]).find((e) => e.id === id)?.name ?? "";
+      for (const m of (moves.data ?? []) as { id: string; kind: string; effective_on: string; asic_due_on: string; entity_id: string }[]) {
+        if (soon(m.asic_due_on, 14)) add("ownership", "ASIC notice of a share change to lodge", m.id, `${name(m.entity_id)}: ${m.kind.replace("_", "-")} on ${m.effective_on}`, m.asic_due_on);
+      }
+      const years = new Set(((grants.data ?? []) as { entity_id: string; granted_on: string }[]).map((g) => `${g.entity_id}|${Number(g.granted_on.slice(5, 7)) >= 7 ? Number(g.granted_on.slice(0, 4)) + 1 : Number(g.granted_on.slice(0, 4))}`));
+      for (const key of years) {
+        const [entity, fy] = key.split("|");
+        const r = ((ess.data ?? []) as { entity_id: string; fy_end: number; statements_given_on: string | null; ato_lodged_on: string | null }[]).find((x) => x.entity_id === entity && x.fy_end === Number(fy));
+        if (!r?.statements_given_on && soon(`${fy}-07-14`, 30)) add("ownership", "Employee share scheme statements to give", `ess-s-${key}`, `${name(entity)}: year to 30 June ${fy}`, `${fy}-07-14`);
+        if (!r?.ato_lodged_on && soon(`${fy}-08-14`, 30)) add("ownership", "Employee share scheme report to the ATO", `ess-a-${key}`, `${name(entity)}: year to 30 June ${fy}`, `${fy}-08-14`);
+      }
     }),
   ]);
 

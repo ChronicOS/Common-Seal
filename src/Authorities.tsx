@@ -48,6 +48,7 @@ import {
   type Version,
 } from "./authorities";
 import type { Entity, GroupData } from "./types";
+import { supabase } from "./supabase";
 
 type Props = { organisationId: string; entities: Entity[]; group: GroupData; canEdit: boolean };
 type View = Kind | "positions";
@@ -404,6 +405,7 @@ export default function Authorities({ organisationId, entities, group, canEdit }
       <p className="eyebrow">Board</p>
       <h1>Authorities</h1>
       <p className="lead">Who can approve spending and who can sign for the company. Once locked, changes take effect only when the board ratifies them.</p>
+      <InvestorConsents organisationId={organisationId} entities={entities} />
       <span className="segmented block-gap" role="group" aria-label="Authorities">
         {(["financial", "signing", "positions"] as View[]).map((k) => (
           <button key={k} type="button" className={view === k ? "on" : undefined} aria-pressed={view === k} onClick={() => { setView(k); setShowing("open"); setMissing(null); setError(null); setNotice(null); }}>
@@ -863,5 +865,32 @@ export default function Authorities({ organisationId, entities, group, canEdit }
       )}
       <p className="muted">Amounts are in Australian dollars.</p>
     </>
+  );
+}
+
+/** Investor reserved matters: consents needed on top of the delegated authorities (startup mode, migration 0044) */
+function InvestorConsents({ organisationId, entities }: { organisationId: string; entities: { id: string; name: string; startup_mode?: boolean }[] }) {
+  const [rows, setRows] = useState<{ id: string; entity_id: string; matter: string; consent_from: string; clause: string | null }[]>([]);
+  const startupIds = entities.filter((e) => e.startup_mode).map((e) => e.id).join(",");
+  useEffect(() => {
+    if (!supabase || !startupIds) return setRows([]);
+    void supabase.from("reserved_matters").select("id, entity_id, matter, consent_from, clause").eq("organisation_id", organisationId).eq("is_active", true).in("entity_id", startupIds.split(","))
+      .then(({ data }) => setRows((data ?? []) as typeof rows));
+  }, [organisationId, startupIds]);
+  if (!rows.length) return null;
+  return (
+    <section className="card note block">
+      <h2>Investor consents also needed</h2>
+      <p className="small muted">Even within these authorities, these decisions need investor consent first. Contracts that fall within them cannot be approved until it is recorded. Manage them under Company, Ownership.</p>
+      <ul className="plain small">
+        {rows.map((r) => (
+          <li key={r.id}>
+            <strong>{r.matter}</strong> · consent from {r.consent_from}
+            {entities.length > 1 ? ` · ${entities.find((e) => e.id === r.entity_id)?.name ?? ""}` : ""}
+            {r.clause ? <span className="muted"> · {r.clause}</span> : null}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

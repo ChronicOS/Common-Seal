@@ -1,6 +1,7 @@
 import { has, only } from "./roles";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Attachments from "./Attachments";
+import { recordConsent } from "./ownership";
 import {
   ANY,
   holders,
@@ -22,6 +23,8 @@ import {
   INTERCOMPANY_TYPE,
   loadContracts,
   partyGate,
+  consentGate,
+  consentsGiven,
   recordSignature,
   resubmitContract,
   type Approval,
@@ -219,6 +222,8 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
     const partyId = open.counterparty?.id;
     const gate = twoSided ? { blocks: [], flags: [], cleared: [] } : partyGate(data, partyId, new Date().toLocaleDateString("en-CA"));
     const blocked = gate.blocks.length > 0;
+    const needConsent = open.status === "draft" || open.status === "pending_approval" ? consentGate(data, open) : [];
+    const hadConsent = consentsGiven(data, open.id);
 
     return (
       <>
@@ -247,6 +252,23 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
               {gate.blocks.map((x) => <li key={x} className="warning-text">{x}</li>)}
               {gate.flags.map((x) => <li key={x}><strong>Flag:</strong> {x}</li>)}
               {gate.cleared.map((x) => <li key={x}>{x}</li>)}
+            </ul>
+          </div>
+        )}
+
+        {(needConsent.length > 0 || hadConsent.length > 0) && (
+          <div className={needConsent.length ? "card warning block" : "muted block"} role={needConsent.length ? "alert" : undefined}>
+            {needConsent.length > 0 && <p><strong>Investor consent is needed before this can be approved.</strong></p>}
+            <ul className="plain small">
+              {needConsent.map((m) => (
+                <li key={m.id}>
+                  <span className="warning-text">Consent from {m.consent_from}: {m.matter}</span> <span className="muted">(applies to {m.reason})</span>
+                  {canRecord && <ConsentForm busy={busy} onSave={(by, on) => void run(async () => { await recordConsent(organisationId, open.entity_id, { matterId: m.id, subjectTable: "contracts", subjectId: open.id, givenBy: by, givenOn: on, notes: "" }); setNotice("Investor consent recorded."); })} />}
+                </li>
+              ))}
+              {hadConsent.map((x) => (
+                <li key={x.matter_id}>Investor consent: {x.matter} · given by {x.given_by}, {formatDay(x.given_on)}</li>
+              ))}
             </ul>
           </div>
         )}
@@ -611,5 +633,19 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
         </p>
       )}
     </>
+  );
+}
+
+function ConsentForm({ busy, onSave }: { busy: boolean; onSave: (givenBy: string, givenOn: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [by, setBy] = useState("");
+  const [on, setOn] = useState(new Date().toLocaleDateString("en-CA"));
+  if (!open) return <button type="button" className="link-dark small" onClick={() => setOpen(true)}> Record consent</button>;
+  return (
+    <span className="row wrap">
+      <input aria-label="Consent given by" placeholder="Given by (investor or class)" value={by} onChange={(e) => setBy(e.target.value)} />
+      <input aria-label="Consent date" type="date" value={on} onChange={(e) => setOn(e.target.value)} />
+      <button type="button" disabled={busy || by.trim().length < 2} onClick={() => onSave(by, on)}>Save consent</button>
+    </span>
   );
 }
