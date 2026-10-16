@@ -79,6 +79,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
   const canEdit = has(role, ...RECORDS_ROLES);
 
   const [tab, setTab] = useState<Tab>("overview");
+  const [trainingModule, setTrainingModule] = useState<string | null>(null);
   // Sections the person has opened by clicking. All start closed; the one holding the current page is marked.
   const [openSections, setOpenSections] = useState<string[]>([]);
   // Speak up is never shown to others: being seen there could identify a reporter or a handler
@@ -152,6 +153,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
 
   const go = (next: Tab) => {
     setTab(next);
+    setTrainingModule(null);
     setEntityId(null);
     setMeetingId(null);
     setContractId(null);
@@ -312,7 +314,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
       <div className="workspace">
         {nav}
         <div className="workspace-main">
-        <Policies organisationId={organisation.id} organisationName={organisation.name} role={role} userId={userId} />
+        <Policies organisationId={organisation.id} organisationName={organisation.name} role={role} userId={userId} onOpenTraining={(id) => { go("training"); setTrainingModule(id); }} />
         </div>
       </div>
     );
@@ -411,7 +413,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
       <div className="workspace">
         {nav}
         <div className="workspace-main">
-        <Training organisationId={organisation.id} role={role} userId={userId} />
+        <Training key={trainingModule ?? "home"} organisationId={organisation.id} organisationName={organisation.name} role={role} userId={userId} initialModuleId={trainingModule} />
         </div>
       </div>
     );

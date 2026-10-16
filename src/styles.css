@@ -1738,3 +1738,17 @@ label.check.option-help input {
 .conflict-table td:last-child {
   min-width: 220px;
 }
+
+/* Training: declaration, signature, assigning */
+.declaration { border-left: 4px solid var(--accent, #1f4e79); }
+.declaration .detail-list.compact { display: flex; gap: 2rem; flex-wrap: wrap; margin: 0 0 0.75rem; }
+.declaration .detail-list.compact dt { font-size: 0.8rem; color: var(--muted, #666); }
+.declaration .detail-list.compact dd { margin: 0; font-weight: 600; }
+input.signature { margin-top: 0; font-weight: 400; font-family: "Brush Script MT", "Segoe Script", cursive; font-size: 1.4rem; max-width: 26rem; }
+.people-pick { max-height: 16rem; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.25rem 1rem; margin-top: 0.5rem; }
+.answer-row { align-items: center; gap: 0.5rem; margin-bottom: 0.35rem; }
+.answer-row input[type="radio"] { width: auto; }
+.answer-row .grow { flex: 1; }
+@media print { .no-print, .side-nav, .segmented { display: none !important; } }
+.declaration .detail-list.compact > div { display: block; border: 0; padding: 0; grid-template-columns: none; }
+.declaration .detail-list.compact dd { font-size: 1.05rem; }

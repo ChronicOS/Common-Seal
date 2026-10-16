@@ -23,12 +23,12 @@ import {
   type PolicyData,
   type PolicyVersion,
 } from "./policies";
-import { createModule, today } from "./training";
+import { createModule, moduleForPolicy, today } from "./training";
 import { fillTemplate, TEMPLATES, type Audience, type Kind } from "./policyTemplates";
 import { readPolicyFile } from "./policyDoc";
 import { attachFile, downloadFile } from "./files";
 
-type Props = { organisationId: string; organisationName: string; role: string; userId: string };
+type Props = { organisationId: string; organisationName: string; role: string; userId: string; onOpenTraining?: (moduleId: string) => void };
 
 /** A blank external policy: the standard sections, worded for people outside the company */
 const EXTERNAL_BLANK = [
@@ -127,7 +127,7 @@ function Writer({
   );
 }
 
-export default function Policies({ organisationId, organisationName, role, userId }: Props) {
+export default function Policies({ organisationId, organisationName, role, userId, onOpenTraining }: Props) {
   const canManage = has(role, ...MANAGE_ROLES);
 
   const [data, setData] = useState<PolicyData | null>(null);
@@ -329,20 +329,26 @@ export default function Policies({ organisationId, organisationName, role, userI
                   type="button"
                   className="quiet"
                   disabled={busy}
-                  onClick={() =>
+                  onClick={() => {
+                    let id: string | null = null;
                     void run(async () => {
-                      await createModule(organisationId, {
-                        title: `${policy.title}: read and acknowledge`,
-                        summary: `Version ${approved.version_no} of the policy.`,
-                        content: approved.content.replace(/^# /gm, ""),
-                        passMark: 80,
-                        refreshMonths: policy.review_every_months,
-                        questions: [],
-                      });
-                    }, "A draft training module was created. Publish and assign it under Training.")
-                  }
+                      id = await moduleForPolicy(policy.id);
+                      if (!id)
+                        id = await createModule(organisationId, {
+                          title: `${policy.title}: read and acknowledge`,
+                          summary: `Version ${approved.version_no} of the policy.`,
+                          content: approved.content.replace(/^# /gm, "").trim().length >= 20 ? `Read version ${approved.version_no} of the ${policy.title} below.` : `Read the ${policy.title} in full.`,
+                          passMark: 0,
+                          refreshMonths: 12,
+                          questions: [],
+                          policyId: policy.id,
+                        });
+                    }).then((ok) => {
+                      if (ok && id && onOpenTraining) onOpenTraining(id);
+                    });
+                  }}
                 >
-                  Create read-and-acknowledge training
+                  Assign Training
                 </button>
               )}
             </div>
