@@ -2,11 +2,10 @@ import { has, only } from "./roles";
 import { useCallback, useEffect, useState } from "react";
 import { formatDay, formatWhen } from "./board";
 import { attachFile, downloadFile, listFiles, type LinkedFile } from "./files";
+import { QuestionnaireAnswers } from "./DdQuestionnaire";
 import {
   addMitigation,
-  assess,
   completeMitigation,
-  COUNTRY_RISK,
   DD_LABELS,
   decideCase,
   escalateCase,
@@ -14,10 +13,13 @@ import {
   FINAL_LABELS,
   KIND_LABELS,
   loadParties,
+  loadQuestionnaires,
+  questionnaireLink,
+  sendQuestionnaire,
+  cancelQuestionnaire,
+  type Questionnaire,
   PARTY_TYPES,
   partyTypeLabel,
-  QUESTIONS,
-  recordExemption,
   requestDueDiligence,
   resolveEscalation,
   RISK_LABELS,
@@ -29,11 +31,9 @@ import {
   TRIGGERS,
   type DdCase,
   type DdCheck,
-  type ExemptionKey,
   type PartiesData,
   type Party,
   type PartyDetails,
-  type Topic,
 } from "./parties";
 
 type Props = { organisationId: string; role: string; userId?: string };
@@ -41,7 +41,6 @@ type View = { kind: "list" } | { kind: "party"; id: string } | { kind: "request"
 
 const RECORDS = ["owner", "admin", "secretary", "legal", "compliance"];
 const today = () => new Date().toLocaleDateString("en-CA");
-const CPI_URL = "https://www.transparency.org/en/cpi";
 
 function partyChip(p: Party, exempt: boolean): { text: string; alert: boolean } {
   if (!p.dd_status) return exempt ? { text: "Out of scope (recorded)", alert: false } : { text: "No due diligence", alert: true };
@@ -81,14 +80,13 @@ function CheckRow({ check, canEdit, busy, onSave }: { check: DdCheck; canEdit: b
 
 const blankDetails = (userId: string): PartyDetails => ({ name: "", party_type: "", country: "", countries: [], registration_number: "", website: "", description: "", business_owner_user_id: userId, annual_value: "" });
 
-/** Asking for due diligence: the third party, whether it is in scope, and the risk questions */
-function RequestForm({ party, people, userId, busy, onRequest, onExempt, onCancel }: {
+/** Asking for due diligence: the basics about the third party. The rest comes from the third party's questionnaire. */
+function RequestForm({ party, people, userId, busy, onRequest, onCancel }: {
   party: Party | null;
   people: { user_id: string | null; full_name: string }[];
   userId: string;
   busy: boolean;
-  onRequest: (d: PartyDetails, trigger: string, answers: Record<string, string>) => void;
-  onExempt: (d: PartyDetails, e: ExemptionKey, reason: string, evidence: string) => void;
+  onRequest: (d: PartyDetails, trigger: string, contact: { name: string; email: string }) => void;
   onCancel: () => void;
 }) {
   const [d, setD] = useState<PartyDetails>(
@@ -98,45 +96,30 @@ function RequestForm({ party, people, userId, busy, onRequest, onExempt, onCance
   );
   const [countriesText, setCountriesText] = useState((party?.countries ?? []).join(", "));
   const [trigger, setTrigger] = useState(party ? (party.dd_status ? "Periodic review" : "Existing third party never checked") : "New third party");
-  const [scope, setScope] = useState<ExemptionKey | "in_scope">("in_scope");
-  const [reason, setReason] = useState("");
-  const [evidence, setEvidence] = useState("");
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [contact, setContact] = useState({ name: "", email: "" });
   const [missing, setMissing] = useState<string | null>(null);
   const set = (patch: Partial<PartyDetails>) => setD({ ...d, ...patch });
-  const details = (): PartyDetails => ({ ...d, countries: countriesText.split(/[,;\n]/).map((x) => x.trim()).filter(Boolean) });
-  const r = assess(answers);
-  const topics: Topic[] = ["pep", "sip", "sanctions", "sanctions_ownership", "state_owned", "official_lists", "adverse_media"];
-  if (d.party_type === "customer" || d.party_type === "distributor") topics.push("aml_kyc");
-  if (answers.labour_risk !== "no") topics.push("modern_slavery");
-  if (r.level !== "low") topics.push("red_flag");
-  if (r.level === "high") topics.push("enhanced", "questionnaire");
-  const answered = QUESTIONS.filter((q) => answers[q.key]).length + (answers.country_risk ? 1 : 0);
 
   const submit = () => {
     if (d.name.trim().length < 2) return setMissing("Give the third party's name.");
     if (!d.party_type) return setMissing("Choose what kind of third party it is.");
-    if (scope !== "in_scope") {
-      if (reason.trim().length < 10) return setMissing("Explain why due diligence is not needed.");
-      return onExempt(details(), scope, reason, evidence);
-    }
     if (!d.description.trim()) return setMissing("Say what they will do for us.");
-    if (!answers.country_risk || QUESTIONS.some((q) => !answers[q.key])) return setMissing('Answer every risk question. "Not known" is an answer.');
+    if (contact.email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(contact.email.trim())) return setMissing("That email address does not look right.");
     setMissing(null);
-    onRequest(details(), trigger, answers);
+    onRequest({ ...d, countries: countriesText.split(/[,;\n]/).map((x) => x.trim()).filter(Boolean) }, trigger, contact);
   };
 
   return (
     <>
       <p className="eyebrow">Due diligence</p>
       <h1>{party ? `Due diligence: ${party.name}` : "Due diligence a third party"}</h1>
-      <p className="lead">Do this before agreeing anything binding. No contract can be approved until due diligence is cleared and any mitigations needed first are done.</p>
+      <p className="lead">Do this before agreeing anything binding. Tell us the basics; the third party then answers a short questionnaire about its owners, office holders, any litigation, insolvency or adverse press, and its licences. No contract can be approved until due diligence is cleared.</p>
 
       <section className="card form">
-        <h2>1. The third party</h2>
+        <h2>The third party</h2>
         {!party && (
           <>
-            <label htmlFor="dd-name">Legal name</label>
+            <label htmlFor="dd-name">Name</label>
             <input id="dd-name" value={d.name} onChange={(e) => set({ name: e.target.value })} />
           </>
         )}
@@ -152,22 +135,12 @@ function RequestForm({ party, people, userId, busy, onRequest, onExempt, onCance
         </select>
         <div className="row wrap">
           <span className="field">
-            <label htmlFor="dd-country">Country of incorporation</label>
+            <label htmlFor="dd-country">Country where it is based</label>
             <input id="dd-country" value={d.country} onChange={(e) => set({ country: e.target.value })} />
           </span>
           <span className="field grow">
-            <label htmlFor="dd-countries">Countries where they will work for us or deliver to (comma between)</label>
+            <label htmlFor="dd-countries">Countries where it will work for us or deliver to (comma between)</label>
             <input id="dd-countries" value={countriesText} onChange={(e) => setCountriesText(e.target.value)} />
-          </span>
-        </div>
-        <div className="row wrap">
-          <span className="field">
-            <label htmlFor="dd-reg">Company or registration number</label>
-            <input id="dd-reg" value={d.registration_number} onChange={(e) => set({ registration_number: e.target.value })} />
-          </span>
-          <span className="field">
-            <label htmlFor="dd-web">Website</label>
-            <input id="dd-web" value={d.website} onChange={(e) => set({ website: e.target.value })} />
           </span>
           <span className="field">
             <label htmlFor="dd-value">Expected value a year (AUD)</label>
@@ -196,82 +169,19 @@ function RequestForm({ party, people, userId, busy, onRequest, onExempt, onCance
             </select>
           </span>
         </div>
+        <h3>Who should answer the questionnaire?</h3>
+        <div className="row wrap">
+          <span className="field">
+            <label htmlFor="dd-contact">Contact name</label>
+            <input id="dd-contact" value={contact.name} onChange={(e) => setContact({ ...contact, name: e.target.value })} />
+          </span>
+          <span className="field grow">
+            <label htmlFor="dd-contact-email">Contact email</label>
+            <input id="dd-contact-email" type="email" value={contact.email} onChange={(e) => setContact({ ...contact, email: e.target.value })} />
+          </span>
+        </div>
+        <p className="muted small">You can also send the questionnaire later from the third party's page.</p>
       </section>
-
-      <section className="card form">
-        <h2>2. Is due diligence needed?</h2>
-        <p className="muted">Some engagements are out of scope. If one of these applies, record why and keep any evidence. Otherwise due diligence is needed.</p>
-        <label className="check option-help">
-          <input type="radio" name="dd-scope" checked={scope === "in_scope"} onChange={() => setScope("in_scope")} /> <strong>None of these: due diligence is needed</strong>
-        </label>
-        {EXEMPTIONS.map((x) => (
-          <label key={x.id} className="check option-help">
-            <input type="radio" name="dd-scope" checked={scope === x.id} onChange={() => setScope(x.id)} /> {x.label}
-            {x.note && <span className="muted"> {x.note}</span>}
-          </label>
-        ))}
-        {scope !== "in_scope" && (
-          <>
-            <label htmlFor="dd-reason">Why it is out of scope</label>
-            <textarea id="dd-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
-            <label htmlFor="dd-evidence">Evidence (optional: a quote, invoice or assessment reference)</label>
-            <input id="dd-evidence" value={evidence} onChange={(e) => setEvidence(e.target.value)} />
-          </>
-        )}
-      </section>
-
-      {scope === "in_scope" && (
-        <section className="card form">
-          <h2>3. Risk questions</h2>
-          <p className="muted">Answer what you know. "Not known" is fine, but it never gives a low rating.</p>
-          <fieldset className="plain-fieldset question">
-            <legend>
-              How high is the corruption risk in the countries involved?{" "}
-              <a className="link-dark small" href={CPI_URL} target="_blank" rel="noreferrer">
-                Transparency International scores
-              </a>
-            </legend>
-            <div className="row wrap">
-              {COUNTRY_RISK.map((c) => (
-                <label key={c.id} className="check">
-                  <input type="radio" name="q-country" checked={answers.country_risk === c.id} onChange={() => setAnswers({ ...answers, country_risk: c.id })} /> {c.label}
-                </label>
-              ))}
-              <label className="check">
-                <input type="radio" name="q-country" checked={answers.country_risk === "unknown"} onChange={() => setAnswers({ ...answers, country_risk: "unknown" })} /> Not known
-              </label>
-            </div>
-          </fieldset>
-          {QUESTIONS.map((q) => (
-            <fieldset key={q.key} className="plain-fieldset question">
-              <legend>
-                {q.text}
-                {q.help && <span className="muted small"> {q.help}</span>}
-              </legend>
-              <div className="row">
-                {(["yes", "no", "unknown"] as const).map((v) => (
-                  <label key={v} className="check">
-                    <input type="radio" name={`q-${q.key}`} checked={answers[q.key] === v} onChange={() => setAnswers({ ...answers, [q.key]: v })} /> {v === "unknown" ? "Not known" : v === "yes" ? "Yes" : "No"}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          ))}
-          <div className={`card rating-${r.level}`} role="status">
-            <p>
-              <strong>Inherent risk: {RISK_LABELS[r.level].toLowerCase()}</strong> · {answered} of {QUESTIONS.length + 1} answered · target {r.level === "high" ? 20 : r.level === "medium" ? 10 : 5} working days
-            </p>
-            {r.reasons.length > 0 && (
-              <ul className="small">
-                {r.reasons.map((x) => (
-                  <li key={x}>{x}</li>
-                ))}
-              </ul>
-            )}
-            <p className="small">Checks: {topics.map((t) => TOPIC_LABELS[t]).join("; ")}.</p>
-          </div>
-        </section>
-      )}
 
       {missing && (
         <p className="error block" role="alert">
@@ -280,7 +190,7 @@ function RequestForm({ party, people, userId, busy, onRequest, onExempt, onCance
       )}
       <div className="row block">
         <button type="button" disabled={busy} onClick={submit}>
-          {scope === "in_scope" ? "Request due diligence" : "Record as out of scope"}
+          Request due diligence
         </button>
         <button type="button" className="link-dark" onClick={onCancel}>
           Cancel
@@ -295,6 +205,9 @@ export default function Parties({ organisationId, role, userId = "" }: Props) {
   const canAdd = !only(role, "auditor");
 
   const [data, setData] = useState<PartiesData | null>(null);
+  const [questionnaires, setQuestionnaires] = useState<Questionnaire[]>([]);
+  const [qLink, setQLink] = useState<{ caseId: string; token: string | null } | null>(null);
+  const [qContact, setQContact] = useState({ name: "", email: "" });
   const [files, setFiles] = useState<LinkedFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -312,11 +225,28 @@ export default function Parties({ organisationId, role, userId = "" }: Props) {
     const d = await loadParties(organisationId);
     setData(d);
     setFiles(await listFiles("dd_cases", d.cases.map((c) => c.id)));
+    setQuestionnaires(await loadQuestionnaires(organisationId));
   }, [organisationId]);
 
   useEffect(() => {
     reload().catch((e) => setError(e instanceof Error ? e.message : "Could not load due diligence."));
   }, [reload]);
+
+  // The personal link for the open case's questionnaire (only those who can send it can read it)
+  const viewPartyId = view.kind === "party" ? view.id : null;
+  const openCaseId = viewPartyId ? data?.cases.find((c) => c.counterparty_id === viewPartyId && c.status === "open")?.id ?? null : null;
+  const openQ = openCaseId ? questionnaires.find((q) => q.case_id === openCaseId && q.status === "sent")?.id ?? null : null;
+  useEffect(() => {
+    if (!openCaseId || !openQ) {
+      setQLink(null);
+      return;
+    }
+    let live = true;
+    questionnaireLink(openCaseId).then((token) => live && setQLink({ caseId: openCaseId, token }));
+    return () => {
+      live = false;
+    };
+  }, [openCaseId, openQ]);
 
   async function run(action: () => Promise<void>, done?: string): Promise<boolean> {
     setBusy(true);
@@ -394,24 +324,18 @@ export default function Parties({ organisationId, role, userId = "" }: Props) {
           userId={userId}
           busy={busy}
           onCancel={() => go(party ? { kind: "party", id: party.id } : { kind: "list" })}
-          onRequest={(d, trigger, answers) => {
+          onRequest={(d, trigger, contact) => {
             let pid = "";
             void run(async () => {
-              pid = await requestDueDiligence(organisationId, party?.id ?? null, d, trigger, answers);
+              const r = await requestDueDiligence(organisationId, party?.id ?? null, d, trigger, {});
+              pid = r.partyId;
+              if (contact.name.trim() || contact.email.trim()) await sendQuestionnaire(r.caseId, contact.name, contact.email);
             }).then((ok) => {
               if (!ok) return;
               go(pid ? { kind: "party", id: pid } : { kind: "list" });
-              setNotice("Due diligence requested. Legal or compliance will run the checks and give their advice.");
+              setNotice(contact.email.trim() ? "Due diligence requested. Send the questionnaire to the third party using the email below." : "Due diligence requested. Send the third party its questionnaire below.");
             });
           }}
-          onExempt={(d, e, reason, evidence) =>
-            void run(() => recordExemption(organisationId, party?.id ?? null, d, e, reason, evidence)).then((ok) => {
-              if (ok) {
-                go({ kind: "list" });
-                setNotice(`${d.name} recorded as out of scope, with your reason.`);
-              }
-            })
-          }
         />
         {messages}
       </>
@@ -474,6 +398,68 @@ export default function Parties({ organisationId, role, userId = "" }: Props) {
           </p>
         )}
         {messages}
+
+        {(current || questionnaires.some((q) => cases.some((c) => c.id === q.case_id))) && (() => {
+          const caseQs = questionnaires.filter((q) => cases.some((c) => c.id === q.case_id));
+          const returned = caseQs.find((q) => q.status === "submitted");
+          const sent = current ? caseQs.find((q) => q.case_id === current.id && q.status === "sent") : undefined;
+          const mayPush = canEdit || isOwner;
+          const link = sent && qLink && qLink.caseId === current?.id && qLink.token ? `${window.location.origin}/?d=${qLink.token}` : null;
+          const mail = link && sent
+            ? `mailto:${encodeURIComponent(sent.contact_email ?? "")}?subject=${encodeURIComponent(`Due diligence questionnaire: ${party.name}`)}&body=${encodeURIComponent(`Dear ${sent.contact_name?.split(" ")[0] ?? "colleague"},\n\nBefore we can work together we ask every business partner to answer a short questionnaire about the company, its office holders and shareholders, and its licences. It takes about ten minutes and needs no account:\n\n${link}\n\nThank you`)}`
+            : null;
+          return (
+            <section className="card form block">
+              <h2>Questionnaire to the third party</h2>
+              {returned?.answers ? (
+                <>
+                  <p className="small">
+                    Returned {returned.submitted_at ? formatDay(returned.submitted_at) : ""}
+                    {returned.contact_name ? ` by ${returned.contact_name}` : ""}.
+                  </p>
+                  <QuestionnaireAnswers a={returned.answers} submittedAt={returned.submitted_at} />
+                </>
+              ) : sent ? (
+                <>
+                  <p className="small">
+                    Sent {sent.sent_at ? formatDay(sent.sent_at) : ""}
+                    {sent.contact_name || sent.contact_email ? ` to ${[sent.contact_name, sent.contact_email].filter(Boolean).join(", ")}` : ""} ·{" "}
+                    {sent.opened_at ? `opened ${formatDay(sent.opened_at)}, not yet submitted` : "not yet opened"}
+                  </p>
+                  {mayPush && link && (
+                    <div className="row wrap">
+                      {mail && sent.contact_email && (
+                        <a className="button-link" href={mail}>
+                          Open the email
+                        </a>
+                      )}
+                      <button type="button" className="quiet" onClick={() => void navigator.clipboard.writeText(link).then(() => setNotice("Link copied."), () => setError("Could not copy."))}>
+                        Copy the link
+                      </button>
+                      <button type="button" className="link-dark small" disabled={busy} onClick={() => { if (window.confirm("Cancel this link? The third party will not be able to use it.")) void run(() => cancelQuestionnaire(sent.id), "Link cancelled."); }}>
+                        Cancel the link
+                      </button>
+                    </div>
+                  )}
+                  {!sent.contact_email && mayPush && <p className="muted small">No email recorded: copy the link and send it yourself.</p>}
+                </>
+              ) : current && mayPush ? (
+                <>
+                  <p className="muted small">Send the third party a personal link. They answer about their company, office holders, shareholders, litigation, insolvency, press coverage and licences.</p>
+                  <div className="row wrap">
+                    <input aria-label="Contact name" placeholder="Contact name" value={qContact.name} onChange={(e) => setQContact({ ...qContact, name: e.target.value })} />
+                    <input aria-label="Contact email" type="email" placeholder="Contact email" value={qContact.email} onChange={(e) => setQContact({ ...qContact, email: e.target.value })} />
+                    <button type="button" disabled={busy} onClick={() => void run(() => sendQuestionnaire(current.id, qContact.name, qContact.email).then(() => undefined), "Questionnaire link created.").then((ok) => ok && setQContact({ name: "", email: "" }))}>
+                      Create the link
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="muted small">Not sent yet.</p>
+              )}
+            </section>
+          );
+        })()}
 
         {current && (
           <section className="card form block">

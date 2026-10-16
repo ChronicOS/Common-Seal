@@ -18,6 +18,9 @@ checks (check_name, ok, detail) as (
          case when to_regclass('public.' || e.marker) is null then 'Table ' || e.marker || ' is missing' else '' end
   from expected e
   union all
+  select 'Migration 0042 has been run',
+         to_regclass('public.dd_questionnaires') is not null, ''
+  union all
   select 'Migration 0041 has been run',
          to_regclass('public.ip_assets') is not null, ''
   union all
@@ -109,11 +112,11 @@ checks (check_name, ok, detail) as (
   -- The deliberate exceptions: eight functions that each need the long code from a person's own link
   select 'Visitors who are not signed in can run nothing except the personal-link pages',
          not exists (select 1 from pg_proc p where p.pronamespace in ('public'::regnamespace, 'app'::regnamespace)
-                       and p.proname not in ('ms_questionnaire', 'ms_submit_questionnaire', 'risk_request', 'risk_save_item', 'risk_delete_item', 'risk_finish', 'risk_action', 'risk_action_update', 'training_by_link', 'complete_training_by_link', 'can_read_training_object')
+                       and p.proname not in ('ms_questionnaire', 'ms_submit_questionnaire', 'risk_request', 'risk_save_item', 'risk_delete_item', 'risk_finish', 'risk_action', 'risk_action_update', 'training_by_link', 'complete_training_by_link', 'can_read_training_object', 'dd_questionnaire', 'submit_dd_questionnaire')
                        and p.prosecdef and has_function_privilege('anon', p.oid, 'execute')),
          coalesce((select string_agg(p.proname, ', ') from pg_proc p
                    where p.pronamespace in ('public'::regnamespace, 'app'::regnamespace)
-                     and p.proname not in ('ms_questionnaire', 'ms_submit_questionnaire', 'risk_request', 'risk_save_item', 'risk_delete_item', 'risk_finish', 'risk_action', 'risk_action_update', 'training_by_link', 'complete_training_by_link', 'can_read_training_object')
+                     and p.proname not in ('ms_questionnaire', 'ms_submit_questionnaire', 'risk_request', 'risk_save_item', 'risk_delete_item', 'risk_finish', 'risk_action', 'risk_action_update', 'training_by_link', 'complete_training_by_link', 'can_read_training_object', 'dd_questionnaire', 'submit_dd_questionnaire')
                      and p.prosecdef and has_function_privilege('anon', p.oid, 'execute')), '')
   union all
   select 'Every privileged function has a fixed search path',

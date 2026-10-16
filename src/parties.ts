@@ -179,7 +179,7 @@ export const TOPIC_HELP: Partial<Record<Topic, string>> = {
   adverse_media: "Bribery, sanctions, money laundering, fraud, political links, regulatory breaches and litigation, human rights, labour and environmental issues.",
   red_flag: "Registration and nature of business, immediate owners, screening of owners and principals, adverse research including litigation and insolvency, local-language sources.",
   enhanced: "A deep-dive investigation by a specialist, across all jurisdictions and in the local language.",
-  questionnaire: "Their compliance programme: code of conduct, anti-bribery and other policies, training, sub-contractors. Ask for copies.",
+  questionnaire: "Marked automatically when the third party returns its questionnaire: clear if nothing adverse is disclosed, otherwise a concern. Review the answers above.",
   sanctions: "For a full sanctions assessment use Contracts, Sanctions.",
 };
 export const STAGES: { label: string; topics: Topic[] }[] = [
@@ -239,7 +239,7 @@ export type PartyDetails = {
   annual_value: string;
 };
 
-export async function requestDueDiligence(organisationId: string, partyId: string | null, details: PartyDetails, trigger: string, answers: Record<string, string>): Promise<string> {
+export async function requestDueDiligence(organisationId: string, partyId: string | null, details: PartyDetails, trigger: string, answers: Record<string, string>): Promise<{ partyId: string; caseId: string }> {
   const { data, error } = await db().rpc("request_due_diligence", {
     p_org: organisationId,
     p_counterparty: partyId,
@@ -250,7 +250,7 @@ export async function requestDueDiligence(organisationId: string, partyId: strin
   check(error);
   // The new case's third party, so the page can open it
   const created = await db().from("dd_cases").select("counterparty_id").eq("id", data as string).maybeSingle();
-  return (created.data?.counterparty_id as string | undefined) ?? partyId ?? "";
+  return { partyId: (created.data?.counterparty_id as string | undefined) ?? partyId ?? "", caseId: data as string };
 }
 
 export async function recordExemption(organisationId: string, partyId: string | null, details: PartyDetails, exemption: ExemptionKey, reason: string, evidence: string) {
@@ -303,4 +303,71 @@ export async function loadPartySummary(organisationId: string): Promise<PartySum
     open: rows.filter((r) => r.dd_status === "open").length,
     rejected: rows.filter((r) => r.dd_status === "rejected").length,
   };
+}
+
+// ---- Questionnaire to the third party (migration 0042) ----
+export type YesNoDetails = { answer: "yes" | "no" | ""; details: string };
+export type QAnswers = {
+  company: { legal_name: string; registration_number: string; incorporated_on: string; registered_address: string; website: string; is_corporation: "yes" | "no" | "" };
+  officers: { name: string; role: string; appointed_on: string }[];
+  shareholders: { name: string; percent: string }[];
+  litigation: YesNoDetails;
+  insolvency: YesNoDetails;
+  press: YesNoDetails;
+  licences: { confirmed: "yes" | "no" | ""; details: string; items: { name: string; number: string; issuer: string; expires_on: string }[] };
+  declaration: { agreed: string; signed_name: string; position: string };
+};
+export type Questionnaire = { id: string; case_id: string; contact_name: string | null; contact_email: string | null; status: "sent" | "submitted" | "cancelled"; sent_at: string | null; opened_at: string | null; submitted_at: string | null; answers: QAnswers | null };
+export type PublicQuestionnaire = { organisation: string; party_name: string; country: string | null; countries: string[] | null; registration_number: string | null; website: string | null; description: string | null; contact_name: string | null; submitted_at: string | null; answers: QAnswers | null };
+
+export const Q_TEXT = {
+  litigation: "Is the company, or any of its directors, involved in any active or threatened litigation, arbitration or regulatory proceedings?",
+  insolvency: "Has the company, or any of its directors, been insolvent, bankrupt, or in administration, receivership or liquidation, or entered a scheme with creditors, in the last ten years?",
+  press: "Has there been any press or media coverage alleging wrongdoing by the company or any of its directors (for example bribery, fraud, sanctions, money laundering, human rights, labour or environmental issues)?",
+  licences: "Does the company hold all the licences, authorisations, permits, registrations and professional memberships it needs to operate its business in the jurisdictions where it proposes to work with us?",
+};
+
+export const blankQAnswers = (p?: { party_name?: string; registration_number?: string | null; website?: string | null }): QAnswers => ({
+  company: { legal_name: p?.party_name ?? "", registration_number: p?.registration_number ?? "", incorporated_on: "", registered_address: "", website: p?.website ?? "", is_corporation: "" },
+  officers: [{ name: "", role: "Director", appointed_on: "" }],
+  shareholders: [{ name: "", percent: "" }],
+  litigation: { answer: "", details: "" },
+  insolvency: { answer: "", details: "" },
+  press: { answer: "", details: "" },
+  licences: { confirmed: "", details: "", items: [{ name: "", number: "", issuer: "", expires_on: "" }] },
+  declaration: { agreed: "", signed_name: "", position: "" },
+});
+
+export async function loadQuestionnaires(organisationId: string): Promise<Questionnaire[]> {
+  const { data, error } = await db().from("dd_questionnaires").select("id, case_id, contact_name, contact_email, status, sent_at, opened_at, submitted_at, answers").eq("organisation_id", organisationId).order("created_at", { ascending: false });
+  if (error) return [];
+  return (data ?? []) as Questionnaire[];
+}
+export async function sendQuestionnaire(caseId: string, name: string, email: string): Promise<string> {
+  const { data, error } = await db().rpc("send_dd_questionnaire", { p_case: caseId, p_contact_name: name, p_contact_email: email });
+  check(error);
+  return data as string;
+}
+export async function questionnaireLink(caseId: string): Promise<string | null> {
+  const { data, error } = await db().rpc("dd_questionnaire_link", { p_case: caseId });
+  if (error) return null;
+  return (data as string | null) ?? null;
+}
+export async function cancelQuestionnaire(id: string) {
+  check((await db().rpc("cancel_dd_questionnaire", { p_questionnaire: id })).error);
+}
+export async function openPublicQuestionnaire(token: string): Promise<PublicQuestionnaire> {
+  const { data, error } = await db().rpc("dd_questionnaire", { p_token: token });
+  check(error);
+  return data as PublicQuestionnaire;
+}
+/** Empty rows are dropped before sending */
+export async function submitPublicQuestionnaire(token: string, a: QAnswers) {
+  const clean: QAnswers = {
+    ...a,
+    officers: a.officers.filter((o) => o.name.trim()),
+    shareholders: a.company.is_corporation === "yes" ? a.shareholders.filter((s) => s.name.trim()) : [],
+    licences: { ...a.licences, items: a.licences.items.filter((i) => i.name.trim()) },
+  };
+  check((await db().rpc("submit_dd_questionnaire", { p_token: token, p_answers: clean })).error);
 }
