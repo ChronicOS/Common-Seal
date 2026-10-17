@@ -143,6 +143,23 @@ export async function loadInbox(organisationId: string, role: string, userId: st
       }
     }),
     safely(async () => {
+      // Anti-bribery: actions on bribery risks I own, and the risk assessment review
+      if (!supabase) return;
+      const [risks, assessments] = await Promise.all([
+        supabase.from("abc_risks").select("id, area, description, action_due_on, owner_user_id, assessment_id").eq("organisation_id", organisationId).eq("owner_user_id", userId),
+        manage ? supabase.from("abc_assessments").select("id, title, status, next_review_on").eq("organisation_id", organisationId) : Promise.resolve({ data: [], error: null }),
+      ]);
+      if (risks.error) return;
+      for (const r of (risks.data ?? []) as { id: string; description: string; action_due_on: string | null }[]) {
+        if (soon(r.action_due_on, 14)) add("abc", "Bribery risk action due", r.id, r.description, r.action_due_on);
+      }
+      const list = (assessments.data ?? []) as { id: string; title: string; status: string; next_review_on: string | null }[];
+      if (!list.some((a) => a.status === "draft")) {
+        const approved = list.filter((a) => a.status === "approved").sort((a, b) => (b.next_review_on ?? "").localeCompare(a.next_review_on ?? ""))[0];
+        if (approved && soon(approved.next_review_on, 30)) add("abc", "Bribery risk assessment due for review", approved.id, approved.title, approved.next_review_on);
+      }
+    }),
+    safely(async () => {
       // Privacy and cyber: breaches to assess, notify or report; holdings and automated decisions I own to review
       if (!supabase) return;
       const [br, hold, adm] = await Promise.all([
