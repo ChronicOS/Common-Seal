@@ -143,6 +143,24 @@ export async function loadInbox(organisationId: string, role: string, userId: st
       }
     }),
     safely(async () => {
+      // Work health and safety: incidents to assess, notifiable incidents not notified, overdue actions, hazard reviews
+      if (!supabase || !manage) return;
+      const [inc, haz] = await Promise.all([
+        supabase.from("whs_incidents").select("id, occurred_at, kind, location, notifiable, regulator_notified_at, actions_due_on, actions_done_on, status").eq("organisation_id", organisationId).eq("status", "open"),
+        supabase.from("whs_hazards").select("id, title, review_on, owner_user_id").eq("organisation_id", organisationId).eq("status", "active"),
+      ]);
+      if (inc.error) return;
+      for (const i of (inc.data ?? []) as { id: string; occurred_at: string; kind: string; location: string | null; notifiable: boolean | null; regulator_notified_at: string | null; actions_due_on: string | null; actions_done_on: string | null }[]) {
+        const what = `${i.kind.replace("_", " ")}${i.location ? `, ${i.location}` : ""}`;
+        if (i.notifiable === null) add("whs", "WHS incident: decide whether it is notifiable", `a-${i.id}`, what, i.occurred_at.slice(0, 10));
+        else if (i.notifiable && !i.regulator_notified_at) add("whs", "Notifiable incident: tell the regulator now", `n-${i.id}`, what, i.occurred_at.slice(0, 10));
+        if (!i.actions_done_on && soon(i.actions_due_on, 7)) add("whs", "WHS corrective actions due", `c-${i.id}`, what, i.actions_due_on);
+      }
+      for (const h of (haz.data ?? []) as { id: string; title: string; review_on: string | null; owner_user_id: string | null }[]) {
+        if ((h.owner_user_id === userId || !h.owner_user_id) && soon(h.review_on, 14)) add("whs", "Hazard review due", h.id, h.title, h.review_on);
+      }
+    }),
+    safely(async () => {
       // Company register: changes to check, and ASIC filings due within 14 days or overdue
       if (!supabase || !manage) return;
       const [filings, ents] = await Promise.all([

@@ -4,7 +4,7 @@ import { supabase } from "./supabase";
 type Row = { id: string; document_id: string; created_at: string; file_name: string; size_bytes: number | null; sha256: string; storage_path: string };
 type Props = {
   subjectTable: "expense_claims" | "contracts" | "policies" | "workflow_run_steps" | "register_entries" | "dd_cases" | "ms_statements" | "insurance_policies"
-    | "bank_accounts" | "credit_facilities" | "corporate_documents" | "asic_filings" | "annual_reviews" | "obligation_completions" | "share_movements" | "share_classes" | "esop_plans" | "esop_grants" | "convertibles" | "investor_consents";
+    | "bank_accounts" | "credit_facilities" | "corporate_documents" | "asic_filings" | "annual_reviews" | "obligation_completions" | "whs_incidents" | "whs_hazards" | "whs_due_diligence" | "share_movements" | "share_classes" | "esop_plans" | "esop_grants" | "convertibles" | "investor_consents";
   subjectId: string;
   canAttach: boolean;
   label?: string;

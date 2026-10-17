@@ -18,6 +18,13 @@ checks (check_name, ok, detail) as (
          case when to_regclass('public.' || e.marker) is null then 'Table ' || e.marker || ' is missing' else '' end
   from expected e
   union all
+  select 'Migration 0049 has been run',
+         to_regclass('public.whs_incidents') is not null, ''
+  union all
+  select 'Files on sensitive records are restricted',
+         not exists (select 1 from public.documents d where not d.is_restricted and exists (select 1 from public.document_links l where l.document_id = d.id
+                     and l.subject_table in ('share_movements', 'esop_grants', 'convertibles', 'bank_accounts', 'credit_facilities', 'corporate_documents', 'asic_filings', 'whs_incidents'))), ''
+  union all
   select 'Migration 0048 has been run',
          to_regclass('public.compliance_obligations') is not null, ''
   union all
