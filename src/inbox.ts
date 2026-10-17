@@ -143,6 +143,27 @@ export async function loadInbox(organisationId: string, role: string, userId: st
       }
     }),
     safely(async () => {
+      // Regulatory checks I own due for review; standard form contracts to review; acquisitions needing ACCC approval
+      if (!supabase) return;
+      const [checks, sfc, deals] = await Promise.all([
+        supabase.from("compliance_checks").select("id, programme, item_key, review_on, owner_user_id").eq("organisation_id", organisationId).eq("owner_user_id", userId),
+        supabase.from("standard_form_contracts").select("id, name, next_review_on, owner_user_id, status").eq("organisation_id", organisationId).eq("status", "current"),
+        manage ? supabase.from("acquisitions").select("id, name, notification, accc_notified_on, determination, planned_completion_on, status").eq("organisation_id", organisationId).in("status", ["considering", "notified"]) : Promise.resolve({ data: [], error: null }),
+      ]);
+      if (checks.error) return;
+      const tabOf: Record<string, string> = { employment: "employment", consumer: "consumer", climate: "climate" };
+      for (const c of (checks.data ?? []) as { id: string; programme: string; item_key: string; review_on: string | null }[]) {
+        if (soon(c.review_on, 14)) add(tabOf[c.programme] ?? "employment", "Compliance check due for review", c.id, c.item_key.replace(/_/g, " "), c.review_on);
+      }
+      for (const c of (sfc.data ?? []) as { id: string; name: string; next_review_on: string | null; owner_user_id: string | null }[]) {
+        if ((c.owner_user_id === userId || (!c.owner_user_id && manage)) && soon(c.next_review_on, 14)) add("consumer", "Standard form contract review due", c.id, c.name, c.next_review_on);
+      }
+      for (const d of (deals.data ?? []) as { id: string; name: string; notification: string; accc_notified_on: string | null; determination: string | null; planned_completion_on: string | null }[]) {
+        if (d.notification === "required" && !d.determination) add("mergers", d.accc_notified_on ? "Acquisition waiting for the ACCC" : "Acquisition to notify to the ACCC", d.id, d.name, d.planned_completion_on);
+        else if (d.notification === "unknown" && soon(d.planned_completion_on, 60)) add("mergers", "Acquisition to test for ACCC notification", d.id, d.name, d.planned_completion_on);
+      }
+    }),
+    safely(async () => {
       // Anti-bribery: actions on bribery risks I own, and the risk assessment review
       if (!supabase) return;
       const [risks, assessments] = await Promise.all([
