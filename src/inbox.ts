@@ -120,6 +120,29 @@ export async function loadInbox(organisationId: string, role: string, userId: st
         if (r.escalate_on <= t) add("register", "Risk report to review and finalise", r.id, r.name, r.forum_on);
       }
     }),    safely(async () => {
+      // Compliance calendar: recurring obligations I own (or any, for managers) due within 14 days or overdue
+      if (!supabase) return;
+      const [obs, comps] = await Promise.all([
+        supabase.from("compliance_obligations").select("*").eq("organisation_id", organisationId).eq("is_active", true),
+        supabase.from("obligation_completions").select("obligation_id, due_on").eq("organisation_id", organisationId),
+      ]);
+      if (obs.error) return;
+      const { dueDates } = await import("./calendar");
+      const limit = new Date();
+      limit.setDate(limit.getDate() + 14);
+      const upto = limit.toISOString().slice(0, 10);
+      const past = new Date();
+      past.setFullYear(past.getFullYear() - 2);
+      for (const o of (obs.data ?? []) as import("./calendar").Obligation[]) {
+        if (o.owner_user_id !== userId && !(manage && !o.owner_user_id)) continue;
+        for (const d of dueDates(o, upto)) {
+          if (d < past.toISOString().slice(0, 10)) continue;
+          if (((comps.data ?? []) as { obligation_id: string; due_on: string }[]).some((x) => x.obligation_id === o.id && x.due_on === d)) continue;
+          add("calendar", o.owner_user_id ? "Compliance obligation due" : "Compliance obligation with no owner", `${o.id}-${d}`, o.title, d);
+        }
+      }
+    }),
+    safely(async () => {
       // Company register: changes to check, and ASIC filings due within 14 days or overdue
       if (!supabase || !manage) return;
       const [filings, ents] = await Promise.all([
