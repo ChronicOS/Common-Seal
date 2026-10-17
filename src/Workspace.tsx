@@ -43,6 +43,7 @@ import CompanyRegister from "./CompanyRegister";
 import ComplianceCalendar from "./ComplianceCalendar";
 import Ownership from "./Ownership";
 import Whs from "./Whs";
+import Privacy from "./Privacy";
 import Parties from "./Parties";
 import { loadPartySummary, type PartySummary } from "./parties";
 import Register from "./Register";
@@ -56,7 +57,7 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Tab =
   | "overview" | "company" | "authorities" | "insurance" | "foryou" | "report" | "modernslavery" | "oldregister" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
-  | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "conflicts" | "expenses" | "speakup" | "people" | "keyemployees" | "keycontracts" | "disputes" | "sanctions" | "legalaudit" | "ip" | "ownership" | "companyregister" | "calendar" | "whs";
+  | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "conflicts" | "expenses" | "speakup" | "people" | "keyemployees" | "keycontracts" | "disputes" | "sanctions" | "legalaudit" | "ip" | "ownership" | "companyregister" | "calendar" | "whs" | "privacy";
 const SECTIONS = ["Company", "Board", "Risk and compliance", "Contracts", "Third parties", "Conduct"] as const;
 const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = [
   { id: "foryou", label: "For you" },
@@ -74,6 +75,7 @@ const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = 
   { id: "calendar", label: "Compliance calendar", section: "Risk and compliance" },
   { id: "register", label: "Risk Register", section: "Risk and compliance" },
   { id: "whs", label: "Work health and safety", section: "Risk and compliance" },
+  { id: "privacy", label: "Privacy and cyber", section: "Risk and compliance" },
   { id: "oldregister", label: "(Old Register)", section: "Risk and compliance" },
   { id: "policies", label: "Policies", section: "Risk and compliance" },
   { id: "modernslavery", label: "Modern slavery", section: "Risk and compliance" },
@@ -383,6 +385,17 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
         {nav}
         <div className="workspace-main">
           <ComplianceCalendar organisationId={organisation.id} organisationName={organisation.name} group={data} canEdit={canEdit} userId={userId} onOpen={(t) => go(t as Tab)} />
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === "privacy") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+          <Privacy organisationId={organisation.id} organisationName={organisation.name} role={role} userId={userId} group={data} />
         </div>
       </div>
     );

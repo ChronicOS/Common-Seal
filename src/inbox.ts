@@ -143,6 +143,25 @@ export async function loadInbox(organisationId: string, role: string, userId: st
       }
     }),
     safely(async () => {
+      // Privacy and cyber: breaches to assess, notify or report; holdings and automated decisions I own to review
+      if (!supabase) return;
+      const [br, hold, adm] = await Promise.all([
+        manage ? supabase.from("privacy_breaches").select("id, title, assessment_due_on, eligible, oaic_notified_at, individuals_notified_at, notify_exception, ransom_paid, ransom_paid_at, ransom_reported_at").eq("organisation_id", organisationId).eq("status", "open") : Promise.resolve({ data: [], error: null }),
+        supabase.from("personal_info_holdings").select("id, name, review_on, owner_user_id").eq("organisation_id", organisationId).eq("status", "active"),
+        supabase.from("automated_decisions").select("id, name, review_on, owner_user_id").eq("organisation_id", organisationId).eq("status", "active"),
+      ]);
+      if (hold.error) return;
+      for (const b of (br.data ?? []) as { id: string; title: string; assessment_due_on: string; eligible: boolean | null; oaic_notified_at: string | null; individuals_notified_at: string | null; notify_exception: string | null; ransom_paid: boolean; ransom_paid_at: string | null; ransom_reported_at: string | null }[]) {
+        if (b.ransom_paid && !b.ransom_reported_at) add("privacy", "Ransomware payment: report to the ASD within 72 hours", `r-${b.id}`, b.title, b.ransom_paid_at!.slice(0, 10));
+        if (b.eligible === null) add("privacy", "Possible data breach to assess (30-day limit)", `a-${b.id}`, b.title, b.assessment_due_on);
+        else if (b.eligible && !b.oaic_notified_at) add("privacy", "Eligible data breach: notify the OAIC", `o-${b.id}`, b.title, null);
+        else if (b.eligible && !b.individuals_notified_at && !b.notify_exception) add("privacy", "Eligible data breach: tell the people affected", `i-${b.id}`, b.title, null);
+      }
+      for (const h of [...((hold.data ?? []) as { id: string; name: string; review_on: string | null; owner_user_id: string | null }[]), ...((adm.data ?? []) as { id: string; name: string; review_on: string | null; owner_user_id: string | null }[])]) {
+        if ((h.owner_user_id === userId || (!h.owner_user_id && manage)) && soon(h.review_on, 14)) add("privacy", "Privacy review due", h.id, h.name, h.review_on);
+      }
+    }),
+    safely(async () => {
       // Work health and safety: incidents to assess, notifiable incidents not notified, overdue actions, hazard reviews
       if (!supabase || !manage) return;
       const [inc, haz] = await Promise.all([

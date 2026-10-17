@@ -1861,3 +1861,6 @@ li.voided > *:not(.card):not(.warning-text) { text-decoration: line-through; opa
 /* Brand: the seal sits beside the name */
 .wordmark { display: inline-flex; align-items: center; gap: 10px; }
 .wordmark .seal { flex: none; margin-top: 2px; }
+/* Privacy: checkbox grid for kinds of information, and policy wording */
+.check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 16px; margin: 6px 0 12px; }
+.policy-wording { white-space: pre-wrap; font: inherit; font-size: 0.95rem; background: var(--paper); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; margin: 0 0 12px; }
