@@ -513,12 +513,12 @@ export default function Insurance({ organisationId, organisationName, group, can
       {due.length > 0 && (
         <section className="block">
           <h2>Reminders to send</h2>
-          <p className="muted">Common Seal cannot send email yet, so each reminder opens in your own email. Mark it as sent once it has gone.</p>
+          <p className="muted">VeraPhius cannot send email yet, so each reminder opens in your own email. Mark it as sent once it has gone.</p>
           {due.map((p) => {
             const months = reminderDue(p)!;
             const r = recipients(p);
             const subject = `Insurance renewal: ${p.policy_type} expires ${day(p.period_to)}`;
-            const body = `Dear ${p.responsible_user_id ? "colleague" : "Directors"},\n\nThe ${p.policy_type} policy for ${p.entity_id ? entityName(p.entity_id) : organisationName}${p.insurer ? ` with ${p.insurer}` : ""}${p.policy_number ? ` (policy ${p.policy_number})` : ""} expires on ${day(p.period_to)}, ${months === 1 ? "one month" : `${months} months`} from now.\n\n${p.limit_amount !== null ? `Current limit: ${money(p.limit_amount, p.currency)}${p.limit_basis ? ` ${p.limit_basis}` : ""}.\n\n` : ""}Please arrange the renewal with the broker${p.broker ? ` (${p.broker})` : ""}, and send the new certificate of currency once it is issued so it can be recorded in Common Seal.\n\nKind regards`;
+            const body = `Dear ${p.responsible_user_id ? "colleague" : "Directors"},\n\nThe ${p.policy_type} policy for ${p.entity_id ? entityName(p.entity_id) : organisationName}${p.insurer ? ` with ${p.insurer}` : ""}${p.policy_number ? ` (policy ${p.policy_number})` : ""} expires on ${day(p.period_to)}, ${months === 1 ? "one month" : `${months} months`} from now.\n\n${p.limit_amount !== null ? `Current limit: ${money(p.limit_amount, p.currency)}${p.limit_basis ? ` ${p.limit_basis}` : ""}.\n\n` : ""}Please arrange the renewal with the broker${p.broker ? ` (${p.broker})` : ""}, and send the new certificate of currency once it is issued so it can be recorded in VeraPhius.\n\nKind regards`;
             return (
               <div key={p.id} className="card row spread">
                 <span>

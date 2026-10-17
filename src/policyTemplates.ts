@@ -1,5 +1,5 @@
 // Built-in policy templates. Original wording for Australian companies, laid out
-// in Common Seal's standard sections. They are starting points: anything in
+// in VeraPhius's standard sections. They are starting points: anything in
 // [square brackets] is a placeholder or a drafting note to resolve before
 // approval. [Company Name] is filled in automatically.
 
@@ -32,7 +32,7 @@ type Parts = {
 };
 
 const INTERNAL_CONCERNS =
-  "If you see or suspect a breach, tell your manager, Legal or Compliance, or use the speak-up channel in Common Seal, which can be anonymous. Nobody will be treated badly for raising a concern in good faith.";
+  "If you see or suspect a breach, tell your manager, Legal or Compliance, or use the speak-up channel in VeraPhius, which can be anonymous. Nobody will be treated badly for raising a concern in good faith.";
 const INTERNAL_BREACHES = "Breaches may lead to disciplinary action, up to and including dismissal, and may be reported to the authorities where the law requires it.";
 const EXTERNAL_CONCERNS =
   "Concerns about [Company Name] or its people can be raised with your [Company Name] contact, or confidentially through [the external speak-up channel or email address]. [Company Name] will not take action against anyone for raising a concern in good faith.";
@@ -124,13 +124,13 @@ export const TEMPLATES: Template[] = [
     audience: "internal",
     kind: "policy",
     summary: "When gifts and hospitality can be given or accepted, how they are declared, and how conflicts of interest are managed.",
-    whyNeeded: "Supports the anti-bribery policy and directors' duties to avoid conflicts. The declarations it requires feed the Declarations register in Common Seal.",
+    whyNeeded: "Supports the anti-bribery policy and directors' duties to avoid conflicts. The declarations it requires feed the Declarations register in VeraPhius.",
     content: build({
       purpose: "Gifts, hospitality and personal interests can influence, or look as if they influence, business decisions. This policy says what is acceptable and how to declare it.",
       who: "Directors, employees and contractors of [Company Name] and its subsidiaries.",
       rules: [
         "Gifts and hospitality must be modest, occasional, and never given or accepted to win or keep business.",
-        "Declare every gift or hospitality given or received in connection with work, in Common Seal, within [5] working days.",
+        "Declare every gift or hospitality given or received in connection with work, in VeraPhius, within [5] working days.",
         "Get approval first for anything valued above [AUD 200], or anything involving a public official.",
         "Never give or accept cash, gift cards or other cash equivalents.",
         "Do not give or accept gifts or hospitality during a tender or negotiation with that party.",
@@ -159,8 +159,8 @@ export const TEMPLATES: Template[] = [
         "Personal work-related grievance: a matter about your own employment that does not have wider significance. These generally go through the grievance process, not this policy.",
       ],
       rules: [
-        "You can report to any eligible recipient: [the people appointed in Common Seal to receive reports], a director, the company secretary, an auditor, or [external service].",
-        "You can report anonymously, and stay anonymous throughout. Common Seal's speak-up channel gives you a code to follow up without revealing who you are.",
+        "You can report to any eligible recipient: [the people appointed in VeraPhius to receive reports], a director, the company secretary, an auditor, or [external service].",
+        "You can report anonymously, and stay anonymous throughout. VeraPhius's speak-up channel gives you a code to follow up without revealing who you are.",
         "Your identity, and information likely to identify you, will not be shared without your consent, except as the law allows.",
         "Nobody may cause or threaten detriment to anyone because they made, or might make, a report. Doing so is a breach of this policy and may be an offence.",
         "Reports are assessed promptly, investigated where appropriate by someone independent of the matter, and you will be kept informed as far as possible.",
@@ -318,7 +318,7 @@ export const TEMPLATES: Template[] = [
         "Authority belongs to the position. An acting appointment carries it only if recorded.",
         "Changes to the Financial Approval Matrix or Signing Delegation take effect only once the board has approved or ratified them.",
       ],
-      roles: "The board approves the delegations. [The CFO and Company Secretary] maintain them in Common Seal. Everyone with an authority is responsible for using it properly.",
+      roles: "The board approves the delegations. [The CFO and Company Secretary] maintain them in VeraPhius. Everyone with an authority is responsible for using it properly.",
       related: ["Expenses and corporate cards", "Financial Approval Matrix and Signing Delegation (Authorities)"],
     }),
   },
@@ -431,7 +431,7 @@ export const TEMPLATES: Template[] = [
         "New material risks and incidents are escalated straight away, without waiting for the next review.",
       ],
       roles: "The board sets risk appetite and oversees the framework. [The risk owner or CFO] runs the risk review process. Each risk category's responsible person keeps their risks current.",
-      related: ["Risk Register in Common Seal", "Work health and safety", "Information security and acceptable use"],
+      related: ["Risk Register in VeraPhius", "Work health and safety", "Information security and acceptable use"],
     }),
   },
   {
@@ -453,7 +453,7 @@ export const TEMPLATES: Template[] = [
         "Train procurement and other higher-risk roles.",
         "Review how effective our actions are each year and report them in the modern slavery statement.",
       ],
-      roles: "The board approves the modern slavery statement. [Legal or Procurement] owns this policy and runs the supplier survey in Common Seal.",
+      roles: "The board approves the modern slavery statement. [Legal or Procurement] owns this policy and runs the supplier survey in VeraPhius.",
       related: ["Supplier Code of Conduct", "Employee Code of Conduct"],
     }),
   },

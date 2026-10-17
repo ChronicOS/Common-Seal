@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { AGENT_TYPES, blankQAnswers, openPublicQuestionnaire, Q_TEXT, removeQuestionnaireUpload, submitPublicQuestionnaire, UPLOAD_KINDS, uploadForQuestionnaire, type PublicQuestionnaire, type QAnswers, type Upload, type YesNoDetails } from "./parties";
+import { Brand } from "./Seal";
 
 const day = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
 
@@ -195,7 +196,7 @@ export default function DdQuestionnaire({ token }: { token: string }) {
   return (
     <div className="page">
       <header className="masthead">
-        <span className="wordmark">Common Seal</span>
+        <Brand />
       </header>
       <main className="content">
         {error && (

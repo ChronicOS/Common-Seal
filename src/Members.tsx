@@ -27,8 +27,8 @@ function RolePicker({ idPrefix, value, onChange, canGrantOwner }: { idPrefix: st
 const inviteHref = (email: string, roles: string, org: string) =>
   mailto(
     [email],
-    `You're invited to ${org} on Common Seal`,
-    `Hello,\n\nYou have been invited to join ${org} on Common Seal as ${roles}.\n\nTo join:\n1. Go to ${window.location.origin}\n2. Enter this email address (${email}) and choose "Email me a sign-in link".\n3. Open the link in the email that arrives (check your junk folder if it does not appear within a few minutes).\n\nYou will join automatically the first time you sign in with this address.\n\nThank you`,
+    `You're invited to ${org} on VeraPhius`,
+    `Hello,\n\nYou have been invited to join ${org} on VeraPhius as ${roles}.\n\nTo join:\n1. Go to ${window.location.origin}\n2. Enter this email address (${email}) and choose "Email me a sign-in link".\n3. Open the link in the email that arrives (check your junk folder if it does not appear within a few minutes).\n\nYou will join automatically the first time you sign in with this address.\n\nThank you`,
   );
 
 export default function Members({ organisationId, role, organisationName = "our organisation" }: { organisationId: string; role: string; organisationName?: string }) {
@@ -241,7 +241,7 @@ export default function Members({ organisationId, role, organisationName = "our 
                 <strong>{invited} is invited.</strong> They will join automatically the first time they sign in with that email.
               </p>
               <p>
-                Common Seal does not send the invitation itself yet.{" "}
+                VeraPhius does not send the invitation itself yet.{" "}
                 <a className="link-dark" href={inviteHref(invited, roleLabels(invitedRoles), organisationName)}>
                   Open the invitation email
                 </a>{" "}

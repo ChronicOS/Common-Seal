@@ -1,4 +1,4 @@
-/* Common Seal: paper, ink and sealing wax. System fonts only, so no third-party requests. */
+/* VeraPhius: paper, ink and sealing wax. System fonts only, so no third-party requests. */
 :root {
   --paper: #f6f3ec;
   --card: #fffdf8;
@@ -1858,3 +1858,6 @@ li.voided > *:not(.card):not(.warning-text) { text-decoration: line-through; opa
   .print-sheet { border: 0; max-width: none; padding: 0; }
   .no-print { display: none !important; }
 }
+/* Brand: the seal sits beside the name */
+.wordmark { display: inline-flex; align-items: center; gap: 10px; }
+.wordmark .seal { flex: none; margin-top: 2px; }

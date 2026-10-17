@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { openQuestionnaire, submitQuestionnaire, type Answer, type PublicQuestionnaire } from "./mssurvey";
+import { Brand } from "./Seal";
 
 const day = (iso: string) => new Date(iso.length === 10 ? `${iso}T00:00:00` : iso).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
 
@@ -30,7 +31,7 @@ export default function Questionnaire({ token }: { token: string }) {
   const shell = (children: React.ReactNode) => (
     <div className="page">
       <header className="masthead">
-        <span className="wordmark">Common Seal</span>
+        <Brand />
       </header>
       <main className="content">{children}</main>
     </div>

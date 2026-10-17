@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { deleteItemByLink, finishByLink, openAction, openRequest, saveItemByLink, updateAction, type PublicAction, type PublicRequest } from "./risk";
 import { blankRisk, RiskCard, RiskForm } from "./RiskParts";
+import { Brand } from "./Seal";
 
 const day = (iso: string) => new Date(iso.length === 10 ? `${iso}T00:00:00` : iso).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
 
@@ -8,7 +9,7 @@ function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="page">
       <header className="masthead">
-        <span className="wordmark">Common Seal</span>
+        <Brand />
       </header>
       <main className="content">{children}</main>
     </div>

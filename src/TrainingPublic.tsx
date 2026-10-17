@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { completeByLink, downloadLinkMaterial, openLinkTraining, type LinkTraining } from "./training";
 import TrainingTake from "./TrainingTake";
+import { Brand } from "./Seal";
 
 /** Training completed by personal link, without signing in */
 export default function TrainingPublic({ token }: { token: string }) {
@@ -14,7 +15,7 @@ export default function TrainingPublic({ token }: { token: string }) {
   return (
     <div className="page">
       <header className="masthead">
-        <span className="wordmark">Common Seal</span>
+        <Brand />
       </header>
       <main className="content">
         {error && (

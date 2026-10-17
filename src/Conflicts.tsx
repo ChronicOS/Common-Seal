@@ -384,7 +384,7 @@ export default function Conflicts({ organisationId, role, userId, entities }: Pr
                         {m.name}
                       </option>
                     ))}
-                {canAssess && <option value="other">Someone not in Common Seal…</option>}
+                {canAssess && <option value="other">Someone not in VeraPhius…</option>}
               </select>
             </span>
             {who === "other" && (

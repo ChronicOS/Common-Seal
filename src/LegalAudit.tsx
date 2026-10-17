@@ -52,7 +52,7 @@ function ItemRow({ item, row, actions, evidence, locked, busy, onSave, onAddActi
       {item.help && <p className="muted small">{item.help}</p>}
       {evidence && (
         <p className="evidence small">
-          <strong>Common Seal shows:</strong> {evidence}
+          <strong>VeraPhius shows:</strong> {evidence}
         </p>
       )}
       <div className="row wrap">
@@ -319,7 +319,7 @@ export default function LegalAudit({ organisationId, role, group }: Props) {
     <>
       <p className="eyebrow">Risk and compliance</p>
       <h1>Legal Audit</h1>
-      <p className="lead">A periodic legal compliance review of a company or country, done with local management and signed off by the general manager or finance director. Where Common Seal already holds the answer, it is shown beside the question.</p>
+      <p className="lead">A periodic legal compliance review of a company or country, done with local management and signed off by the general manager or finance director. Where VeraPhius already holds the answer, it is shown beside the question.</p>
       {messages}
       {data.audits.length === 0 ? (
         <p className="muted">No legal audits yet.</p>

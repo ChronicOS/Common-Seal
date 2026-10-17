@@ -4,6 +4,7 @@ import { isConfigured, supabase } from "./supabase";
 import { joinRoles, roleLabels } from "./roles";
 import type { Membership } from "./types";
 import Workspace from "./Workspace";
+import { Brand } from "./Seal";
 
 const ORG_KEY = "common-seal-organisation";
 
@@ -55,7 +56,7 @@ function Shell({ children, wide, email, onSignOut, onPassword, orgSwitch }: Shel
   return (
     <div className="page">
       <header className="masthead">
-        <span className="wordmark">Common Seal</span>
+        <Brand />
         {orgSwitch}
         {email && (
           <span className="account">

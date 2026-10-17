@@ -32,7 +32,7 @@ export type Item = {
   /** Ask who is responsible */
   responsible?: boolean;
   optional?: boolean;
-  /** Evidence Common Seal can show for this question */
+  /** Evidence VeraPhius can show for this question */
   evidence?: EvidenceKey;
 };
 export type Question = { id: string; text: string; help?: string; items: Item[] };
@@ -188,7 +188,7 @@ export async function startFollowUp(id: string, title: string): Promise<string> 
   return data as string;
 }
 
-/** What Common Seal already holds that bears on a question. Each is best-effort: anything not readable is left out. */
+/** What VeraPhius already holds that bears on a question. Each is best-effort: anything not readable is left out. */
 export type Evidence = Partial<Record<EvidenceKey, string>>;
 export async function loadEvidence(organisationId: string): Promise<Evidence> {
   const client = db();

@@ -677,11 +677,11 @@ export default function Policies({ organisationId, organisationName, role, userI
           <p className={upload.titleFound ? "card note" : "card warning"} role="status">
             {upload.titleFound ? "The name below was read from the document." : "No title was found in the document, so the file name is used."}{" "}
             {upload.dateFound ? "So was the date it is current from." : "No effective or approval date was found: enter it, or leave it blank to use today."}{" "}
-            {upload.text.trim().length < 20 ? "The text could not be read (it may be a scan), so the policy will be the document only." : "Its text is kept so it can be read in Common Seal."}
+            {upload.text.trim().length < 20 ? "The text could not be read (it may be a scan), so the policy will be the document only." : "Its text is kept so it can be read in VeraPhius."}
           </p>
           <label htmlFor="up-target">This is</label>
           <select id="up-target" value={upTarget} onChange={(e) => setUpTarget(e.target.value)}>
-            <option value="">A policy not yet in Common Seal</option>
+            <option value="">A policy not yet in VeraPhius</option>
             {current.map((p) => (
               <option key={p.id} value={p.id}>
                 A new version of: {p.title}

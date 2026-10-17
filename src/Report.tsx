@@ -70,7 +70,7 @@ export default function Report({ organisationId, organisationName }: { organisat
       <p className="eyebrow">Board assurance report</p>
       <h1>{organisationName}</h1>
       <p className="lead">
-        Prepared {formatDay(today())} from the records held in Common Seal.{" "}
+        Prepared {formatDay(today())} from the records held in VeraPhius.{" "}
         <button type="button" className="quiet no-print" onClick={() => window.print()}>
           Print or save as PDF
         </button>

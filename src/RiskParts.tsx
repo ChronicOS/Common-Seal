@@ -24,7 +24,7 @@ type FormProps = {
   onDelete?: () => void;
 };
 
-/** One risk: Risk; Actions, Controls, Mitigations; Due date; optional actioner. Used on the personal link and inside Common Seal. */
+/** One risk: Risk; Actions, Controls, Mitigations; Due date; optional actioner. Used on the personal link and inside VeraPhius. */
 export function RiskForm({ idPrefix, initial, examples, comment, isSaved, busy, onSave, onCancel, onDelete }: FormProps) {
   const [v, setV] = useState(initial);
   const [error, setError] = useState<string | null>(null);

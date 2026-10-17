@@ -774,7 +774,7 @@ export default function Training({ organisationId, organisationName, role, userI
         <>
           <section className="block">
             <h2>Roster</h2>
-            <p className="muted">Everyone who can be assigned training. Common Seal members are added automatically; add anyone else here. People without an account complete training by a personal link.</p>
+            <p className="muted">Everyone who can be assigned training. VeraPhius members are added automatically; add anyone else here. People without an account complete training by a personal link.</p>
             <datalist id="tr-functions">
               {[...new Set([...DEFAULT_FUNCTIONS, ...functionsInUse])].map((f) => (
                 <option key={f} value={f} />
@@ -1021,7 +1021,7 @@ export default function Training({ organisationId, organisationName, role, userI
       {section === "reminders" && (
         <section className="block">
           <h2>Reminders to send</h2>
-          <p className="muted">7 days before the due date, on the due date, then weekly while overdue with the manager copied. Common Seal cannot send email yet, so each opens in your own email; mark it as sent once it has gone.</p>
+          <p className="muted">7 days before the due date, on the due date, then weekly while overdue with the manager copied. VeraPhius cannot send email yet, so each opens in your own email; mark it as sent once it has gone.</p>
           {reminders.length === 0 ? (
             <p className="muted">Nothing to send today.</p>
           ) : (

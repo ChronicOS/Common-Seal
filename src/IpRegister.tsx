@@ -231,7 +231,7 @@ export default function IpRegister({ organisationId, role, userId, group }: Prop
         canEdit ? (
           <div className="form">
             <h2>Set up the password vault</h2>
-            <p className="muted small">Passwords for domains and accounts are encrypted in your browser with this passphrase before they are saved. Common Seal never sees the passphrase. Share it only with the people who need it, outside Common Seal (for example in a password manager). If it is lost, the stored passwords cannot be recovered.</p>
+            <p className="muted small">Passwords for domains and accounts are encrypted in your browser with this passphrase before they are saved. VeraPhius never sees the passphrase. Share it only with the people who need it, outside VeraPhius (for example in a password manager). If it is lost, the stored passwords cannot be recovered.</p>
             <div className="row wrap">
               <input type="password" aria-label="Vault passphrase" placeholder="Passphrase (at least 12 characters)" autoComplete="new-password" value={pass.a} onChange={(e) => setPass({ ...pass, a: e.target.value })} />
               <input type="password" aria-label="Repeat the passphrase" placeholder="Repeat it" autoComplete="new-password" value={pass.b} onChange={(e) => setPass({ ...pass, b: e.target.value })} />

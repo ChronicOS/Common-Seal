@@ -45,7 +45,7 @@ async function docxRead(file: File): Promise<{ title: string | null; lines: stri
     if (!text) continue;
     const style = p.getElementsByTagNameNS(W, "pStyle")[0]?.getAttributeNS(W, "val") ?? p.getElementsByTagNameNS(W, "pStyle")[0]?.getAttribute("w:val") ?? "";
     if (/^title$/i.test(style) && !headingTitle) headingTitle = text;
-    // Word headings become sections in Common Seal
+    // Word headings become sections in VeraPhius
     out.push(/^(heading1|heading 1|title)$/i.test(style) ? `# ${text}` : /^heading\s?[23]$/i.test(style) ? text : text);
   }
   const coreTitle = /<dc:title>([^<]{3,150})<\/dc:title>/.exec(core)?.[1]?.trim() ?? null;

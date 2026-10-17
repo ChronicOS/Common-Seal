@@ -110,7 +110,7 @@ function SendTo({ initial, isDefault, busy, href, onSave }: { initial: string[];
           </a>
         )}
       </div>
-      <p className="muted">Common Seal cannot attach the file for you yet: download the PowerPoint above and attach it to the email.</p>
+      <p className="muted">VeraPhius cannot attach the file for you yet: download the PowerPoint above and attach it to the email.</p>
     </section>
   );
 }
@@ -733,7 +733,7 @@ export default function RiskRegister({ organisationId, organisationName, role, u
             initial={r.send_to ?? (ownerEmail ? [ownerEmail] : [])}
             isDefault={!r.send_to}
             busy={busy}
-            href={(list) => mailto(list, `${r.name}: risk report${r.status === "final" ? "" : " (draft)"}`, `Please find attached the risk report for ${r.name}${r.status === "final" ? "" : ", in draft"}.\n\n[Attach the PowerPoint file downloaded from Common Seal before sending.]\n`)}
+            href={(list) => mailto(list, `${r.name}: risk report${r.status === "final" ? "" : " (draft)"}`, `Please find attached the risk report for ${r.name}${r.status === "final" ? "" : ", in draft"}.\n\n[Attach the PowerPoint file downloaded from VeraPhius before sending.]\n`)}
             onSave={(list) => void run(() => setReportRecipients(r.id, list), "Saved who the report goes to.")}
           />
         )}

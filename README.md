@@ -1,4 +1,4 @@
-# Common Seal
+# VeraPhius
 
 Board, company secretarial and compliance on one record. This repository holds the web app and the database migrations.
 

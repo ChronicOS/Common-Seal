@@ -729,7 +729,7 @@ export default function Sanctions({ organisationId, role, userId, group }: Props
             </a>
           </span>
         ))}
-        . Common Seal does not screen against the lists itself; record the result of your screening here.
+        . VeraPhius does not screen against the lists itself; record the result of your screening here.
       </p>
     </>
   );
