@@ -8,8 +8,15 @@ import type { Entity } from "./types";
 const day = (iso: string | null | undefined) => (iso ? formatDay(`${iso.slice(0, 10)}T12:00:00`) : "");
 const acn = (e: Entity) => (e.acn ? `${e.acn.slice(0, 3)} ${e.acn.slice(3, 6)} ${e.acn.slice(6)}` : null);
 
+/** The organisation's logo and details for the top of printed documents (Settings, Account) */
+let printHeader: { logo: string | null; legalName: string | null; abn: string | null } | null = null;
+export function setPrintHeader(h: typeof printHeader) {
+  printHeader = h;
+}
+
 /** A full-screen sheet with Print and Close. Printing shows only the sheet. */
 export function PrintView({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  const h = printHeader;
   return (
     <div className="print-view" role="dialog" aria-label={title}>
       <div className="print-toolbar no-print">
@@ -19,7 +26,15 @@ export function PrintView({ title, onClose, children }: { title: string; onClose
           <button type="button" className="quiet" onClick={onClose}>Close</button>
         </span>
       </div>
-      <div className="print-sheet">{children}</div>
+      <div className="print-sheet">
+        {h && (h.logo || h.legalName) && (
+          <div className="print-letterhead">
+            {h.logo && <img src={h.logo} alt="" />}
+            {h.legalName && <span>{h.legalName}{h.abn ? ` · ABN ${h.abn.replace(/^(\d{2})(\d{3})(\d{3})(\d{3})$/, "$1 $2 $3 $4")}` : ""}</span>}
+          </div>
+        )}
+        {children}
+      </div>
     </div>
   );
 }

@@ -18,6 +18,23 @@ checks (check_name, ok, detail) as (
          case when to_regclass('public.' || e.marker) is null then 'Table ' || e.marker || ' is missing' else '' end
   from expected e
   union all
+  select 'Migration 0060 has been run',
+         to_regclass('public.sign_in_events') is not null and to_regprocedure('public.my_memberships()') is not null, ''
+  union all
+  select 'Two-step sign-in and access end dates are enforced by the database',
+         to_regprocedure('app.mfa_ok(uuid, public.member_role, public.member_role[])') is null
+         or (pg_get_functiondef('app.is_member(uuid)'::regprocedure) like '%mfa_ok%' and pg_get_functiondef('app.is_member(uuid)'::regprocedure) like '%access_ends_on%'
+             and pg_get_functiondef('app.has_role(uuid, public.member_role[])'::regprocedure) like '%mfa_ok%'), ''
+  union all
+  select 'Sign-in history is not directly readable',
+         to_regclass('public.sign_in_events') is null
+         or (not has_table_privilege('authenticated', 'public.sign_in_events', 'select') and not has_table_privilege('anon', 'public.sign_in_events', 'select')), ''
+  union all
+  select 'Agreement acceptance and closure requests can only be made through their functions',
+         not has_column_privilege('authenticated', 'public.organisations', 'id', 'update')
+         and (not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'organisations' and column_name = 'terms_accepted_at')
+              or (not has_column_privilege('authenticated', 'public.organisations', 'terms_accepted_at', 'update') and not has_column_privilege('authenticated', 'public.organisations', 'close_requested_at', 'update'))), ''
+  union all
   select 'Migration 0059 has been run',
          not has_column_privilege('authenticated', 'public.organisations', 'data_region', 'update'), ''
   union all

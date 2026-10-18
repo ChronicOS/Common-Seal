@@ -53,6 +53,9 @@ import { ClimateReporting, ConsumerLaw, EmploymentLaw } from "./RegulatoryPages"
 import Parties from "./Parties";
 import { loadPartySummary, type PartySummary } from "./parties";
 import Register from "./Register";
+import { setPrintHeader } from "./RegisterDocs";
+import { loadOrgSettings } from "./settings";
+import { DataPrivacy, DefaultsSettings, EmailSettings, Integrations, MyProfile, SecuritySettings } from "./Settings";
 import { loadRiskSummary, type RiskSummary } from "./risk";
 import { day as insDay, loadInsuranceSummary, type InsuranceSummary } from "./insurance";
 import type { GroupData, Membership } from "./types";
@@ -63,13 +66,20 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Tab =
   | "overview" | "company" | "authorities" | "insurance" | "foryou" | "report" | "modernslavery" | "oldregister" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
-  | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "conflicts" | "expenses" | "speakup" | "people" | "keyemployees" | "keycontracts" | "disputes" | "sanctions" | "legalaudit" | "ip" | "ownership" | "companyregister" | "calendar" | "whs" | "privacy" | "abc" | "employment" | "consumer" | "climate" | "mergers" | "confidential" | "account";
+  | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "conflicts" | "expenses" | "speakup" | "people" | "keyemployees" | "keycontracts" | "disputes" | "sanctions" | "legalaudit" | "ip" | "ownership" | "companyregister" | "calendar" | "whs" | "privacy" | "abc" | "employment" | "consumer" | "climate" | "mergers" | "confidential" | "account" | "profile" | "security" | "defaults" | "emails" | "integrations" | "data";
 const SECTIONS = ["Company", "Board", "Risk and compliance", "Contracts", "Third parties", "Conduct"] as const;
-const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = [
+const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] | "Settings" }[] = [
   { id: "foryou", label: "For you" },
   { id: "overview", label: "Overview" },
   { id: "confidential", label: "Confidential projects" },
-  { id: "account", label: "Account settings" },
+  { id: "profile", label: "My profile", section: "Settings" },
+  { id: "account", label: "Account", section: "Settings" },
+  { id: "people", label: "People and access", section: "Settings" },
+  { id: "security", label: "Security", section: "Settings" },
+  { id: "defaults", label: "Defaults and set-up", section: "Settings" },
+  { id: "emails", label: "Email and notifications", section: "Settings" },
+  { id: "integrations", label: "Integrations", section: "Settings" },
+  { id: "data", label: "Data and privacy", section: "Settings" },
   { id: "company", label: "Company Info", section: "Company" },
   { id: "ownership", label: "Ownership", section: "Company" },
   { id: "companyregister", label: "Company register", section: "Company" },
@@ -78,7 +88,6 @@ const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = 
   { id: "ip", label: "IP Register", section: "Company" },
   { id: "meetings", label: "Meetings", section: "Board" },
   { id: "report", label: "Board report", section: "Board" },
-  { id: "people", label: "Appointments", section: "Board" },
   { id: "authorities", label: "Authorities", section: "Board" },
   { id: "calendar", label: "Compliance calendar", section: "Risk and compliance" },
   { id: "register", label: "Risk Register", section: "Risk and compliance" },
@@ -108,7 +117,7 @@ const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = 
   { id: "expenses", label: "Expenses", section: "Conduct" },
 ];
 
-export default function Workspace({ membership, userId, userName, onPassword }: { membership: Membership; userId: string; userName: string; onPassword: () => void }) {
+export default function Workspace({ membership, userId, userName }: { membership: Membership; userId: string; userName: string }) {
   const { organisation, role } = membership;
   setPickerOrganisation(organisation.id);
   const canEdit = has(role, ...RECORDS_ROLES);
@@ -118,6 +127,10 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
   const [employeesSub, setEmployeesSub] = useState<EmployeesSub>("key");
   // Sections the person has opened by clicking. All start closed; the one holding the current page is marked.
   const [openSections, setOpenSections] = useState<string[]>([]);
+  useEffect(() => {
+    setPrintHeader(null);
+    void loadOrgSettings(organisation.id).then((o) => setPrintHeader(o ? { logo: o.logo_data_url, legalName: o.legal_name, abn: o.abn } : null), () => undefined);
+  }, [organisation.id, tab === "account"]);
   // Speak up is never shown to others: being seen there could identify a reporter or a handler
   const others = usePresence(organisation.id, userId, userName, tab === "speakup" || (tab === "keyemployees" && employeesSub === "investigations") ? null : tab);
   const [data, setData] = useState<GroupData | null>(null);
@@ -250,15 +263,10 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
       })}
       <div className="nav-section solo">{item(TABS.find((t) => t.id === "confidential")!)}</div>
       <div className={openSections.includes("Settings") ? "nav-section open" : "nav-section"}>
-        <button type="button" className="nav-head" aria-expanded={openSections.includes("Settings")} onClick={() => setOpenSections((list) => (list.includes("Settings") ? list.filter((x) => x !== "Settings") : [...list, "Settings"]))}>
+        <button type="button" className={TABS.some((t) => t.section === "Settings" && t.id === tab) ? "nav-head on" : "nav-head"} aria-expanded={openSections.includes("Settings")} onClick={() => setOpenSections((list) => (list.includes("Settings") ? list.filter((x) => x !== "Settings") : [...list, "Settings"]))}>
           Settings
         </button>
-        <div className="nav-items">
-          {item(TABS.find((t) => t.id === "account")!)}
-          <button type="button" className="tab" onClick={onPassword}>
-            Password
-          </button>
-        </div>
+        <div className="nav-items">{TABS.filter((t) => t.section === "Settings").map(item)}</div>
       </div>
     </nav>
   );
@@ -406,12 +414,19 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
     );
   }
 
-  if (tab === "account") {
+  if (tab === "account" || tab === "profile" || tab === "security" || tab === "defaults" || tab === "emails" || tab === "integrations" || tab === "data") {
+    const p = { organisationId: organisation.id, role, userId };
     return (
       <div className="workspace">
         {nav}
         <div className="workspace-main">
-          <AccountSettings organisation={organisation} role={role} userId={userId} onPassword={onPassword} />
+          {tab === "account" ? <AccountSettings organisation={organisation} role={role} userId={userId} />
+            : tab === "profile" ? <MyProfile {...p} email={userName} />
+            : tab === "security" ? <SecuritySettings {...p} />
+            : tab === "defaults" ? <DefaultsSettings {...p} onOpen={(t) => go(t as Tab)} />
+            : tab === "emails" ? <EmailSettings {...p} />
+            : tab === "integrations" ? <Integrations />
+            : <DataPrivacy {...p} />}
         </div>
       </div>
     );

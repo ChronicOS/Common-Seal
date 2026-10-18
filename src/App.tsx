@@ -5,6 +5,8 @@ import { joinRoles, roleLabels } from "./roles";
 import type { Membership } from "./types";
 import Workspace from "./Workspace";
 import { Brand } from "./Seal";
+import { TwoStep } from "./Settings";
+import { loadFactors, loadMySecurity, recordSignIn } from "./settings";
 
 const ORG_KEY = "common-seal-organisation";
 
@@ -312,6 +314,35 @@ function ChooseOrganisation({ memberships, onChoose, onCreate }: { memberships: 
   );
 }
 
+/** Signs out after the organisation's idle time, with a minute's warning */
+function IdleGuard({ organisationId }: { organisationId: string }) {
+  const [minutes, setMinutes] = useState<number | null>(null);
+  const [warning, setWarning] = useState(false);
+  useEffect(() => {
+    void loadMySecurity(organisationId).then((s) => setMinutes(s?.idle_timeout_minutes ?? null));
+  }, [organisationId]);
+  useEffect(() => {
+    if (!minutes) return;
+    let last = Date.now();
+    const touch = () => {
+      last = Date.now();
+      setWarning(false);
+    };
+    const events = ["pointerdown", "keydown", "scroll", "touchstart"];
+    events.forEach((e) => window.addEventListener(e, touch, { passive: true }));
+    const timer = window.setInterval(() => {
+      const idle = Date.now() - last;
+      if (idle >= minutes * 60_000) void supabase?.auth.signOut();
+      else setWarning(idle >= minutes * 60_000 - 60_000);
+    }, 5000);
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, touch));
+      window.clearInterval(timer);
+    };
+  }, [minutes]);
+  return warning ? <p className="card note idle-warning" role="alert">You will be signed out in under a minute because nothing has happened for a while. Click anywhere to stay signed in.</p> : null;
+}
+
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
@@ -336,6 +367,14 @@ export default function App() {
   }, []);
 
   const userId = session?.user.id;
+  const accessToken = session?.access_token;
+  // Someone who has set up two-step sign-in is asked for a code before anything else
+  const [needsCode, setNeedsCode] = useState(false);
+  useEffect(() => {
+    if (!accessToken || !userId) return;
+    void loadFactors().then((f) => setNeedsCode(f.next === "aal2" && f.level !== "aal2"), () => setNeedsCode(false));
+    void recordSignIn(accessToken, userId);
+  }, [accessToken, userId]);
 
   const loadMemberships = useCallback(async () => {
     if (!supabase || !userId) return;
@@ -346,6 +385,15 @@ export default function App() {
       () => undefined,
     );
     const client = supabase;
+    // Migration 0060: your organisations, including any waiting for two-step sign-in
+    const mine = await client.rpc("my_memberships");
+    if (!mine.error) {
+      type Row = { organisation_id: string; name: string; tier: string; data_region: string; role: string; extra_roles: string[] | null; locked: string | null };
+      const list = ((mine.data ?? []) as Row[]).map((m) => ({ role: joinRoles(m.role, m.extra_roles), locked: m.locked, organisation: { id: m.organisation_id, name: m.name, tier: m.tier, data_region: m.data_region } }));
+      setMemberships(list);
+      if (list.length > 1 && !chosenThisVisit()) setChoosing(true);
+      return;
+    }
     const read = (columns: string) => client.from("memberships").select(`${columns}, organisation:organisations(id, name, tier, data_region)`).eq("user_id", userId).eq("is_active", true);
     let { data, error } = await read("role, extra_roles");
     // Before the multiple-roles migration has been run there is no extra_roles column
@@ -381,7 +429,19 @@ export default function App() {
   };
 
   let body: ReactNode;
-  if (showPassword) {
+  if (needsCode) {
+    body = (
+      <>
+        <h1>Two-step sign-in</h1>
+        <section className="card form">
+          <TwoStep compact onVerified={() => {
+            setNeedsCode(false);
+            void loadMemberships();
+          }} />
+        </section>
+      </>
+    );
+  } else if (showPassword) {
     body = <PasswordForm onClose={() => setShowPassword(false)} />;
   } else if (loadError) {
     body = (
@@ -403,11 +463,26 @@ export default function App() {
     );
   } else if (choosing && several) {
     body = <ChooseOrganisation memberships={memberships} onChoose={choose} onCreate={() => setCreating(true)} />;
+  } else if (current.locked === "mfa") {
+    body = (
+      <>
+        <h1>Two-step sign-in needed</h1>
+        <p className="lead">{current.organisation.name} asks everyone in your role to use an authenticator app. Set one up to continue. It takes about a minute.</p>
+        <section className="card form">
+          <TwoStep compact onVerified={() => void loadMemberships()} />
+        </section>
+      </>
+    );
   } else {
-    body = <Workspace key={current.organisation.id} membership={current} userId={session.user.id} userName={session.user.email ?? "Someone"} onPassword={() => setShowPassword(true)} />;
+    body = (
+      <>
+        <IdleGuard organisationId={current.organisation.id} />
+        <Workspace key={current.organisation.id} membership={current} userId={session.user.id} userName={session.user.email ?? "Someone"} />
+      </>
+    );
   }
 
-  const inWorkspace = Boolean(current) && !showPassword && !creating && !(choosing && several);
+  const inWorkspace = Boolean(current) && !showPassword && !creating && !(choosing && several) && !needsCode && current?.locked !== "mfa";
   const orgSwitch =
     current && memberships ? (
       <span className="org-picker">
@@ -443,7 +518,7 @@ export default function App() {
       orgSwitch={orgSwitch}
       email={session.user.email}
       onSignOut={() => void client.auth.signOut()}
-      // Inside an organisation, Password lives under Settings in the side menu
+      // Inside an organisation, Password lives under Settings, My profile
       onPassword={current ? undefined : () => setShowPassword(true)}
     >
       {body}

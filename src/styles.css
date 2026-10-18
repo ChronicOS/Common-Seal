@@ -1874,3 +1874,8 @@ li.voided > *:not(.card):not(.warning-text) { text-decoration: line-through; opa
 .tier-card h3 { margin-top: 0; }
 .tier-card.on { border: 2px solid var(--wax); }
 .tier-card ul { padding-left: 18px; margin: 4px 0 10px; }
+
+/* Settings */
+.print-letterhead { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #cfc8b8; padding-bottom: 12px; margin-bottom: 20px; font-size: 13px; color: #44524e; }
+.print-letterhead img { max-height: 44px; max-width: 220px; }
+.idle-warning { position: fixed; bottom: 16px; left: 16px; right: 16px; max-width: 560px; margin: 0 auto; z-index: 50; }

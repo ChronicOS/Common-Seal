@@ -1,6 +1,6 @@
 export type Organisation = { id: string; name: string; tier: string; data_region: string };
 /** role holds every role the person has here, comma separated; read it with the helpers in roles.ts */
-export type Membership = { role: string; organisation: Organisation };
+export type Membership = { role: string; organisation: Organisation; /** "mfa" when the organisation needs two-step sign-in this session does not have yet */ locked?: string | null };
 
 export type EntityForm =
   | "proprietary_company"

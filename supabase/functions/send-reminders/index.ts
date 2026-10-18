@@ -14,7 +14,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 type Item = { area: string; what: string; due: string | null };
-type Row = { organisation_id: string; organisation_name: string; user_id: string; email: string; full_name: string; items: Item[]; item_keys: string[] };
+type Row = { organisation_id: string; organisation_name: string; user_id: string; email: string; full_name: string; items: Item[]; item_keys: string[]; email_footer?: string | null; reply_to?: string | null };
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const day = (iso: string | null) => (iso ? new Date(`${iso}T12:00:00`).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }) : "");
@@ -29,14 +29,16 @@ function message(r: Row, site: string) {
     `${n === 1 ? "This is" : "These are"} waiting for you in VeraPhius for ${r.organisation_name}:`,
     ...r.items.map((i) => `- ${i.area}: ${line(i)}`),
     `Open VeraPhius: ${site}`,
-    `You get this email only when something needs you. To change how often, open For you in VeraPhius.`,
+    `You get this email only when something needs you. To change how often or which areas, open Settings, My profile in VeraPhius.`,
+    ...(r.email_footer ? [r.email_footer] : []),
   ].join("\n\n");
   const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#10231f;max-width:560px">
 <p>Hello ${esc(r.full_name)},</p>
 <p>${n === 1 ? "This is" : "These are"} waiting for you in VeraPhius for <strong>${esc(r.organisation_name)}</strong>:</p>
 <ul>${r.items.map((i) => `<li><strong>${esc(i.area)}:</strong> ${esc(line(i))}</li>`).join("")}</ul>
 <p><a href="${esc(site)}" style="color:#b4472e">Open VeraPhius</a></p>
-<p style="color:#44524e;font-size:13px">You get this email only when something needs you. To change how often, open For you in VeraPhius.</p>
+<p style="color:#44524e;font-size:13px">You get this email only when something needs you. To change how often or which areas, open Settings, My profile in VeraPhius.</p>
+${r.email_footer ? `<p style="color:#44524e;font-size:12px;white-space:pre-line">${esc(r.email_footer)}</p>` : ""}
 </div>`;
   return { subject, text, html };
 }
@@ -60,7 +62,7 @@ Deno.serve(async (req) => {
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ from, to: [r.email], subject: m.subject, text: m.text, html: m.html }),
+        body: JSON.stringify({ from, to: [r.email], subject: m.subject, text: m.text, html: m.html, ...(r.reply_to ? { reply_to: r.reply_to } : {}) }),
       });
       if (!res.ok) {
         failed.push(`${r.email}: ${res.status}`);

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { mailto } from "./risk";
 import { formatDay, inviteMember, loadInvitations, loadMembers, revokeInvitation, setMemberRoles, type Invitation, type Member } from "./board";
 import { has, roleLabel, roleLabels, roleList, ROLES } from "./roles";
+import { loadAccessEnds, setAccessEnd } from "./settings";
 
 /** Tick boxes for one or more roles. */
 function RolePicker({ idPrefix, value, onChange, canGrantOwner }: { idPrefix: string; value: string[]; onChange: (roles: string[]) => void; canGrantOwner: boolean }) {
@@ -47,11 +48,16 @@ export default function Members({ organisationId, role, organisationName = "our 
   const [invited, setInvited] = useState<string | null>(null);
   const [invitedRoles, setInvitedRoles] = useState("");
   const [handingOver, setHandingOver] = useState(false);
+  const [ends, setEnds] = useState<Record<string, string | null>>({});
+  const [endOn, setEndOn] = useState("");
 
   const reload = useCallback(async () => {
     try {
       setMembers(await loadMembers(organisationId));
-      if (canInvite) setInvitations(await loadInvitations(organisationId));
+      if (canInvite) {
+        setInvitations(await loadInvitations(organisationId));
+        setEnds(await loadAccessEnds(organisationId));
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load people.");
     }
@@ -95,6 +101,7 @@ export default function Members({ organisationId, role, organisationName = "our 
     setHandingOver(false);
     setAssignee(userId);
     setAssignRoles(roleList(members?.find((m) => m.user_id === userId)?.role ?? ""));
+    setEndOn(ends[userId] ?? "");
     setMode("assign");
     setError(null);
     setDone(null);
@@ -107,8 +114,9 @@ export default function Members({ organisationId, role, organisationName = "our 
 
   return (
     <>
-      <p className="eyebrow">Board</p>
-      <h1>Appointments</h1>
+      <p className="eyebrow">Settings</p>
+      <h1>People and access</h1>
+      <p className="lead">Who can sign in, and what they can do. Officeholders (directors, secretaries) are recorded in Company register.</p>
       {members === null && !error && <p className="lead">Loading…</p>}
       {members && (
         <ul className="entity-list">
@@ -121,6 +129,7 @@ export default function Members({ organisationId, role, organisationName = "our 
                     {roleLabel(r)}
                   </span>
                 ))}
+                {ends[m.user_id] && <span className={ends[m.user_id]! < new Date().toISOString().slice(0, 10) ? "chip warning-text" : "chip"}>{ends[m.user_id]! < new Date().toISOString().slice(0, 10) ? "Access ended" : "Access ends"} {formatDay(`${ends[m.user_id]}T12:00:00`)}</span>}
                 {canInvite && (
                   <button type="button" className="link-dark" aria-label={`Change roles for ${m.name}`} onClick={() => choose(m.user_id)}>
                     Change roles
@@ -224,6 +233,20 @@ export default function Members({ organisationId, role, organisationName = "our 
                     )}
                     {!handingOver && <button type="button" className="quiet" disabled={busy} onClick={() => setHandingOver(true)}>Hand over responsibilities</button>}
                   </div>
+                  {chosen.is_active && !handingOver && (
+                    <div className="row wrap">
+                      <span className="field">
+                        <label htmlFor="member-ends">Access ends on (optional)</label>
+                        <input id="member-ends" type="date" min={new Date().toISOString().slice(0, 10)} value={endOn} onChange={(e) => setEndOn(e.target.value)} />
+                      </span>
+                      {endOn !== (ends[chosen.user_id] ?? "") && (
+                        <button type="button" className="quiet" disabled={busy} onClick={() => void act(() => setAccessEnd(organisationId, chosen.user_id, endOn || null).then(() => setDone(endOn ? `${chosen.name} can sign in until the end of ${formatDay(`${endOn}T12:00:00`)}.` : `${chosen.name}'s access no longer has an end date.`)))}>
+                          {endOn ? "Set end date" : "Remove end date"}
+                        </button>
+                      )}
+                      <p className="small muted">Useful for auditors and advisers. After this date they cannot open anything, and they stop getting emails.</p>
+                    </div>
+                  )}
                   {handingOver && (
                     <Handover organisationId={organisationId} person={{ user_id: chosen.user_id, name: chosen.name, is_active: chosen.is_active }}
                       people={(members ?? []).map((m) => ({ user_id: m.user_id, name: m.name, is_active: m.is_active }))} busy={busy} onCancel={() => setHandingOver(false)}
