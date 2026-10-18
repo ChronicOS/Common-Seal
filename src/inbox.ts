@@ -143,6 +143,39 @@ export async function loadInbox(organisationId: string, role: string, userId: st
       }
     }),
     safely(async () => {
+      // Confidential projects (code names only): my notices to acknowledge or deletion to confirm; for the lead and the
+      // legal contact (or the directors), anything in the protocol that has not been followed
+      if (!supabase) return;
+      const [projects, members] = await Promise.all([
+        supabase.from("conf_projects").select("id, code_name, status, lead_user_id, legal_user_id, expected_close_on, kickoff_issued_at, closure_issued_at, closure_needs_deletion, conf_ends_on, ended_notice_at, dl_address, dl_synced_at").eq("organisation_id", organisationId),
+        supabase.from("conf_members").select("id, project_id, user_id, added_at, removed_at, acknowledged_at, closure_confirmed_at").eq("organisation_id", organisationId),
+      ]);
+      if (projects.error) return;
+      const ms = (members.data ?? []) as { id: string; project_id: string; user_id: string | null; added_at: string; removed_at: string | null; acknowledged_at: string | null; closure_confirmed_at: string | null }[];
+      const ago = (iso: string, days: number) => Date.now() - new Date(iso).getTime() > days * 864e5;
+      for (const p of (projects.data ?? []) as { id: string; code_name: string; status: string; lead_user_id: string; legal_user_id: string | null; expected_close_on: string | null; kickoff_issued_at: string | null; closure_issued_at: string | null; closure_needs_deletion: boolean; conf_ends_on: string | null; ended_notice_at: string | null; dl_address: string | null; dl_synced_at: string | null }[]) {
+        const name = `Project ${p.code_name}`;
+        const team = ms.filter((m) => m.project_id === p.id);
+        const me = team.find((m) => m.user_id === userId && !m.removed_at);
+        if (me && p.kickoff_issued_at && !me.acknowledged_at && p.status !== "closed") add("confidential", "Acknowledge the confidentiality notice", `ca-${me.id}`, name, null);
+        if (me && p.closure_issued_at && p.closure_needs_deletion && me.acknowledged_at && !me.closure_confirmed_at) add("confidential", "Confirm you have deleted the project material", `cc-${me.id}`, name, null);
+        const isLead = p.lead_user_id === userId;
+        const isEscalation = !isLead && (p.legal_user_id === userId || (!p.legal_user_id && has(role, "director")));
+        if (!isLead && !isEscalation) continue;
+        // The lead hears straight away; the legal contact once it has gone unfixed (escalation)
+        const pre = isLead ? "" : "Escalated: ";
+        const unacked = team.filter((m) => !m.removed_at && !m.acknowledged_at && p.kickoff_issued_at && (isLead || ago(m.added_at, 5)));
+        if (p.status !== "closed" && unacked.length) add("confidential", `${pre}${unacked.length} not acknowledged the confidentiality notice`, `cu-${p.id}`, name, null);
+        if (isLead && p.status === "open" && !p.kickoff_issued_at && ago(team[0]?.added_at ?? new Date().toISOString(), 2)) add("confidential", "Issue the confidentiality notice", `ck-${p.id}`, name, null);
+        if (p.status === "open" && p.expected_close_on && (isLead ? soon(p.expected_close_on, 7) : p.expected_close_on < t)) add("confidential", `${pre}Close, extend or pause the project`, `ce-${p.id}`, name, p.expected_close_on);
+        const dlChanges = p.dl_address && p.status !== "closed" && team.some((m) => (m.added_at > (p.dl_synced_at ?? "") || (m.removed_at ?? "") > (p.dl_synced_at ?? "")) && (isLead || ago(m.removed_at ?? m.added_at, 3)));
+        if (dlChanges) add("confidential", `${pre}Update the distribution list`, `cd-${p.id}`, name, null);
+        const outstanding = p.closure_issued_at && p.closure_needs_deletion && (isLead || ago(p.closure_issued_at, 14)) ? team.filter((m) => m.acknowledged_at && !m.closure_confirmed_at).length : 0;
+        if (outstanding) add("confidential", `${pre}${outstanding} deletion confirmation${outstanding === 1 ? "" : "s"} outstanding`, `co-${p.id}`, name, null);
+        if (p.status === "closed" && p.conf_ends_on && p.conf_ends_on <= t && !p.ended_notice_at) add("confidential", "Confidentiality has ended: tell the team", `cx-${p.id}`, name, p.conf_ends_on);
+      }
+    }),
+    safely(async () => {
       // Regulatory checks I own due for review; standard form contracts to review; acquisitions needing ACCC approval
       if (!supabase) return;
       const [checks, sfc, deals] = await Promise.all([
