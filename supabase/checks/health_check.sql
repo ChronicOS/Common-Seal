@@ -18,6 +18,9 @@ checks (check_name, ok, detail) as (
          case when to_regclass('public.' || e.marker) is null then 'Table ' || e.marker || ' is missing' else '' end
   from expected e
   union all
+  select 'Migration 0059 has been run',
+         not has_column_privilege('authenticated', 'public.organisations', 'data_region', 'update'), ''
+  union all
   select 'Migration 0058 has been run',
          to_regprocedure('public.reminder_batch()') is not null, ''
   union all

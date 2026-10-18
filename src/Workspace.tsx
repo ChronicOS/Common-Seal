@@ -47,6 +47,7 @@ import { setPickerOrganisation } from "./PersonPicker";
 import Privacy from "./Privacy";
 import AntiBribery from "./AntiBribery";
 import Confidential from "./Confidential";
+import AccountSettings from "./AccountSettings";
 import MergerControl from "./MergerControl";
 import { ClimateReporting, ConsumerLaw, EmploymentLaw } from "./RegulatoryPages";
 import Parties from "./Parties";
@@ -62,12 +63,13 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Tab =
   | "overview" | "company" | "authorities" | "insurance" | "foryou" | "report" | "modernslavery" | "oldregister" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
-  | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "conflicts" | "expenses" | "speakup" | "people" | "keyemployees" | "keycontracts" | "disputes" | "sanctions" | "legalaudit" | "ip" | "ownership" | "companyregister" | "calendar" | "whs" | "privacy" | "abc" | "employment" | "consumer" | "climate" | "mergers" | "confidential";
+  | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "conflicts" | "expenses" | "speakup" | "people" | "keyemployees" | "keycontracts" | "disputes" | "sanctions" | "legalaudit" | "ip" | "ownership" | "companyregister" | "calendar" | "whs" | "privacy" | "abc" | "employment" | "consumer" | "climate" | "mergers" | "confidential" | "account";
 const SECTIONS = ["Company", "Board", "Risk and compliance", "Contracts", "Third parties", "Conduct"] as const;
 const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = [
   { id: "foryou", label: "For you" },
   { id: "overview", label: "Overview" },
   { id: "confidential", label: "Confidential projects" },
+  { id: "account", label: "Account settings" },
   { id: "company", label: "Company Info", section: "Company" },
   { id: "ownership", label: "Ownership", section: "Company" },
   { id: "companyregister", label: "Company register", section: "Company" },
@@ -252,6 +254,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
           Settings
         </button>
         <div className="nav-items">
+          {item(TABS.find((t) => t.id === "account")!)}
           <button type="button" className="tab" onClick={onPassword}>
             Password
           </button>
@@ -398,6 +401,17 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
         {nav}
         <div className="workspace-main">
           <ComplianceCalendar organisationId={organisation.id} organisationName={organisation.name} group={data} canEdit={canEdit} userId={userId} onOpen={(t) => go(t as Tab)} />
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === "account") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+          <AccountSettings organisation={organisation} role={role} userId={userId} onPassword={onPassword} />
         </div>
       </div>
     );

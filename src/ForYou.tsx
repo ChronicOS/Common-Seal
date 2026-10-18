@@ -4,7 +4,7 @@ import { formatDay } from "./board";
 import type { InboxItem } from "./inbox";
 
 /** Everything waiting on the signed-in person, across the platform. Common items can be done right here. */
-function ReminderChoice({ organisationId, userId }: { organisationId: string; userId: string }) {
+export function ReminderChoice({ organisationId, userId }: { organisationId: string; userId: string }) {
   const [choice, setChoice] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   useEffect(() => {

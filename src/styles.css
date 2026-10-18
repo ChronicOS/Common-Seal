@@ -1869,3 +1869,8 @@ li.voided > *:not(.card):not(.warning-text) { text-decoration: line-through; opa
 /* For you: an action beside the item */
 .for-you-row { align-items: center; gap: 8px; }
 .for-you-row > .entity-row { flex: 1 1 260px; }
+/* Account settings: the tiers side by side, stacked on phones */
+.tier-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; align-items: start; }
+.tier-card h3 { margin-top: 0; }
+.tier-card.on { border: 2px solid var(--wax); }
+.tier-card ul { padding-left: 18px; margin: 4px 0 10px; }
