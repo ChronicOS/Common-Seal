@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import LawNote from "./LawNote";
 import Attachments from "./Attachments";
 import { today as todayIso } from "./authorities";
 import { formatDay } from "./board";
 import { has } from "./roles";
+import { ItemRow } from "./RegulatoryPage";
+import { effective, saveCheck } from "./regulatory";
 import {
-  approveAssessment, AREA_LABELS, deleteRisk, effective, loadAbc, PRINCIPLES, saveElement, saveRisk, score, scoreLabel, startAssessment, STATUS_LABELS, updateAssessment,
-  type AbcData, type Area, type Assessment, type ProgrammeRow, type Risk, type RiskValues, type Status,
+  approveAssessment, AREA_LABELS, deleteRisk, loadAbc, PRINCIPLES, saveRisk, score, scoreLabel, startAssessment, updateAssessment,
+  type AbcData, type Area, type Assessment, type Risk, type RiskValues,
 } from "./antiBribery";
 
 type Sub = "map" | "risks";
 type Props = { organisationId: string; role: string; userId: string; onOpen: (tab: string) => void };
 const day = (iso: string | null | undefined) => (iso ? formatDay(`${iso.slice(0, 10)}T12:00:00`) : "");
-const CLASS: Record<Status | "not_assessed", string> = { in_place: "ok-text", partly: "warning-text", gap: "warning-text", not_applicable: "muted", not_assessed: "warning-text" };
-const LABEL: Record<Status | "not_assessed", string> = { ...STATUS_LABELS, not_assessed: "Not assessed" };
 
 function Field({ id, label, children, wide }: { id: string; label: string; children: ReactNode; wide?: boolean }) {
   return <span className={wide ? "field grow" : "field"}><label htmlFor={id}>{label}</label>{children}</span>;
@@ -61,6 +62,7 @@ export default function AntiBribery({ organisationId, role, userId, onOpen }: Pr
       <p className="eyebrow">Risk and compliance</p>
       <h1>Anti-bribery</h1>
       <p className="lead">A company is liable if anyone acting for it bribes a foreign public official to win or keep business, unless it had adequate procedures to prevent it. This maps your procedures against the six principles in the Attorney-General's guidance, using what is already recorded here as evidence.</p>
+      <LawNote library="anti_bribery" />
       {problem && <p className="error" role="alert">{problem}</p>}
       {notice && <p className="card note" role="status">{notice}</p>}
     </>
@@ -85,18 +87,11 @@ export default function AntiBribery({ organisationId, role, userId, onOpen }: Pr
 function ProcedureMap({ organisationId, data, manage, userId, busy, today: t, onOpen, run }: {
   organisationId: string; data: AbcData; manage: boolean; userId: string; busy: boolean; today: string; onOpen: (tab: string) => void; run: (work: () => Promise<unknown>, done: string) => Promise<boolean>;
 }) {
-  const [open, setOpen] = useState<string | null>(null);
-  const [draft, setDraft] = useState<Pick<ProgrammeRow, "status" | "notes" | "evidence" | "owner_user_id">>({ status: null, notes: null, evidence: null, owner_user_id: null });
   const ev = data.evidence!;
-  const rows = new Map(data.programme.map((r) => [r.element_key, r]));
-  const all = PRINCIPLES.flatMap((p) => p.elements.map((el) => ({ el, eff: effective(rows.get(el.key), el.auto ? el.auto(ev, t) : null) })));
-  const count = (s: Status | "not_assessed") => all.filter((x) => x.eff.status === s).length;
-  const who = (uid: string | null) => (uid ? data.people.find((p) => p.user_id === uid)?.full_name ?? "" : "");
-  const edit = (key: string) => {
-    const r = rows.get(key);
-    setDraft({ status: r?.status ?? null, notes: r?.notes ?? null, evidence: r?.evidence ?? null, owner_user_id: r?.owner_user_id ?? null });
-    setOpen(open === key ? null : key);
-  };
+  const rows = new Map(data.programme.map((r) => [r.item_key, r]));
+  const all = PRINCIPLES.flatMap((p) => p.elements.map((el) => ({ el, auto: el.auto ? el.auto(ev, t) : null })));
+  const eff = (key: string, auto: ReturnType<NonNullable<(typeof all)[number]["el"]["auto"]>> | null) => effective(rows.get(key), auto, true);
+  const count = (s: string) => all.filter(({ el, auto }) => eff(el.key, auto).status === s).length;
   return (
     <>
       <dl className="facts">
@@ -111,50 +106,12 @@ function ProcedureMap({ organisationId, data, manage, userId, busy, today: t, on
           <h2>{p.label}</h2>
           <ul className="plain rows">
             {p.elements.map((el) => {
-              const row = rows.get(el.key);
               const auto = el.auto ? el.auto(ev, t) : null;
-              const eff = effective(row, auto);
-              const canEdit = manage || (row?.owner_user_id === userId);
+              const row = rows.get(el.key);
               return (
-                <li key={el.key}>
-                  <div className="row wrap">
-                    <span className="grow">
-                      <strong>{el.label}</strong>
-                      <span className="muted small"><br />{el.hint}</span>
-                    </span>
-                    <span className={CLASS[eff.status]}><strong>{LABEL[eff.status]}</strong></span>
-                    {canEdit && <button type="button" className="quiet" aria-expanded={open === el.key} onClick={() => edit(el.key)}>{open === el.key ? "Close" : row ? "Update" : "Assess"}</button>}
-                  </div>
-                  {auto && (
-                    <p className={`small ${auto.level === "ok" ? "muted" : "warning-text"}`}>
-                      From the records: {auto.text} {auto.tab && <button type="button" className="link-dark" onClick={() => onOpen(auto.tab!)}>Open</button>}
-                    </p>
-                  )}
-                  {eff.reason && <p className="small warning-text">{eff.reason}</p>}
-                  {row && (row.notes || row.evidence) && open !== el.key && (
-                    <p className="small">{row.notes}{row.evidence ? <><br /><span className="muted">Evidence: {row.evidence}</span></> : null}{row.owner_user_id ? <span className="muted"> · owner {who(row.owner_user_id)}</span> : null}{row.reviewed_at ? <span className="muted"> · reviewed {day(row.reviewed_at)}</span> : null}</p>
-                  )}
-                  {open === el.key && (
-                    <div className="form block">
-                      <fieldset className="plain-fieldset">
-                        <legend>Status</legend>
-                        <span className="row wrap">
-                          {(Object.keys(STATUS_LABELS) as Status[]).map((s) => (
-                            <label key={s} className="check"><input type="radio" name={`st-${el.key}`} checked={draft.status === s} onChange={() => setDraft({ ...draft, status: s })} /> {STATUS_LABELS[s]}</label>
-                          ))}
-                        </span>
-                      </fieldset>
-                      <Field id={`n-${el.key}`} label={draft.status === "not_applicable" ? "Why it does not apply" : "How it is met, or what is missing"} wide><textarea id={`n-${el.key}`} rows={2} value={draft.notes ?? ""} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} /></Field>
-                      <Field id={`e-${el.key}`} label="Evidence" wide><input id={`e-${el.key}`} value={draft.evidence ?? ""} onChange={(e) => setDraft({ ...draft, evidence: e.target.value })} placeholder="Board minutes 12 Aug 2026; audit report; contract clause" /></Field>
-                      <div className="row wrap">
-                        <Field id={`o-${el.key}`} label="Owner"><select id={`o-${el.key}`} value={draft.owner_user_id ?? ""} onChange={(e) => setDraft({ ...draft, owner_user_id: e.target.value || null })}><option value="">No owner</option>{data.people.filter((x) => x.user_id).map((x) => <option key={x.user_id!} value={x.user_id!}>{x.full_name}</option>)}</select></Field>
-                      </div>
-                      <button type="button" disabled={busy || !draft.status || (draft.status === "not_applicable" && (draft.notes ?? "").trim().length < 5)}
-                        onClick={async () => { if (await run(() => saveElement(organisationId, row, el.key, draft), "Saved.")) setOpen(null); }}>Save</button>
-                      {row && <Attachments subjectTable="abc_programme" subjectId={row.id} canAttach={manage} label="Evidence files" />}
-                    </div>
-                  )}
-                </li>
+                <ItemRow key={el.key} item={{ key: el.key, label: el.label, hint: el.hint, law: el.law }} applies auto={auto} eff={eff(el.key, auto)} check={row} people={data.people}
+                  canEdit={manage || row?.owner_user_id === userId} manage={manage} busy={busy} today={t} onOpen={onOpen}
+                  onSave={(v) => run(() => saveCheck(organisationId, "anti_bribery", null, row, el.key, v), "Saved.")} />
               );
             })}
           </ul>

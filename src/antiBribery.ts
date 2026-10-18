@@ -1,3 +1,4 @@
+import type { Check } from "./regulatory";
 import { supabase } from "./supabase";
 
 // Anti-bribery programme (migration 0051)
@@ -13,7 +14,6 @@ export type Risk = {
 };
 export type RiskValues = Omit<Risk, "id" | "assessment_id">;
 export type Status = "in_place" | "partly" | "gap" | "not_applicable";
-export type ProgrammeRow = { id: string; element_key: string; status: Status | null; notes: string | null; evidence: string | null; owner_user_id: string | null; reviewed_by: string | null; reviewed_at: string | null };
 export type Evidence = {
   policy: { abc: number; abc_overdue: number; gifts: number; speak_up: number; conflicts: number };
   training: { modules: number; assigned: number; current: number; overdue: number };
@@ -37,7 +37,7 @@ export const score = (r: Pick<Risk, "likelihood" | "impact" | "residual_likeliho
 export const scoreLabel = (n: number) => (n >= 15 ? "High" : n >= 8 ? "Medium" : "Low");
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-type Element = { key: string; label: string; hint: string; auto?: (e: Evidence, today: string) => Auto };
+type Element = { key: string; label: string; hint: string; law?: string; auto?: (e: Evidence, today: string) => Auto };
 export const PRINCIPLES: { key: string; label: string; elements: Element[] }[] = [
   {
     key: "control", label: "1. A proportionate control environment",
@@ -107,18 +107,6 @@ export const PRINCIPLES: { key: string; label: string; elements: Element[] }[] =
 ];
 export const ELEMENT_LABEL = Object.fromEntries(PRINCIPLES.flatMap((p) => p.elements.map((e) => [e.key, e.label])));
 
-/** Combine what was recorded with what the records show. Unknown is never green. */
-export function effective(row: ProgrammeRow | undefined, auto: Auto): { status: Status | "not_assessed"; reason: string | null } {
-  const manual = row?.status ?? null;
-  const autoStatus: Status | null = auto ? (auto.level === "gap" ? "gap" : auto.level === "warn" ? "partly" : "in_place") : null;
-  if (!manual && !autoStatus) return { status: "not_assessed", reason: null };
-  if (manual === "not_applicable") return { status: "not_applicable", reason: null };
-  if (!manual) return autoStatus === "in_place" ? { status: "partly", reason: "The records look good, but no one has confirmed this element yet." } : { status: autoStatus!, reason: null };
-  if (!autoStatus) return { status: manual, reason: null };
-  const rank: Record<Status, number> = { gap: 0, partly: 1, in_place: 2, not_applicable: 3 };
-  return rank[autoStatus] < rank[manual] ? { status: autoStatus, reason: "The records show less than was recorded." } : { status: manual, reason: null };
-}
-
 function db() {
   if (!supabase) throw new Error("The site is not connected to its database.");
   return supabase;
@@ -128,13 +116,13 @@ function check(error: { message: string } | null) {
 }
 const tidy = (v: object) => Object.fromEntries(Object.entries(v).map(([k, x]) => [k, typeof x === "string" ? x.trim() || null : x]));
 
-export type AbcData = { ready: boolean; allowed: boolean; assessments: Assessment[]; risks: Risk[]; programme: ProgrammeRow[]; evidence: Evidence | null; people: { user_id: string | null; full_name: string }[] };
+export type AbcData = { ready: boolean; allowed: boolean; assessments: Assessment[]; risks: Risk[]; programme: Check[]; evidence: Evidence | null; people: { user_id: string | null; full_name: string }[] };
 export async function loadAbc(organisationId: string): Promise<AbcData> {
   const c = db();
   const [assessments, risks, programme, evidence, people] = await Promise.all([
     c.from("abc_assessments").select("*").eq("organisation_id", organisationId).order("assessed_on", { ascending: false }),
     c.from("abc_risks").select("*").eq("organisation_id", organisationId).order("created_at"),
-    c.from("abc_programme").select("*").eq("organisation_id", organisationId),
+    c.from("compliance_checks").select("*").eq("organisation_id", organisationId).eq("programme", "anti_bribery"),
     c.rpc("abc_evidence", { p_org: organisationId }),
     c.from("people").select("user_id, full_name").eq("organisation_id", organisationId),
   ]);
@@ -144,19 +132,10 @@ export async function loadAbc(organisationId: string): Promise<AbcData> {
     allowed: !evidence.error,
     assessments: (assessments.data ?? []) as Assessment[],
     risks: (risks.data ?? []) as Risk[],
-    programme: (programme.data ?? []) as ProgrammeRow[],
+    programme: (programme.data ?? []) as Check[],
     evidence: (evidence.data ?? null) as Evidence | null,
     people: (people.data ?? []) as AbcData["people"],
   };
-}
-export async function saveElement(organisationId: string, row: ProgrammeRow | undefined, key: string, v: Pick<ProgrammeRow, "status" | "notes" | "evidence" | "owner_user_id">) {
-  if (row) {
-    check((await db().from("abc_programme").update(tidy(v)).eq("id", row.id)).error);
-    return row.id;
-  }
-  const { data, error } = await db().from("abc_programme").insert({ ...tidy(v), organisation_id: organisationId, element_key: key }).select("id").single();
-  check(error);
-  return data!.id as string;
 }
 /** A new draft, starting from the risks of the last approved assessment */
 export async function startAssessment(organisationId: string, title: string, from: Risk[]) {

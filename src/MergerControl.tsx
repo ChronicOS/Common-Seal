@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import LawNote from "./LawNote";
 import Attachments from "./Attachments";
 import { today as todayIso } from "./authorities";
 import { formatDay } from "./board";
@@ -74,6 +75,7 @@ export default function MergerControl({ organisationId, role, group }: Props) {
       <p className="eyebrow">Risk and compliance</p>
       <h1>Merger control</h1>
       <p className="lead">From 1 January 2026, an acquisition that meets the thresholds must be notified to the ACCC and approved before it completes. One completed without approval is void, and penalties apply. Test each acquisition here, including earlier related acquisitions in the last three years.</p>
+      <LawNote library="mergers" />
       {problem && <p className="error" role="alert">{problem}</p>}
       {notice && <p className="card note" role="status">{notice}</p>}
     </>

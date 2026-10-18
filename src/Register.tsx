@@ -1,3 +1,4 @@
+import { companyChoice, pickCompany } from "./currentCompany";
 import { has } from "./roles";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { formatDay } from "./board";
@@ -119,7 +120,7 @@ export default function Register({ organisation, group, role, reloadGroup }: Pro
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [level, setLevel] = useState<Level>("local");
-  const [entityId, setEntityId] = useState(group.entities[0]?.id ?? "");
+  const [entityId, setEntityId] = useState(() => pickCompany(group.entities.map((e) => e.id)));
   const [region, setRegion] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -448,7 +449,7 @@ export default function Register({ organisation, group, role, reloadGroup }: Pro
           ))}
         </span>
         {level === "local" && group.entities.length > 1 && (
-          <select aria-label="Company" value={entity?.id ?? ""} onChange={(e) => { setEntityId(e.target.value); setRegionDraft(null); }}>
+          <select aria-label="Company" value={entity?.id ?? ""} onChange={(e) => { companyChoice.id = e.target.value; setEntityId(e.target.value); setRegionDraft(null); }}>
             {group.entities.map((e) => (
               <option key={e.id} value={e.id}>
                 {e.name}

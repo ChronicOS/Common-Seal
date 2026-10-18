@@ -2,7 +2,7 @@ import { supabase } from "./supabase";
 
 // Regulatory checks: employment law, consumer law and climate reporting (migration 0052), and merger control (0053)
 
-export type Programme = "employment" | "consumer" | "climate";
+export type Programme = "employment" | "consumer" | "climate" | "anti_bribery";
 export type Status = "in_place" | "partly" | "gap" | "not_applicable";
 export type Answers = Record<string, string | number | boolean | null>;
 export type Profile = { id: string; entity_id: string | null; programme: Programme; answers: Answers };
@@ -16,7 +16,7 @@ export type Item = {
   key: string;
   label: string;
   hint: string;
-  law: string;
+  law?: string;
   /** Not yet law: shown as coming, never as a gap */
   coming?: boolean;
   /** true applies, false does not, null not known yet (answer the profile) */

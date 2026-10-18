@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import LawNote from "./LawNote";
 import Attachments from "./Attachments";
 import { today as todayIso } from "./authorities";
 import { formatDay } from "./board";
@@ -82,6 +83,7 @@ export default function Privacy({ organisationId, organisationName, role, userId
       <p className="eyebrow">Risk and compliance</p>
       <h1>Privacy and cyber</h1>
       <p className="lead">Report a possible data breach, run the 30-day assessment, notify the OAIC and the people affected, report any ransomware payment within 72 hours, and keep the record of the personal information you hold and the automated decisions you make with it.</p>
+      <LawNote library="privacy" />
       {problem && <p className="error" role="alert">{problem}</p>}
       {notice && <p className="card note" role="status">{notice}</p>}
     </>

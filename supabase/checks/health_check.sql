@@ -18,6 +18,27 @@ checks (check_name, ok, detail) as (
          case when to_regclass('public.' || e.marker) is null then 'Table ' || e.marker || ' is missing' else '' end
   from expected e
   union all
+  select 'Migration 0058 has been run',
+         to_regprocedure('public.reminder_batch()') is not null, ''
+  union all
+  select 'Reminder email lists are open only to the server',
+         to_regprocedure('public.reminder_batch()') is null
+         or (not has_function_privilege('authenticated', 'public.reminder_batch()', 'execute') and not has_function_privilege('anon', 'public.reminder_batch()', 'execute')), ''
+  union all
+  select 'Migration 0057 has been run',
+         to_regclass('public.abc_programme') is null and to_regclass('public.abc_assessments') is not null, ''
+  union all
+  select 'Migration 0056 has been run',
+         to_regprocedure('public.hand_over(uuid, uuid, uuid)') is not null, ''
+  union all
+  select 'Migration 0055 has been run',
+         exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'conf_members' and column_name = 'link_expires_at'), ''
+  union all
+  select 'Personal links expire',
+         not exists (select 1 from (values ('ms_recipients'), ('risk_requests'), ('risk_items'), ('training_assignments'), ('dd_questionnaires'), ('conf_members')) t(name)
+                     where not exists (select 1 from information_schema.columns c where c.table_schema = 'public' and c.table_name = t.name and c.column_name = 'link_expires_at')),
+         ''
+  union all
   select 'Migration 0054 has been run',
          to_regclass('public.conf_projects') is not null, ''
   union all
@@ -28,7 +49,7 @@ checks (check_name, ok, detail) as (
          to_regclass('public.compliance_checks') is not null, ''
   union all
   select 'Migration 0051 has been run',
-         to_regclass('public.abc_programme') is not null, ''
+         to_regclass('public.abc_assessments') is not null, ''
   union all
   select 'Migration 0050 has been run',
          to_regclass('public.privacy_breaches') is not null, ''

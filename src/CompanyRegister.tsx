@@ -1,3 +1,4 @@
+import { companyChoice } from "./currentCompany";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Attachments from "./Attachments";
 import { today } from "./authorities";
@@ -18,7 +19,6 @@ type Props = { organisationId: string; group: GroupData | null; canEdit: boolean
 type Sheet = { title: string; body: ReactNode } | null;
 
 const day = (iso: string | null | undefined) => (iso ? formatDay(`${iso.slice(0, 10)}T12:00:00`) : "");
-let chosenEntity: string | null = null;
 
 function Text({ id, label, value, onChange, type = "text", wide, placeholder }: { id: string; label: string; value: string | null; onChange: (v: string) => void; type?: string; wide?: boolean; placeholder?: string }) {
   return (
@@ -32,9 +32,9 @@ function Text({ id, label, value, onChange, type = "text", wide, placeholder }: 
 /** Company, Company register: documents, officers' details, ASIC filings, the annual review and the statutory registers */
 export default function CompanyRegister({ organisationId, group, canEdit, onChanged, onAddEntity }: Props) {
   const entities = useMemo(() => (group?.entities ?? []).filter((e) => e.status !== "deregistered"), [group]);
-  const [entityId, setEntityIdState] = useState<string | null>(() => (entities.some((e) => e.id === chosenEntity) ? chosenEntity : entities[0]?.id ?? null));
+  const [entityId, setEntityIdState] = useState<string | null>(() => (entities.some((e) => e.id === companyChoice.id) ? companyChoice.id : entities[0]?.id ?? null));
   const setEntityId = (id: string | null) => {
-    chosenEntity = id;
+    companyChoice.id = id;
     setEntityIdState(id);
   };
   useEffect(() => {

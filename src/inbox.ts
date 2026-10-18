@@ -10,7 +10,17 @@ import { isOverdue, loadTraining, today } from "./training";
 import { loadWorkflows } from "./workflows";
 import { supabase } from "./supabase";
 
-export type InboxItem = { key: string; tab: string; kind: string; title: string; due: string | null; overdue: boolean };
+/** Something that can be done right here, without opening the module */
+export type InboxAction = { label: string; needsName?: boolean; run: (name: string) => Promise<void> };
+export type InboxItem = { key: string; tab: string; kind: string; title: string; due: string | null; overdue: boolean; action?: InboxAction };
+const must = (r: { error: { message: string } | null }) => {
+  if (r.error) throw new Error(r.error.message);
+};
+const inMonths = (n: number) => {
+  const d = new Date();
+  d.setMonth(d.getMonth() + n);
+  return d.toLocaleDateString("en-CA");
+};
 
 const MANAGE_ROLES = ["owner", "admin", "secretary", "legal", "compliance"];
 const soon = (iso: string | null, days: number) => {
@@ -28,8 +38,8 @@ export async function loadInbox(organisationId: string, role: string, userId: st
   const manage = has(role, ...MANAGE_ROLES);
   const t = today();
   const items: InboxItem[] = [];
-  const add = (tab: string, kind: string, id: string, title: string, due: string | null) =>
-    items.push({ key: `${tab}-${id}`, tab, kind, title, due, overdue: Boolean(due && due.slice(0, 10) < t) });
+  const add = (tab: string, kind: string, id: string, title: string, due: string | null, action?: InboxAction) =>
+    items.push({ key: `${tab}-${id}`, tab, kind, title, due, overdue: Boolean(due && due.slice(0, 10) < t), action });
   const safely = async (work: () => Promise<void>) => {
     try {
       await work();
@@ -138,7 +148,8 @@ export async function loadInbox(organisationId: string, role: string, userId: st
         for (const d of dueDates(o, upto)) {
           if (d < past.toISOString().slice(0, 10)) continue;
           if (((comps.data ?? []) as { obligation_id: string; due_on: string }[]).some((x) => x.obligation_id === o.id && x.due_on === d)) continue;
-          add("calendar", o.owner_user_id ? "Compliance obligation due" : "Compliance obligation with no owner", `${o.id}-${d}`, o.title, d);
+          add("calendar", o.owner_user_id ? "Compliance obligation due" : "Compliance obligation with no owner", `${o.id}-${d}`, o.title, d,
+            d <= t || o.owner_user_id === userId ? { label: "Mark done", run: async () => must(await supabase!.from("obligation_completions").insert({ organisation_id: organisationId, obligation_id: o.id, due_on: d, done_on: t })) } : undefined);
         }
       }
     }),
@@ -157,8 +168,8 @@ export async function loadInbox(organisationId: string, role: string, userId: st
         const name = `Project ${p.code_name}`;
         const team = ms.filter((m) => m.project_id === p.id);
         const me = team.find((m) => m.user_id === userId && !m.removed_at);
-        if (me && p.kickoff_issued_at && !me.acknowledged_at && p.status !== "closed") add("confidential", "Acknowledge the confidentiality notice", `ca-${me.id}`, name, null);
-        if (me && p.closure_issued_at && p.closure_needs_deletion && me.acknowledged_at && !me.closure_confirmed_at) add("confidential", "Confirm you have deleted the project material", `cc-${me.id}`, name, null);
+        if (me && p.kickoff_issued_at && !me.acknowledged_at && p.status !== "closed") add("confidential", "Acknowledge the confidentiality notice", `ca-${me.id}`, name, null, { label: "I have read it and will follow it", needsName: true, run: async (n) => must(await supabase!.rpc("conf_acknowledge", { p_member: me.id, p_name: n })) });
+        if (me && p.closure_issued_at && p.closure_needs_deletion && me.acknowledged_at && !me.closure_confirmed_at) add("confidential", "Confirm you have deleted the project material", `cc-${me.id}`, name, null, { label: "I have deleted it", needsName: true, run: async (n) => must(await supabase!.rpc("conf_confirm_closure", { p_member: me.id, p_name: n })) });
         const isLead = p.lead_user_id === userId;
         const isEscalation = !isLead && (p.legal_user_id === userId || (!p.legal_user_id && has(role, "director")));
         if (!isLead && !isEscalation) continue;
@@ -169,7 +180,7 @@ export async function loadInbox(organisationId: string, role: string, userId: st
         if (isLead && p.status === "open" && !p.kickoff_issued_at && ago(team[0]?.added_at ?? new Date().toISOString(), 2)) add("confidential", "Issue the confidentiality notice", `ck-${p.id}`, name, null);
         if (p.status === "open" && p.expected_close_on && (isLead ? soon(p.expected_close_on, 7) : p.expected_close_on < t)) add("confidential", `${pre}Close, extend or pause the project`, `ce-${p.id}`, name, p.expected_close_on);
         const dlChanges = p.dl_address && p.status !== "closed" && team.some((m) => (m.added_at > (p.dl_synced_at ?? "") || (m.removed_at ?? "") > (p.dl_synced_at ?? "")) && (isLead || ago(m.removed_at ?? m.added_at, 3)));
-        if (dlChanges) add("confidential", `${pre}Update the distribution list`, `cd-${p.id}`, name, null);
+        if (dlChanges) add("confidential", `${pre}Update the distribution list`, `cd-${p.id}`, name, null, isLead ? { label: "The DL is up to date", run: async () => must(await supabase!.from("conf_projects").update({ dl_synced_at: new Date().toISOString() }).eq("id", p.id)) } : undefined);
         const outstanding = p.closure_issued_at && p.closure_needs_deletion && (isLead || ago(p.closure_issued_at, 14)) ? team.filter((m) => m.acknowledged_at && !m.closure_confirmed_at).length : 0;
         if (outstanding) add("confidential", `${pre}${outstanding} deletion confirmation${outstanding === 1 ? "" : "s"} outstanding`, `co-${p.id}`, name, null);
         if (p.status === "closed" && p.conf_ends_on && p.conf_ends_on <= t && !p.ended_notice_at) add("confidential", "Confidentiality has ended: tell the team", `cx-${p.id}`, name, p.conf_ends_on);
@@ -247,7 +258,7 @@ export async function loadInbox(organisationId: string, role: string, userId: st
         if (!i.actions_done_on && soon(i.actions_due_on, 7)) add("whs", "WHS corrective actions due", `c-${i.id}`, what, i.actions_due_on);
       }
       for (const h of (haz.data ?? []) as { id: string; title: string; review_on: string | null; owner_user_id: string | null }[]) {
-        if ((h.owner_user_id === userId || !h.owner_user_id) && soon(h.review_on, 14)) add("whs", "Hazard review due", h.id, h.title, h.review_on);
+        if ((h.owner_user_id === userId || !h.owner_user_id) && soon(h.review_on, 14)) add("whs", "Hazard review due", h.id, h.title, h.review_on, { label: "Reviewed: next review in 12 months", run: async () => must(await supabase!.from("whs_hazards").update({ review_on: inMonths(12) }).eq("id", h.id)) });
       }
     }),
     safely(async () => {

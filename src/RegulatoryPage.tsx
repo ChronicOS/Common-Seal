@@ -1,4 +1,6 @@
+import { companyChoice, pickCompany } from "./currentCompany";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import LawNote, { type LawLibrary } from "./LawNote";
 import Attachments from "./Attachments";
 import { today as todayIso } from "./authorities";
 import { formatDay } from "./board";
@@ -18,8 +20,6 @@ type Props = {
   extra?: (ctx: PageContext) => ReactNode;
 };
 
-// Remembered across visits, per programme
-const chosen: Partial<Record<Programme, string>> = {};
 
 /** A checklist of legal obligations, driven by a short profile, with evidence from the rest of the platform */
 export default function RegulatoryPage({ organisationId, role, userId, group, onOpen, programme, title, lead, questions, items, perEntity, extra }: Props) {
@@ -29,7 +29,7 @@ export default function RegulatoryPage({ organisationId, role, userId, group, on
   const [problem, setProblem] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const entities = group?.entities ?? [];
-  const [entityId, setEntityId] = useState<string | null>(perEntity ? chosen[programme] ?? entities[0]?.id ?? null : null);
+  const [entityId, setEntityId] = useState<string | null>(perEntity ? pickCompany(entities.map((e) => e.id)) || null : null);
   const t = todayIso();
   useEffect(() => {
     if (perEntity && !entityId && entities[0]) setEntityId(entities[0].id);
@@ -67,6 +67,7 @@ export default function RegulatoryPage({ organisationId, role, userId, group, on
       <p className="eyebrow">Risk and compliance</p>
       <h1>{title}</h1>
       <p className="lead">{lead}</p>
+      <LawNote library={programme as LawLibrary} />
       {problem && <p className="error" role="alert">{problem}</p>}
       {notice && <p className="card note" role="status">{notice}</p>}
     </>
@@ -93,7 +94,7 @@ export default function RegulatoryPage({ organisationId, role, userId, group, on
       {perEntity && entities.length > 1 && (
         <p className="row wrap">
           <label htmlFor={`${programme}-entity`} className="small">Company</label>
-          <select id={`${programme}-entity`} value={entityId ?? ""} onChange={(e) => { chosen[programme] = e.target.value; setEntityId(e.target.value); }}>
+          <select id={`${programme}-entity`} value={entityId ?? ""} onChange={(e) => { companyChoice.id = e.target.value; setEntityId(e.target.value); }}>
             {entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
           </select>
         </p>
@@ -161,7 +162,8 @@ function ProfileForm({ questions, answers, canEdit, busy, updated, onSave }: { q
   );
 }
 
-function ItemRow({ item: it, applies, auto, eff, check, people, canEdit, manage, busy, today: t, onOpen, onSave }: {
+/** One checklist item: shared by every checklist (law checks, anti-bribery procedures) */
+export function ItemRow({ item: it, applies, auto, eff, check, people, canEdit, manage, busy, today: t, onOpen, onSave }: {
   item: Item; applies: boolean | null; auto: ReturnType<NonNullable<Item["auto"]>> | null; eff: ReturnType<typeof effective>; check: Check | undefined; people: RegData["people"];
   canEdit: boolean; manage: boolean; busy: boolean; today: string; onOpen: (tab: string) => void; onSave: (v: Pick<Check, "status" | "notes" | "evidence" | "owner_user_id" | "review_on">) => Promise<boolean>;
 }) {
@@ -174,7 +176,7 @@ function ItemRow({ item: it, applies, auto, eff, check, people, canEdit, manage,
         <span className="grow">
           <strong>{it.label}</strong>
           <span className="small"><br />{it.hint}</span>
-          <span className="muted small"><br />{it.law}</span>
+          {it.law && <span className="muted small"><br />{it.law}</span>}
         </span>
         <span className={EFFECTIVE_CLASS[eff.status]}><strong>{EFFECTIVE_LABELS[eff.status]}</strong></span>
         {canEdit && applies !== false && <button type="button" className="quiet" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Close" : check ? "Update" : "Assess"}</button>}

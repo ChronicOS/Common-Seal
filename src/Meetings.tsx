@@ -1,3 +1,4 @@
+import { companyChoice, pickCompany } from "./currentCompany";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { createMeeting, formatWhen, loadMeetings, STATUS_LABELS, type Meeting } from "./board";
 import type { GroupData } from "./types";
@@ -22,7 +23,7 @@ function defaultWhen() {
 export default function Meetings({ organisationId, group, canWrite, onOpen }: Props) {
   const [meetings, setMeetings] = useState<Meeting[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [entityId, setEntityId] = useState(group.entities[0]?.id ?? "");
+  const [entityId, setEntityId] = useState(() => pickCompany(group.entities.map((e) => e.id)));
   const [title, setTitle] = useState("Board meeting");
   const [when, setWhen] = useState(defaultWhen);
   const [location, setLocation] = useState("");
@@ -87,7 +88,7 @@ export default function Meetings({ organisationId, group, canWrite, onOpen }: Pr
           <form className="card form" onSubmit={create}>
             <h2>Schedule a meeting</h2>
             <label htmlFor="m-entity">Company</label>
-            <select id="m-entity" value={entityId} onChange={(e) => setEntityId(e.target.value)}>
+            <select id="m-entity" value={entityId} onChange={(e) => { companyChoice.id = e.target.value; setEntityId(e.target.value); }}>
               {group.entities.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.name}

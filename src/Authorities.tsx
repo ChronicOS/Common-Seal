@@ -1,3 +1,4 @@
+import { companyChoice, pickCompany } from "./currentCompany";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import {
   addBand,
@@ -96,7 +97,7 @@ type GroupsProps = {
 /** Signing Delegation: for each company, signatory groups, what each can sign, and the minimum signatures. */
 function SigningGroups({ organisationId, data, version, editable, entities, group, busy, run }: GroupsProps) {
   const live = entities.filter((e) => e.status !== "deregistered");
-  const [entityId, setEntityId] = useState(live[0]?.id ?? "");
+  const [entityId, setEntityId] = useState(() => pickCompany(live.map((e) => e.id)));
   const [newGroup, setNewGroup] = useState("");
   const [copyFrom, setCopyFrom] = useState("");
   const [adding, setAdding] = useState<Record<string, string>>({});
@@ -121,7 +122,7 @@ function SigningGroups({ organisationId, data, version, editable, entities, grou
       <div className="row block">
         <span className="field">
           <label htmlFor="sg-company">Company</label>
-          <select id="sg-company" value={entityId} onChange={(e) => setEntityId(e.target.value)}>
+          <select id="sg-company" value={entityId} onChange={(e) => { companyChoice.id = e.target.value; setEntityId(e.target.value); }}>
             {live.map((e) => (
               <option key={e.id} value={e.id}>
                 {e.name}

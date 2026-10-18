@@ -1,3 +1,4 @@
+import PersonPicker from "./PersonPicker";
 import { useCallback, useEffect, useState } from "react";
 import { formatDay } from "./board";
 import { loadKeyContracts, money, setKeyContract, YES_NO, type KeyContract, type YesNo } from "./registers";
@@ -29,7 +30,7 @@ function KeyForm({ initial, busy, onSave, onCancel, label }: { initial: Values; 
         </span>
         <span className="field">
           <label htmlFor="kc-owner">Relationship owner</label>
-          <input id="kc-owner" value={v.owner} onChange={(e) => setV({ ...v, owner: e.target.value })} />
+          <PersonPicker id="kc-owner" value={v.owner} onChange={(name) => setV({ ...v, owner: name })} />
         </span>
       </div>
       <div className="row">

@@ -1,3 +1,4 @@
+import PersonPicker from "./PersonPicker";
 import { has, only } from "./roles";
 import { useCallback, useEffect, useState } from "react";
 import { formatDay, formatWhen } from "./board";
@@ -534,7 +535,7 @@ export default function Parties({ organisationId, role, userId = "" }: Props) {
                   </span>
                   <span className="field">
                     <label htmlFor="mt-owner">Who</label>
-                    <input id="mt-owner" value={mitigation.owner} onChange={(e) => setMitigation({ ...mitigation, owner: e.target.value })} />
+                    <PersonPicker id="mt-owner" value={mitigation.owner} onChange={(name) => setMitigation({ ...mitigation, owner: name })} />
                   </span>
                   <span className="field">
                     <label htmlFor="mt-due">By</label>

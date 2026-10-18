@@ -201,6 +201,12 @@ export async function removeMember(id: string) {
 export async function recordReply(memberId: string, what: "ack" | "closure") {
   check((await db().rpc("conf_record", { p_member: memberId, p_what: what })).error);
 }
+/** Copying a person's link gives it a fresh 30 days */
+export async function renewLink(memberId: string) {
+  const { data, error } = await db().rpc("conf_renew_link", { p_member: memberId });
+  check(error);
+  return personalLink(data as string);
+}
 export async function acknowledge(memberId: string, name: string) {
   check((await db().rpc("conf_acknowledge", { p_member: memberId, p_name: name })).error);
 }

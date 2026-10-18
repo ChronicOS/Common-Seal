@@ -1,3 +1,4 @@
+import { companyChoice } from "./currentCompany";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Attachments from "./Attachments";
 import { createEntity } from "./data";
@@ -62,14 +63,13 @@ function ResolutionPick({ id, data, value, onChange }: { id: string; data: Owner
   );
 }
 
-let chosenEntity: string | null = null;
 
 export default function Ownership({ organisationId, group, canEdit, onChanged, onAddEntity }: Props) {
   const entities = useMemo(() => (group?.entities ?? []).filter((e) => e.status !== "deregistered"), [group]);
   // Remembered for the visit, so the choice survives the page reloading or a trip to another tab
-  const [entityId, setEntityIdState] = useState<string | null>(() => (entities.some((e) => e.id === chosenEntity) ? chosenEntity : entities[0]?.id ?? null));
+  const [entityId, setEntityIdState] = useState<string | null>(() => (entities.some((e) => e.id === companyChoice.id) ? companyChoice.id : entities[0]?.id ?? null));
   const setEntityId = (id: string | null) => {
-    chosenEntity = id;
+    companyChoice.id = id;
     setEntityIdState(id);
   };
   const entity = entities.find((e) => e.id === entityId) ?? null;
@@ -95,8 +95,8 @@ export default function Ownership({ organisationId, group, canEdit, onChanged, o
     void reload();
   }, [reload]);
   useEffect(() => {
-    if (chosenEntity && chosenEntity !== entityId && entities.some((e) => e.id === chosenEntity)) setEntityIdState(chosenEntity);
-    else if ((!entityId || !entities.some((e) => e.id === entityId)) && entities[0] && !(chosenEntity && entityId === chosenEntity)) setEntityIdState(entities[0].id);
+    if (companyChoice.id && companyChoice.id !== entityId && entities.some((e) => e.id === companyChoice.id)) setEntityIdState(companyChoice.id);
+    else if ((!entityId || !entities.some((e) => e.id === entityId)) && entities[0] && !(companyChoice.id && entityId === companyChoice.id)) setEntityIdState(entities[0].id);
   }, [entities, entityId]);
   useEffect(() => {
     if (!startup && ["convertibles", "rights", "diluted"].includes(sub)) setSub("register");

@@ -1,3 +1,4 @@
+import Handover from "./Handover";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { mailto } from "./risk";
 import { formatDay, inviteMember, loadInvitations, loadMembers, revokeInvitation, setMemberRoles, type Invitation, type Member } from "./board";
@@ -45,6 +46,7 @@ export default function Members({ organisationId, role, organisationName = "our 
   const [done, setDone] = useState<string | null>(null);
   const [invited, setInvited] = useState<string | null>(null);
   const [invitedRoles, setInvitedRoles] = useState("");
+  const [handingOver, setHandingOver] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -90,6 +92,7 @@ export default function Members({ organisationId, role, organisationName = "our 
   }
 
   function choose(userId: string) {
+    setHandingOver(false);
     setAssignee(userId);
     setAssignRoles(roleList(members?.find((m) => m.user_id === userId)?.role ?? ""));
     setMode("assign");
@@ -214,21 +217,24 @@ export default function Members({ organisationId, role, organisationName = "our 
                     <button type="button" disabled={busy || assignRoles.length === 0} onClick={() => void act(() => setMemberRoles(organisationId, chosen.user_id, assignRoles).then(() => setDone(`Roles saved for ${chosen.name}.`)))}>
                       {busy ? "Saving…" : chosen.is_active ? "Save roles" : "Restore access with these roles"}
                     </button>
-                    {chosen.is_active && (
-                      <button
-                        type="button"
-                        className="link-dark"
-                        disabled={busy}
-                        onClick={() => {
-                          if (window.confirm(`Remove ${chosen.name}'s access to this organisation? Their past records stay. You can restore access later.`)) {
-                            void act(() => setMemberRoles(organisationId, chosen.user_id, [], false).then(() => setDone(`Access removed for ${chosen.name}.`)));
-                          }
-                        }}
-                      >
-                        Remove access
+                    {chosen.is_active && !handingOver && (
+                      <button type="button" className="link-dark" disabled={busy} onClick={() => setHandingOver(true)}>
+                        Remove access…
                       </button>
                     )}
+                    {!handingOver && <button type="button" className="quiet" disabled={busy} onClick={() => setHandingOver(true)}>Hand over responsibilities</button>}
                   </div>
+                  {handingOver && (
+                    <Handover organisationId={organisationId} person={{ user_id: chosen.user_id, name: chosen.name, is_active: chosen.is_active }}
+                      people={(members ?? []).map((m) => ({ user_id: m.user_id, name: m.name, is_active: m.is_active }))} busy={busy} onCancel={() => setHandingOver(false)}
+                      onDone={async (removeAccess, moved, to) => {
+                        setHandingOver(false);
+                        await act(async () => {
+                          if (removeAccess) await setMemberRoles(organisationId, chosen.user_id, [], false);
+                          setDone(`${moved ? `${moved} responsibilit${moved === 1 ? "y" : "ies"} handed over to ${to}. ` : ""}${removeAccess ? `Access removed for ${chosen.name}.` : ""}`.trim());
+                        });
+                      }} />
+                  )}
                 </>
               )}
             </div>

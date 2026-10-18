@@ -1,3 +1,4 @@
+import PersonPicker from "./PersonPicker";
 import { useCallback, useEffect, useState } from "react";
 import { formatDay, formatWhen } from "./board";
 import { has } from "./roles";
@@ -62,7 +63,7 @@ function ItemRow({ item, row, actions, evidence, locked, busy, onSave, onAddActi
           </label>
         ))}
         {item.responsible && (
-          <input className="grow" aria-label={`Person responsible: ${item.text}`} placeholder="Person responsible" disabled={locked} value={responsible} onChange={(e) => setResponsible(e.target.value)} onBlur={() => responsible !== (row?.responsible ?? "") && save({})} />
+          <span className="grow" onBlur={() => responsible !== (row?.responsible ?? "") && save({})}><PersonPicker className="grow" label={`Person responsible: ${item.text}`} placeholder="Person responsible" disabled={locked} value={responsible} onChange={(name) => setResponsible(name)} /></span>
         )}
       </div>
       <textarea
@@ -105,7 +106,7 @@ function ItemRow({ item, row, actions, evidence, locked, busy, onSave, onAddActi
         (adding ? (
           <div className="row wrap">
             <input className="grow" aria-label="Agreed action" placeholder="Agreed action" value={act.action} onChange={(e) => setAct({ ...act, action: e.target.value })} />
-            <input aria-label="Responsibility" placeholder="Who" value={act.owner} onChange={(e) => setAct({ ...act, owner: e.target.value })} />
+            <PersonPicker label="Responsibility" placeholder="Who" value={act.owner} onChange={(name) => setAct({ ...act, owner: name })} />
             <input aria-label="Timeframe" type="date" value={act.due} onChange={(e) => setAct({ ...act, due: e.target.value })} />
             <button type="button" className="quiet" disabled={busy || act.action.trim().length < 5} onClick={() => { onAddAction(act); setAct({ action: "", owner: "", due: "" }); setAdding(false); }}>
               Add

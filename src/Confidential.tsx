@@ -6,8 +6,8 @@ import DropZone from "./DropZone";
 import { attachFile } from "./files";
 import { PrintView } from "./RegisterDocs";
 import {
-  acknowledge, addMember, closureNotice, confirmClosure, endedNotice, inviteText, KIND_LABELS, kickoffNotice, loadConfidential, mailto, OUTCOME_LABELS, personalLink,
-  recordReply, removeMember, startProject, STATUS_LABELS, suggestName, updateProject,
+  acknowledge, addMember, closureNotice, confirmClosure, endedNotice, inviteText, KIND_LABELS, kickoffNotice, loadConfidential, mailto, OUTCOME_LABELS,
+  recordReply, removeMember, renewLink, startProject, STATUS_LABELS, suggestName, updateProject,
   type ConfData, type Kind, type Member, type NdaRequest, type NoticeContext, type Project,
 } from "./confidential";
 import type { GroupData } from "./types";
@@ -254,7 +254,7 @@ function Team({ p, members, data, manage, organisationId, busy, run, ctx }: { p:
                       {!m.removed_at && (
                         <span className="row wrap">
                           {p.kickoff_issued_at && !m.acknowledged_at && <button type="button" className="quiet" disabled={busy} onClick={() => run(() => recordReply(m.id, "ack"), `${m.full_name}'s reply recorded.`)}>Record reply</button>}
-                          {(p.kickoff_issued_at || p.closure_issued_at) && <button type="button" className="quiet" onClick={() => copy(personalLink(m.token))}>Copy their link</button>}
+                          {(p.kickoff_issued_at || p.closure_issued_at) && <button type="button" className="quiet" disabled={busy} title="Links work for 30 days from when they are copied or the notice is issued" onClick={() => void run(async () => copy(await renewLink(m.id)), `Link for ${m.full_name} copied. It works for 30 days.`)}>Copy their link</button>}
                           {m.user_id !== p.lead_user_id && <button type="button" className="quiet" disabled={busy} onClick={() => run(() => removeMember(m.id), `${m.full_name} removed. Update the DL.`)}>Remove</button>}
                         </span>
                       )}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import LawNote from "./LawNote";
 import Attachments from "./Attachments";
 import { today as todayIso } from "./authorities";
 import { formatDay } from "./board";
@@ -70,6 +71,7 @@ export default function Whs({ organisationId, role, userId, group }: Props) {
       <p className="eyebrow">Risk and compliance</p>
       <h1>Work health and safety</h1>
       <p className="lead">Report incidents, decide quickly whether the regulator must be told, keep the hazard register (including psychosocial hazards), and give directors the evidence of their due diligence as officers.</p>
+      <LawNote library="whs" />
       {problem && <p className="error" role="alert">{problem}</p>}
       {notice && <p className="card note" role="status">{notice}</p>}
     </>

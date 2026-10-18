@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import LawNote from "./LawNote";
 import Attachments from "./Attachments";
 import { today as todayIso } from "./authorities";
 import { formatDay } from "./board";
@@ -79,6 +80,7 @@ export default function ComplianceCalendar({ organisationId, organisationName, g
       <p className="eyebrow">Risk and compliance</p>
       <h1>Compliance calendar</h1>
       <p className="lead">Every compliance date across the group in one place: ASIC filings, the annual review, tax and payroll, insurance, IP, facilities, contracts, sanctions, policies and more. Anything overdue goes into the next risk review.</p>
+      <LawNote library="calendar" />
       {problem && <p className="error" role="alert">{problem}</p>}
       {notice && <p className="card note" role="status">{notice}</p>}
     </>

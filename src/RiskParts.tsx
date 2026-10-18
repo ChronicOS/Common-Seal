@@ -1,3 +1,4 @@
+import PersonPicker from "./PersonPicker";
 import { useState } from "react";
 import type { RiskValues } from "./risk";
 
@@ -41,7 +42,7 @@ export function RiskForm({ idPrefix, initial, examples, comment, isSaved, busy, 
         </span>
         <span className="field">
           <label htmlFor={`${idPrefix}-who`}>Actioner (optional)</label>
-          <input id={`${idPrefix}-who`} placeholder="If not you" value={v.actioner} onChange={(e) => setV({ ...v, actioner: e.target.value })} />
+          <PersonPicker id={`${idPrefix}-who`} placeholder="If not you" value={v.actioner} onChange={(name, person) => setV({ ...v, actioner: name, actioner_email: person?.email ?? v.actioner_email })} />
         </span>
         <span className="field">
           <label htmlFor={`${idPrefix}-email`}>Actioner's email (optional)</label>

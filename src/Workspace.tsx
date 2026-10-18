@@ -43,6 +43,7 @@ import CompanyRegister from "./CompanyRegister";
 import ComplianceCalendar from "./ComplianceCalendar";
 import Ownership from "./Ownership";
 import Whs from "./Whs";
+import { setPickerOrganisation } from "./PersonPicker";
 import Privacy from "./Privacy";
 import AntiBribery from "./AntiBribery";
 import Confidential from "./Confidential";
@@ -107,6 +108,7 @@ const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] }[] = 
 
 export default function Workspace({ membership, userId, userName, onPassword }: { membership: Membership; userId: string; userName: string; onPassword: () => void }) {
   const { organisation, role } = membership;
+  setPickerOrganisation(organisation.id);
   const canEdit = has(role, ...RECORDS_ROLES);
 
   const [tab, setTab] = useState<Tab>("overview");
@@ -565,7 +567,7 @@ export default function Workspace({ membership, userId, userName, onPassword }: 
       <div className="workspace">
         {nav}
         <div className="workspace-main">
-        <ForYou items={inbox} onOpen={(t) => go(t as Tab)} />
+        <ForYou items={inbox} organisationId={organisation.id} userId={userId} onOpen={(t) => go(t as Tab)} onChanged={() => void loadInbox(organisation.id, role, userId).then(setInbox, () => undefined)} />
         </div>
       </div>
     );
