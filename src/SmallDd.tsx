@@ -8,7 +8,9 @@ import {
 // Due Diligence essentials for the Small tier: as few questions and decisions as possible.
 
 /** Asking for due diligence: name, what they do, one risk question, and who gets the questionnaire */
-export function SmallRequestForm({ party, subject, userId, busy, onRequest, onCancel }: {
+export function SmallRequestForm({ party, subject, userId, busy, progress, onRequest, onCancel }: {
+  /** What is happening while the checks run straight after starting */
+  progress?: string;
   party: Party | null;
   subject: SubjectType;
   userId: string;
@@ -47,7 +49,7 @@ export function SmallRequestForm({ party, subject, userId, busy, onRequest, onCa
     <>
       <p className="eyebrow">Due diligence</p>
       <h1>{party ? `Check ${party.name}` : person ? "Check a person" : "Check an organisation"}</h1>
-      <p className="lead">Three quick questions. {person ? "Then run the checks with one click." : "We email them a short questionnaire, then you run the checks with one click."}</p>
+      <p className="lead">Three quick questions, then one click runs every check: sanctions, politically exposed people, watch lists and the news.</p>
       <section className="card form">
         {!party && (
           <>
@@ -82,11 +84,31 @@ export function SmallRequestForm({ party, subject, userId, busy, onRequest, onCa
       </section>
       {missing && <p className="error block" role="alert">{missing}</p>}
       <div className="row block">
-        <button type="button" disabled={busy} onClick={submit}>{person ? "Start" : contact.email.trim() ? "Start and prepare the questionnaire" : "Start"}</button>
+        <button type="button" disabled={busy} onClick={submit}>{busy ? progress || "Starting…" : person || !contact.email.trim() ? "Run the checks" : "Run the checks and prepare the questionnaire"}</button>
         <button type="button" className="link-dark" onClick={onCancel}>Cancel</button>
       </div>
     </>
   );
+}
+
+/** Runs every automatic check for a case: lists first, then the news. Returns a plain-English summary. */
+export async function runAllChecks(o: { partyId: string; partyName: string; caseId: string; listsForEveryone: boolean; onProgress: (text: string) => void }): Promise<string> {
+  o.onProgress("Checking sanctions, PEP and watch lists…");
+  const lists = o.listsForEveryone ? await screenCase(o.caseId, true) : await screenParty(o.partyId, true).then((r) => ({ subjects: 1, total_hits: r.total_hits }));
+  const targets = await loadCaseTargets(o.caseId).catch(() => [{ key: "party", name: o.partyName }]);
+  let media = 0;
+  const missed: string[] = [];
+  for (const [i, t] of targets.entries()) {
+    o.onProgress(`Searching the news ${i + 1} of ${targets.length}: ${t.name}…`);
+    try {
+      media += (await mediaSearch(o.partyId, o.caseId, t.key)).findings;
+    } catch (e) {
+      missed.push(`${t.name} (${e instanceof Error ? e.message : "failed"})`);
+    }
+  }
+  const found = lists.total_hits + media;
+  const tail = missed.length ? ` News not searched for: ${missed.join("; ")}.` : "";
+  return found === 0 ? `Checks done for ${lists.subjects === 1 ? o.partyName : `${lists.subjects} names`}: nothing found.${tail}` : `Checks done: ${found} possible match${found === 1 ? "" : "es"} to look at below.${tail}`;
 }
 
 const mark = (r: DdCheck["result"]) => (r === "clear" ? "✓" : r === "concern" ? "!" : "…");
@@ -133,24 +155,7 @@ export function SmallSteps({ party, current, checks, questionnaire, screenings, 
       setProgress("");
     }
   };
-  const runAll = () => act(async () => {
-    setProgress("Checking sanctions, PEP and watch lists…");
-    const lists = person || questionnaire !== "returned" ? await screenParty(party.id, true).then((r) => ({ subjects: 1, total_hits: r.total_hits })) : await screenCase(current.id, true);
-    const targets = await loadCaseTargets(current.id).catch(() => [{ key: "party", name: party.name }]);
-    let media = 0;
-    const missed: string[] = [];
-    for (const [i, t] of targets.entries()) {
-      setProgress(`Searching the news ${i + 1} of ${targets.length}: ${t.name}…`);
-      try {
-        media += (await mediaSearch(party.id, current.id, t.key)).findings;
-      } catch (e) {
-        missed.push(`${t.name} (${e instanceof Error ? e.message : "failed"})`);
-      }
-    }
-    const found = lists.total_hits + media;
-    return found === 0 ? `Checks done for ${lists.subjects === 1 ? party.name : `${lists.subjects} names`}: nothing found.${missed.length ? ` News not searched for: ${missed.join("; ")}.` : ""}`
-      : `Checks done: ${found} possible match${found === 1 ? "" : "es"} to look at below.${missed.length ? ` News not searched for: ${missed.join("; ")}.` : ""}`;
-  });
+  const runAll = () => act(() => runAllChecks({ partyId: party.id, partyName: party.name, caseId: current.id, listsForEveryone: !person && questionnaire === "returned", onProgress: setProgress }));
 
   const step = (n: number, done: boolean, title: string, body: React.ReactNode) => (
     <li className={done ? "small-step done" : "small-step"}>

@@ -6,7 +6,7 @@ import { attachFile, downloadFile, listFiles, type LinkedFile } from "./files";
 import { QuestionnaireAnswers, QuestionnaireAnswers2 } from "./DdQuestionnaire";
 import ScreeningPanel from "./Screening";
 import AdverseMediaPanel from "./AdverseMedia";
-import { SmallRequestForm, SmallSteps } from "./SmallDd";
+import { runAllChecks, SmallRequestForm, SmallSteps } from "./SmallDd";
 import {
   addMitigation,
   completeMitigation,
@@ -359,6 +359,7 @@ export default function Parties({ organisationId, role, userId = "", tier = "lar
   const [view, setView] = useState<View>({ kind: "list" });
   const [filter, setFilter] = useState<"all" | "open" | "attention" | "mine">("all");
   const [subject, setSubject] = useState<SubjectType>("entity");
+  const [smallProgress, setSmallProgress] = useState("");
   const [screenings, setScreenings] = useState<Screening[] | null>(null);
   const [individual, setIndividual] = useState<IndividualDetails | null>(null);
   const [editingPerson, setEditingPerson] = useState(false);
@@ -481,18 +482,27 @@ export default function Parties({ organisationId, role, userId = "", tier = "lar
           ← Back
         </button>
         {small ? (
-          <SmallRequestForm party={party} subject={party ? subjectOf(party) : view.subject ?? "entity"} userId={userId} busy={busy}
+          <SmallRequestForm party={party} subject={party ? subjectOf(party) : view.subject ?? "entity"} userId={userId} busy={busy} progress={smallProgress}
             onCancel={() => go(party ? { kind: "party", id: party.id } : { kind: "list" })}
             onRequest={(d, trigger, contact, answers) => {
               let pid = "";
+              let summary = "";
               void run(async () => {
+                setSmallProgress("Starting…");
                 const r = await requestDueDiligence(organisationId, party?.id ?? null, d, trigger, answers);
                 pid = r.partyId;
                 if (contact.email.trim()) await sendQuestionnaire(r.caseId, contact.name, contact.email);
+                // Straight on to the checks: no second page to start them from
+                try {
+                  summary = await runAllChecks({ partyId: r.partyId, partyName: d.name, caseId: r.caseId, listsForEveryone: false, onProgress: setSmallProgress });
+                } catch (e) {
+                  summary = `Started, but the checks did not run: ${e instanceof Error ? e.message : "unknown problem"} You can run them again below.`;
+                }
               }).then((ok) => {
+                setSmallProgress("");
                 if (!ok) return;
                 go(pid ? { kind: "party", id: pid } : { kind: "list" });
-                setNotice(contact.email.trim() ? "Started. Open the email below to send them the questionnaire, then run the checks." : "Started. Run the checks below.");
+                setNotice(`${summary}${contact.email.trim() ? " Open the email below to send them the questionnaire." : ""}`);
               });
             }} />
         ) : (
