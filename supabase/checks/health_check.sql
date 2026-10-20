@@ -18,6 +18,18 @@ checks (check_name, ok, detail) as (
          case when to_regclass('public.' || e.marker) is null then 'Table ' || e.marker || ' is missing' else '' end
   from expected e
   union all
+  select 'Migration 0067 has been run',
+         to_regprocedure('public.save_read_contract(uuid, uuid, boolean, jsonb, uuid, uuid, text)') is not null, ''
+  union all
+  select 'AI contract readings can only be recorded by the server',
+         to_regprocedure('public.record_contract_reading(uuid, text, jsonb, text)') is null
+         or (not has_function_privilege('authenticated', 'public.record_contract_reading(uuid, text, jsonb, text)', 'execute')
+             and not has_function_privilege('anon', 'public.record_contract_reading(uuid, text, jsonb, text)', 'execute')
+             and not exists (select 1 from pg_policies where schemaname = 'public' and tablename in ('extractions', 'extraction_fields') and cmd in ('INSERT', 'ALL'))), ''
+  union all
+  select 'The AI systems in use process in Australia and do not train on customer data',
+         not exists (select 1 from public.ai_systems a where a.retired_at is null and (a.trains_on_customer_data or a.processing_region !~* 'australia')), ''
+  union all
   select 'Migration 0066 has been run',
          to_regclass('public.site_sessions') is not null, ''
   union all

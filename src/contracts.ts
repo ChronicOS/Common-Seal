@@ -22,6 +22,17 @@ export type Contract = {
   arrangement_type?: string | null;
   pricing_basis?: string | null;
   interest_rate?: number | null;
+  /** Read from the document or online terms (migration 0067) */
+  description?: string | null;
+  purpose?: string | null;
+  terms_url?: string | null;
+  terms_added_on?: string | null;
+  tfc_available?: string | null;
+  tfc_by?: string | null;
+  tfc_notice?: string | null;
+  tfc_from?: string | null;
+  renewal_terms?: string | null;
+  source?: "typed" | "document" | "online_terms";
 };
 
 export type Approval = {

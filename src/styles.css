@@ -1898,3 +1898,17 @@ fieldset.person-row { min-width: 0; }
 .small-step.done .small-step-n { background: var(--ink); color: var(--paper, #fff); }
 .small-step > div { flex: 1; min-width: 0; }
 .test-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border: 1px dashed var(--wax, #b4472e); border-radius: 6px; margin-bottom: 16px; }
+
+/* Contract reading (0067) */
+.reader .drop-zone { margin: 10px 0 6px; }
+.reader-signed { align-self: flex-end; padding-bottom: 6px; }
+.reader-items { display: grid; gap: 12px; margin-top: 14px; }
+.reader-item { border: 1px solid var(--line, #cfc8b8); border-radius: 8px; padding: 12px 14px; background: #fff; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.reader-item.saved { background: #f3f7f1; }
+.reader-item input, .reader-item select, .reader-item textarea { max-width: 100%; }
+.reader-quote { display: block; font-size: 0.85em; color: #6b6458; border-left: 3px solid #e4dccb; padding-left: 8px; margin: 2px 0 6px; font-style: italic; overflow-wrap: anywhere; }
+.reader-group { border: 1px solid #ece6d8; border-radius: 6px; padding: 8px 10px; margin: 8px 0 4px; min-width: 0; }
+.reader-group legend { font-weight: 600; font-size: 0.95em; padding: 0 4px; }
+.reader-item .field { min-width: 0; flex: 1 1 180px; }
+.reader-item label:not(.check) { display: block; }
+.reader-group > input, .reader-group > textarea { width: 100%; box-sizing: border-box; }

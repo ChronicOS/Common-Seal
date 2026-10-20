@@ -14,6 +14,8 @@ import {
 } from "./authority";
 import { formatDay, formatWhen } from "./board";
 import DropZone from "./DropZone";
+import ContractReader from "./ContractReader";
+import { tfcLine } from "./contractReading";
 import { attachFile, downloadFile, listFiles, type LinkedFile } from "./files";
 import {
   CONTRACT_STATUS,
@@ -306,13 +308,49 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
             <dt>{twoSided ? "Review by" : "Notice by"}</dt>
             <dd>{open.notice_by ? formatDay(open.notice_by) : "Not stated"}</dd>
           </div>
-          {open.summary && (
+          {open.description && (
+            <div>
+              <dt>What it is</dt>
+              <dd>{open.description}</dd>
+            </div>
+          )}
+          {open.purpose && (
+            <div>
+              <dt>What it is for</dt>
+              <dd>{open.purpose}</dd>
+            </div>
+          )}
+          {tfcLine(open) && (
+            <div>
+              <dt>Ending it early by notice</dt>
+              <dd>{tfcLine(open)}</dd>
+            </div>
+          )}
+          {open.renewal_terms && (
+            <div>
+              <dt>Renewal</dt>
+              <dd>{open.renewal_terms}</dd>
+            </div>
+          )}
+          {open.terms_url && (
+            <div>
+              <dt>Online terms</dt>
+              <dd>
+                <a href={open.terms_url} target="_blank" rel="noopener noreferrer">{open.terms_url}</a>
+                {open.terms_added_on && <span className="muted"> · added {formatDay(open.terms_added_on)}. The page may have changed since.</span>}
+              </dd>
+            </div>
+          )}
+          {open.summary && open.summary !== open.description && (
             <div>
               <dt>Summary</dt>
               <dd className="muted">{open.summary}</dd>
             </div>
           )}
         </dl>
+        {open.source && open.source !== "typed" && (
+          <p className="muted small">Details read by Claude (in Australia) and checked by a person before saving.</p>
+        )}
 
         <section className="block">
           <h2>Contract documents</h2>
@@ -571,11 +609,18 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
         (group.entities.length === 0 ? (
           <p className="card note">Add an entity on the Overview page first; a contract belongs to a company.</p>
         ) : (
+          <>
+          <ContractReader
+            organisationId={organisationId}
+            entities={group.entities}
+            counterparties={data.counterparties}
+            onSaved={reload}
+            onOpen={(id) => { setOpenId(id); setError(null); setNotice(null); }}
+          />
+          <details className="block">
+          <summary>Or type a contract in</summary>
           <form className="card form" onSubmit={submit}>
             <h2>File a contract</h2>
-            <p className="muted">
-              For now the details are typed in. Reading them from the uploaded document comes with AI extraction.
-            </p>
             <label htmlFor="c-entity">Our company</label>
             <select id="c-entity" value={entityId} onChange={(e) => setEntityId(e.target.value)}>
               {group.entities.map((e) => (
@@ -626,6 +671,8 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
               {busy ? "Filing…" : "File and send for approval"}
             </button>
           </form>
+          </details>
+          </>
         ))}
       {error && (
         <p className="error block" role="alert">
