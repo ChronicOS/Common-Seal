@@ -15,9 +15,12 @@ export type PartyType =
   | "supplier" | "service_provider" | "distributor" | "sales_agent" | "process_agent" | "joint_venture"
   | "sub_contractor" | "research_partner" | "customer" | "donation_recipient" | "other";
 
+export type SubjectType = "entity" | "individual";
 export type Party = {
   id: string;
   name: string;
+  /** Migration 0061: an organisation or a person. Missing before then (treat as entity). */
+  subject_type?: SubjectType;
   kind: PartyKind;
   country: string | null;
   risk_rating: RiskLevel | null;
@@ -237,6 +240,13 @@ export type PartyDetails = {
   description: string;
   business_owner_user_id: string;
   annual_value: string;
+  /** Migration 0061 */
+  subject_type?: SubjectType;
+  date_of_birth?: string;
+  gender?: "male" | "female" | "";
+  citizenship?: string;
+  role_title?: string;
+  employer?: string;
 };
 
 export async function requestDueDiligence(organisationId: string, partyId: string | null, details: PartyDetails, trigger: string, answers: Record<string, string>): Promise<{ partyId: string; caseId: string }> {
@@ -428,4 +438,167 @@ export async function uploadForQuestionnaire(token: string, kind: Upload["kind"]
 }
 export async function removeQuestionnaireUpload(token: string, path: string) {
   check((await db().rpc("remove_dd_upload", { p_token: token, p_path: path })).error);
+}
+
+// ---------------------------------------------------------------------
+// Individuals and screening (migration 0061)
+// ---------------------------------------------------------------------
+export const subjectOf = (p: Pick<Party, "subject_type">): SubjectType => (p.subject_type === "individual" ? "individual" : "entity");
+
+/** The kinds of engagement that make sense for a person engaged directly */
+export const INDIVIDUAL_TYPES: { id: PartyType; label: string }[] = [
+  { id: "service_provider", label: "Consultant, contractor or adviser" },
+  { id: "sales_agent", label: "Sales agent, introducer or finder" },
+  { id: "process_agent", label: "Agent for permits, licences, visas or customs" },
+  { id: "research_partner", label: "Researcher or academic" },
+  { id: "donation_recipient", label: "Recipient of a donation, sponsorship or grant" },
+  { id: "customer", label: "Customer" },
+  { id: "other", label: "Other" },
+];
+
+/** Mirrors app.dd_individual_questions() */
+export const INDIVIDUAL_QUESTIONS: Question[] = [
+  { key: "ind_official", text: "Is the person a government official or politically exposed person, or a close relative or associate of one?", help: "Includes employees of state-owned businesses, public hospitals and universities, and party officials.", adverse: "yes", weight: "high" },
+  { key: "ind_dealings_officials", text: "Will they deal with government officials for us?", help: "Licences, permits, customs, tenders, inspections, regulators.", adverse: "yes", weight: "high" },
+  { key: "ind_unusual_payment", text: "Have they asked for unusual payment terms?", help: "Cash, payment to another person or an offshore account, large upfront or success fees.", adverse: "yes", weight: "high" },
+  { key: "ind_adverse", text: "Do you know of any history of fraud, bribery, sanctions issues, insolvency or criminal matters?", adverse: "yes", weight: "high" },
+  { key: "ind_connections", text: "Are they related to, or were they recommended by, someone in our organisation, a customer or an official?", adverse: "yes", weight: "medium" },
+  { key: "ind_qualified", text: "Have you confirmed they hold the qualifications or licences the work needs?", adverse: "no", weight: "medium" },
+];
+
+/** Mirrors the individual branch of app.dd_assess() so the form shows the rating as you answer */
+export function assessIndividual(a: Record<string, string | undefined>, partyType: string): { level: RiskLevel; reasons: string[] } {
+  let rank = partyType === "sales_agent" || partyType === "process_agent" ? 3 : partyType === "donation_recipient" ? 2 : 1;
+  const reasons: string[] = rank === 3 ? ["Acts for us with customers or officials (agent)"] : rank === 2 ? ["Type of engagement carries more risk"] : [];
+  const unknown: string[] = [];
+  if (a.country_risk === "high") {
+    rank = 3;
+    reasons.push("Works in countries with a high corruption risk (CPI below 40)");
+  } else if (a.country_risk === "medium") {
+    rank = Math.max(rank, 2);
+    reasons.push("Works in countries with a medium corruption risk (CPI 40 to 59)");
+  } else if (a.country_risk !== "low") unknown.push("country corruption risk");
+  for (const q of INDIVIDUAL_QUESTIONS) {
+    const v = a[q.key];
+    if (v !== "yes" && v !== "no") unknown.push(q.key);
+    else if (v === q.adverse) {
+      rank = Math.max(rank, q.weight === "high" ? 3 : 2);
+      reasons.push(q.text.replace(/\?$/, ""));
+    }
+  }
+  if (unknown.length) {
+    rank = Math.max(rank, 2);
+    reasons.push(`Not known: ${unknown.length} ${unknown.length === 1 ? "answer" : "answers"}`);
+  }
+  return { level: rank === 3 ? "high" : rank === 2 ? "medium" : "low", reasons };
+}
+
+export type IndividualDetails = { counterparty_id: string; date_of_birth: string | null; gender: "male" | "female" | null; citizenship: string | null; role_title: string | null; employer: string | null };
+export async function loadIndividual(partyId: string): Promise<IndividualDetails | null> {
+  const { data, error } = await db().from("dd_individual_details").select("counterparty_id, date_of_birth, gender, citizenship, role_title, employer").eq("counterparty_id", partyId).maybeSingle();
+  return error ? null : ((data as IndividualDetails | null) ?? null);
+}
+export async function saveIndividual(organisationId: string, partyId: string, d: Omit<IndividualDetails, "counterparty_id">) {
+  const row = { counterparty_id: partyId, organisation_id: organisationId, ...d, citizenship: d.citizenship ? d.citizenship.trim().toUpperCase() : null };
+  check((await db().from("dd_individual_details").upsert(row, { onConflict: "counterparty_id" })).error);
+}
+export async function setSubjectType(partyId: string, type: SubjectType) {
+  check((await db().rpc("set_dd_subject_type", { p_party: partyId, p_type: type })).error);
+}
+
+export type ScreeningHit = {
+  id: string;
+  name?: string;
+  source_type?: string;
+  source_id?: string;
+  pep_type?: string;
+  entity_type?: string;
+  gender?: string;
+  alias_names?: string[];
+  date_of_birth?: string[];
+  place_of_birth?: string[];
+  citizenship?: string[];
+  positions?: string[];
+  sanction_details?: string[];
+  description?: string[];
+  address?: string[];
+  links?: string[];
+  jurisdiction?: string[] | string;
+  company_number?: string[] | string;
+};
+export type HitReview = { decision: "match" | "not_a_match"; note: string; by: string; by_name: string | null; at: string };
+export type Screening = {
+  id: string;
+  counterparty_id: string;
+  case_id: string | null;
+  provider: string;
+  subject_type: SubjectType;
+  query: Record<string, string | number>;
+  total_hits: number;
+  hits: ScreeningHit[];
+  reviews: Record<string, HitReview>;
+  outcome: "no_matches" | "to_review" | "cleared" | "match";
+  screened_by: string | null;
+  screened_at: string;
+};
+export const SOURCE_LABELS: Record<string, string> = {
+  SANCTION: "Sanctions list",
+  PEP: "Politically exposed person",
+  CRIMINAL: "Criminal or law enforcement list",
+  NON_COMPLIANT_TAXPAYER: "Non-compliant taxpayer",
+  OTHER: "Other watch list",
+};
+export const OUTCOME_LABELS: Record<Screening["outcome"], string> = {
+  no_matches: "No possible matches",
+  to_review: "Possible matches to review",
+  cleared: "Reviewed: no match",
+  match: "Confirmed match",
+};
+
+/** Null until migration 0061 has been run */
+export async function loadScreenings(organisationId: string): Promise<Screening[] | null> {
+  const { data, error } = await db().from("dd_screenings").select("id, counterparty_id, case_id, provider, subject_type, query, total_hits, hits, reviews, outcome, screened_by, screened_at").eq("organisation_id", organisationId).order("screened_at", { ascending: false });
+  return error ? null : (data as Screening[]);
+}
+
+async function invoke<T>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await db().functions.invoke("screen-party", { body });
+  if (error) {
+    // The function explains itself in the response body
+    let message = error.message;
+    try {
+      const ctx = (error as { context?: Response }).context;
+      if (ctx && typeof ctx.json === "function") message = ((await ctx.json()) as { error?: string }).error ?? message;
+    } catch {
+      // keep the general message
+    }
+    if (/Failed to send a request|FunctionsFetchError|not found/i.test(message)) message = "Screening is not set up yet: the screen-party function has not been deployed (see the README).";
+    throw new Error(message);
+  }
+  return data as T;
+}
+export type ScreeningStatus = { configured: boolean; provider?: string; usage?: Record<string, number> | null };
+export async function screeningStatus(): Promise<ScreeningStatus | null> {
+  try {
+    return await invoke<ScreeningStatus>({ action: "status" });
+  } catch {
+    return null;
+  }
+}
+export async function screenParty(partyId: string, fuzzy: boolean): Promise<{ screening_id: string; total_hits: number; shown: number }> {
+  return invoke({ action: "screen", party_id: partyId, fuzzy });
+}
+/** The provider's PDF report, as a file ready to attach */
+export async function screeningReport(screening: Screening, partyName: string): Promise<File> {
+  const r = await invoke<{ pdf_base64: string }>({ action: "report", screening_id: screening.id });
+  const bin = atob(r.pdf_base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const day = new Date(screening.screened_at).toLocaleDateString("en-CA");
+  return new File([bytes], `Screening report - ${partyName.replace(/[^\w .-]/g, "")} - ${day}.pdf`, { type: "application/pdf" });
+}
+export async function reviewHit(screeningId: string, recordId: string, decision: "match" | "not_a_match" | "undo", note: string): Promise<string> {
+  const { data, error } = await db().rpc("review_dd_screening_hit", { p_screening: screeningId, p_record: recordId, p_decision: decision, p_note: note });
+  check(error);
+  return data as string;
 }

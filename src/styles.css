@@ -1879,3 +1879,7 @@ li.voided > *:not(.card):not(.warning-text) { text-decoration: line-through; opa
 .print-letterhead { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #cfc8b8; padding-bottom: 12px; margin-bottom: 20px; font-size: 13px; color: #44524e; }
 .print-letterhead img { max-height: 44px; max-width: 220px; }
 .idle-warning { position: fixed; bottom: 16px; left: 16px; right: 16px; max-width: 560px; margin: 0 auto; z-index: 50; }
+
+/* Due diligence screening */
+.screen-hits { display: grid; gap: 12px; margin: 12px 0; }
+.screen-hit p { margin: 0 0 6px; }

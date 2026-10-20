@@ -9,6 +9,7 @@ import {
   removeFactor, saveOrgSettings, saveRetention, setMuted, startEnrol, verifyCode,
   type AuditRow, type EditableSettings, type Factor, type OrgSettings, type SignIn, type Usage,
 } from "./settings";
+import { useScreeningStatus } from "./Screening";
 import { supabase } from "./supabase";
 
 type Props = { organisationId: string; role: string; userId: string };
@@ -522,10 +523,23 @@ const INTEGRATIONS: { name: string; what: string }[] = [
   { name: "Accounting software", what: "Bring in revenue and entity figures for thresholds (Xero, MYOB, NetSuite)." },
 ];
 export function Integrations() {
+  const status = useScreeningStatus();
+  const usage = status?.usage as { billed_requests_used?: number; billed_requests_quota?: number } | null | undefined;
   return (
     <>
-      <Head title="Integrations" lead="Connections to the tools you already use. None are available yet; they are on the build list." />
+      <Head title="Integrations" lead="Connections to the tools you already use." />
       <div className="tier-grid">
+        <section className="card tier-card">
+          <p className="eyebrow">{status?.configured ? "Connected" : "Ready to connect"}</p>
+          <h3>Sanctions and watch-list screening (Dilisense)</h3>
+          <p className="small">Screens organisations and individuals in Due Diligence against sanctions lists, politically exposed persons and criminal and other watch lists.</p>
+          {status === undefined ? <p className="small muted">Checking…</p>
+            : status?.configured ? (
+              <p className="small ok-text">On.{usage?.billed_requests_quota != null ? ` ${usage.billed_requests_used ?? 0} of ${usage.billed_requests_quota} searches used this month.` : ""}</p>
+            ) : (
+              <p className="small muted">Not connected. Whoever runs your Supabase project adds the Dilisense key there (see the set-up instructions). The key never goes into VeraPhius screens or chat.</p>
+            )}
+        </section>
         {INTEGRATIONS.map((i) => (
           <section key={i.name} className="card tier-card">
             <p className="eyebrow">Coming</p>

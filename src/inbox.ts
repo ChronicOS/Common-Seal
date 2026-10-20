@@ -50,6 +50,18 @@ export async function loadInbox(organisationId: string, role: string, userId: st
 
   await Promise.all([
     safely(async () => {
+      // Screening matches waiting for Legal or Compliance (migration 0061)
+      if (!has(role, "owner", "admin", "legal", "compliance") || !supabase) return;
+      const { data, error } = await supabase.from("dd_screenings").select("id, counterparty_id, outcome, screened_at, party:counterparties(name)").eq("organisation_id", organisationId).order("screened_at", { ascending: false });
+      if (error) return;
+      const seen = new Set<string>();
+      for (const x of (data ?? []) as unknown as { id: string; counterparty_id: string; outcome: string; party: { name: string } | null }[]) {
+        if (seen.has(x.counterparty_id)) continue;
+        seen.add(x.counterparty_id);
+        if (x.outcome === "to_review") add("parties", "Screening: possible matches to review", x.id, x.party?.name ?? "A third party", null);
+      }
+    }),
+    safely(async () => {
       const off = await loadConflictOfficer(organisationId);
       if (!off.ready) return;
       const mine = off.officer === userId;
