@@ -1897,3 +1897,4 @@ fieldset.person-row { min-width: 0; }
 .small-step-n { flex: none; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--ink); display: grid; place-items: center; font-weight: 700; font-size: 14px; }
 .small-step.done .small-step-n { background: var(--ink); color: var(--paper, #fff); }
 .small-step > div { flex: 1; min-width: 0; }
+.test-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border: 1px dashed var(--wax, #b4472e); border-radius: 6px; margin-bottom: 16px; }

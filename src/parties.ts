@@ -252,6 +252,8 @@ export type PartyDetails = {
   annual_value: string;
   /** Migration 0061 */
   subject_type?: SubjectType;
+  /** Migration 0065, TEST ONLY: open the case as the Small or the full process */
+  dd_mode?: "small" | "full";
   date_of_birth?: string;
   gender?: "male" | "female" | "";
   citizenship?: string;

@@ -345,7 +345,34 @@ function RequestForm({ party, subject, people, userId, busy, onRequest, onCancel
 
 export default function Parties({ organisationId, role, userId = "", tier = "large" }: Props) {
   const canEdit = has(role, ...RECORDS);
-  const small = tier === "small";
+  // TEST ONLY (remove before go-live): each browser tab can show Due Diligence as Small or as Medium/Large
+  const [testView, setTestView] = useState<"small" | "full" | null>(() => {
+    try {
+      const v = window.sessionStorage.getItem("veraphius-dd-view");
+      return v === "small" || v === "full" ? v : null;
+    } catch {
+      return null;
+    }
+  });
+  const small = testView ? testView === "small" : tier === "small";
+  const switchView = (v: "small" | "full") => {
+    setTestView(v);
+    try {
+      window.sessionStorage.setItem("veraphius-dd-view", v);
+    } catch {
+      // the switch then lasts until the page reloads
+    }
+  };
+  const testSwitch = (
+    <p className="test-switch no-print">
+      <span className="chip">Test only</span> Show due diligence as{" "}
+      <span className="segmented" role="group" aria-label="Test: due diligence version">
+        <button type="button" className={small ? "on" : undefined} aria-pressed={small} onClick={() => switchView("small")}>Small</button>
+        <button type="button" className={!small ? "on" : undefined} aria-pressed={!small} onClick={() => switchView("full")}>Medium/Large</button>
+      </span>{" "}
+      <span className="muted small">This tab only; open another tab to compare. New checks start under the version shown.</span>
+    </p>
+  );
   const canAdd = !only(role, "auditor");
 
   const [data, setData] = useState<PartiesData | null>(null);
@@ -489,7 +516,7 @@ export default function Parties({ organisationId, role, userId = "", tier = "lar
               let summary = "";
               void run(async () => {
                 setSmallProgress("Starting…");
-                const r = await requestDueDiligence(organisationId, party?.id ?? null, d, trigger, answers);
+                const r = await requestDueDiligence(organisationId, party?.id ?? null, { ...d, dd_mode: "small" }, trigger, answers);
                 pid = r.partyId;
                 if (contact.email.trim()) await sendQuestionnaire(r.caseId, contact.name, contact.email);
                 // Straight on to the checks: no second page to start them from
@@ -516,7 +543,7 @@ export default function Parties({ organisationId, role, userId = "", tier = "lar
           onRequest={(d, trigger, contact, answers) => {
             let pid = "";
             void run(async () => {
-              const r = await requestDueDiligence(organisationId, party?.id ?? null, d, trigger, answers);
+              const r = await requestDueDiligence(organisationId, party?.id ?? null, { ...d, dd_mode: "full" }, trigger, answers);
               pid = r.partyId;
               if (contact.name.trim() || contact.email.trim()) await sendQuestionnaire(r.caseId, contact.name, contact.email);
             }).then((ok) => {
@@ -556,6 +583,7 @@ export default function Parties({ organisationId, role, userId = "", tier = "lar
         <button type="button" className="back" onClick={() => go({ kind: "list" })}>
           ← Back to due diligence
         </button>
+        {testSwitch}
         <p className="eyebrow">
           {subjectOf(party) === "individual" ? `Individual · ${INDIVIDUAL_TYPES.find((t) => t.id === party.party_type)?.label ?? "Person"}` : partyTypeLabel(party.party_type) ?? KIND_LABELS[party.kind]}
           {party.country ? ` · ${party.country}` : ""}
@@ -1006,6 +1034,7 @@ export default function Parties({ organisationId, role, userId = "", tier = "lar
   return (
     <>
       <p className="eyebrow">Third parties</p>
+      {testSwitch}
       <h1>Due Diligence</h1>
       <p className="lead">
         {small
