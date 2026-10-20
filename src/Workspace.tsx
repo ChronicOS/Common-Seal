@@ -541,7 +541,7 @@ export default function Workspace({ membership, userId, userName }: { membership
       <div className="workspace">
         {nav}
         <div className="workspace-main">
-        <Parties organisationId={organisation.id} role={role} userId={userId} />
+        <Parties organisationId={organisation.id} role={role} userId={userId} tier={organisation.tier} />
         </div>
       </div>
     );

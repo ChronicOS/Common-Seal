@@ -47,12 +47,28 @@ import {
   setSubjectType,
   subjectOf,
   type IndividualDetails,
+  type PartyType,
+  loadCaseTargets,
+  mediaSearch,
+  screenCase,
+  screenParty,
   isForm2,
   type Screening,
   type SubjectType,
 } from "./parties";
 
-type Props = { organisationId: string; role: string; userId?: string };
+type Props = { organisationId: string; role: string; userId?: string; /** The organisation's tier: Small gets the essentials only */ tier?: string };
+
+/** Small tier: a shorter list of kinds of third party */
+const SMALL_TYPES: { id: PartyType; label: string }[] = [
+  { id: "supplier", label: "Supplier" },
+  { id: "service_provider", label: "Service provider, consultant or contractor" },
+  { id: "sales_agent", label: "Agent or introducer (wins business or deals with officials for us)" },
+  { id: "distributor", label: "Distributor or reseller" },
+  { id: "customer", label: "Customer" },
+  { id: "other", label: "Other" },
+];
+const SMALL_INDIVIDUAL_TYPES = INDIVIDUAL_TYPES.filter((t) => ["service_provider", "sales_agent", "other"].includes(t.id));
 type View = { kind: "list" } | { kind: "party"; id: string } | { kind: "request"; partyId: string | null; subject?: SubjectType };
 
 const RECORDS = ["owner", "admin", "secretary", "legal", "compliance"];
@@ -97,6 +113,50 @@ function CheckRow({ check, canEdit, busy, onSave }: { check: DdCheck; canEdit: b
 const blankDetails = (userId: string): PartyDetails =>({ name: "", party_type: "", country: "", countries: [], registration_number: "", website: "", description: "", business_owner_user_id: userId, annual_value: "" });
 
 /** Asking for due diligence: the basics about the third party. The rest comes from the third party's questionnaire. */
+/** Small tier: every automatic check in one click (sanctions and watch lists, then adverse media) */
+function QuickChecks({ party, caseId, questionnaireBack, onDone }: { party: Party; caseId: string; questionnaireBack: boolean; onDone: (notice: string) => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState("");
+  const [problem, setProblem] = useState<string | null>(null);
+  const person = subjectOf(party) === "individual";
+  const runAll = async () => {
+    setBusy(true);
+    setProblem(null);
+    try {
+      setProgress("Checking sanctions, PEP and watch lists…");
+      const lists = person || !questionnaireBack ? await screenParty(party.id, true).then((r) => ({ subjects: 1, total_hits: r.total_hits })) : await screenCase(caseId, true);
+      const targets = await loadCaseTargets(caseId).catch(() => [{ key: "party", name: party.name }]);
+      let media = 0;
+      const missed: string[] = [];
+      for (const [i, t] of targets.entries()) {
+        setProgress(`Searching adverse media ${i + 1} of ${targets.length}: ${t.name}…`);
+        try {
+          media += (await mediaSearch(party.id, caseId, t.key)).findings;
+        } catch (e) {
+          missed.push(`${t.name} (${e instanceof Error ? e.message : "failed"})`);
+        }
+      }
+      await onDone(`Checks run for ${lists.subjects} ${lists.subjects === 1 ? "name" : "names"}: ${lists.total_hits === 0 ? "no sanctions, PEP or watch-list matches" : `${lists.total_hits} possible list match${lists.total_hits === 1 ? "" : "es"} to review`}; ${media === 0 ? "no adverse media found" : `${media} adverse media finding${media === 1 ? "" : "s"} to review`}.${missed.length ? ` Adverse media not searched for: ${missed.join("; ")}.` : ""}`);
+    } catch (e) {
+      setProblem(e instanceof Error ? e.message : "The checks did not run.");
+    } finally {
+      setBusy(false);
+      setProgress("");
+    }
+  };
+  return (
+    <section className="card note block">
+      <h2>Run the checks</h2>
+      <p className="small">
+        {person ? "One click checks this person" : questionnaireBack ? "One click checks the organisation and everyone its questionnaire names" : "The questionnaire isn't back yet. You can check the organisation's name now and run the checks again when it returns, to cover its owners and managers"}{" "}
+        against sanctions lists, politically exposed persons, other watch lists and adverse media. The checks below fill in by themselves; you only review possible matches.
+      </p>
+      {problem && <p className="error" role="alert">{problem}</p>}
+      <button type="button" disabled={busy} onClick={() => void runAll()}>{busy ? progress || "Running…" : "Run all checks"}</button>
+    </section>
+  );
+}
+
 function PersonForm({ initial, busy, onSave, onCancel }: { initial: IndividualDetails; busy: boolean; onSave: (v: Omit<IndividualDetails, "counterparty_id">) => void; onCancel: () => void }) {
   const [v, setV] = useState({ date_of_birth: initial.date_of_birth ?? "", gender: initial.gender ?? "", citizenship: initial.citizenship ?? "", role_title: initial.role_title ?? "", employer: initial.employer ?? "" });
   return (
@@ -120,7 +180,8 @@ function PersonForm({ initial, busy, onSave, onCancel }: { initial: IndividualDe
   );
 }
 
-function RequestForm({ party, subject, people, userId, busy, onRequest, onCancel }: {
+function RequestForm({ party, subject, people, userId, busy, onRequest, onCancel, small = false }: {
+  small?: boolean;
   party: Party | null;
   subject: SubjectType;
   people: { user_id: string | null; full_name: string }[];
@@ -217,7 +278,9 @@ function RequestForm({ party, subject, people, userId, busy, onRequest, onCancel
         <select id="dd-type" value={d.party_type} onChange={(e) => set({ party_type: e.target.value as PartyDetails["party_type"] })}>
           <option value="">Choose</option>
           {person
-            ? INDIVIDUAL_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)
+            ? (small ? SMALL_INDIVIDUAL_TYPES : INDIVIDUAL_TYPES).map((t) => <option key={t.id} value={t.id}>{t.label}</option>)
+            : small
+            ? SMALL_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)
             : PARTY_TYPES.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.label}
@@ -230,18 +293,20 @@ function RequestForm({ party, subject, people, userId, busy, onRequest, onCancel
             <label htmlFor="dd-country">{person ? "Country where they live" : "Country where it is based"}</label>
             <input id="dd-country" value={d.country} onChange={(e) => set({ country: e.target.value })} />
           </span>
-          <span className="field grow">
-            <label htmlFor="dd-countries">Countries where it will work for us or deliver to (comma between)</label>
-            <input id="dd-countries" value={countriesText} onChange={(e) => setCountriesText(e.target.value)} />
-          </span>
+          {!small && (
+            <span className="field grow">
+              <label htmlFor="dd-countries">Countries where it will work for us or deliver to (comma between)</label>
+              <input id="dd-countries" value={countriesText} onChange={(e) => setCountriesText(e.target.value)} />
+            </span>
+          )}
           <span className="field">
-            <label htmlFor="dd-value">Expected value a year (AUD)</label>
+            <label htmlFor="dd-value">{small ? "Expected value a year (AUD, optional)" : "Expected value a year (AUD)"}</label>
             <input id="dd-value" inputMode="decimal" value={d.annual_value} onChange={(e) => set({ annual_value: e.target.value })} />
           </span>
         </div>
         <label htmlFor="dd-desc">What will they do for us?</label>
         <textarea id="dd-desc" rows={2} value={d.description} onChange={(e) => set({ description: e.target.value })} />
-        <div className="row wrap">
+        {!small && <div className="row wrap">
           <span className="field">
             <label htmlFor="dd-owner">Business owner (responsible for the relationship)</label>
             <select id="dd-owner" value={d.business_owner_user_id} onChange={(e) => set({ business_owner_user_id: e.target.value })}>
@@ -260,7 +325,7 @@ function RequestForm({ party, subject, people, userId, busy, onRequest, onCancel
               ))}
             </select>
           </span>
-        </div>
+        </div>}
         {!person && (<>
         <h3>Who should answer the questionnaire?</h3>
         <div className="row wrap">
@@ -325,8 +390,9 @@ function RequestForm({ party, subject, people, userId, busy, onRequest, onCancel
   );
 }
 
-export default function Parties({ organisationId, role, userId = "" }: Props) {
+export default function Parties({ organisationId, role, userId = "", tier = "large" }: Props) {
   const canEdit = has(role, ...RECORDS);
+  const small = tier === "small";
   const canAdd = !only(role, "auditor");
 
   const [data, setData] = useState<PartiesData | null>(null);
@@ -462,6 +528,7 @@ export default function Parties({ organisationId, role, userId = "" }: Props) {
           ← Back
         </button>
         <RequestForm
+          small={small}
           party={party}
           subject={party ? subjectOf(party) : view.subject ?? "entity"}
           people={data.people}
@@ -588,7 +655,7 @@ export default function Parties({ organisationId, role, userId = "" }: Props) {
                     {returned.contact_name ? ` by ${returned.contact_name}` : ""}.
                   </p>
                   {isForm2(returned.answers) ? <QuestionnaireAnswers2 a={returned.answers} submittedAt={returned.submitted_at} /> : <QuestionnaireAnswers a={returned.answers} submittedAt={returned.submitted_at} />}
-                  {["supplier", "service_provider", "sub_contractor", "distributor"].includes(party.party_type ?? "") && (
+                  {!small && ["supplier", "service_provider", "sub_contractor", "distributor"].includes(party.party_type ?? "") && (
                     <p className="note small">
                       Next step for a supplier: send the modern slavery supplier questionnaire too (Risk and compliance → Modern slavery). It covers labour practices and supply chains, which this questionnaire does not.
                     </p>
@@ -636,6 +703,14 @@ export default function Parties({ organisationId, role, userId = "" }: Props) {
           );
         })()}
 
+        {small && current && canEdit && screenings !== null && (
+          <QuickChecks party={party} caseId={current.id} questionnaireBack={subjectOf(party) === "individual" || questionnaires.some((q) => q.case_id === current.id && q.status === "submitted")}
+            onDone={async (n) => {
+              await reload();
+              setNotice(n);
+            }} />
+        )}
+
         {screenings !== null && (current || screenings.some((x) => x.counterparty_id === party.id)) && (
           <ScreeningPanel party={party} screenings={screenings.filter((x) => x.counterparty_id === party.id && x.kind !== "media" && (!current || x.case_id === current.id))} caseId={current?.id ?? null}
             named={(() => {
@@ -645,7 +720,7 @@ export default function Parties({ organisationId, role, userId = "" }: Props) {
               const names = [...a.owners.map((o) => o.name), ...a.officers.map((o) => o.name), ...a.management.map((o) => o.name)].map((n) => n.trim()).filter((n) => n.length >= 2);
               return [...new Map(names.map((n) => [n.toLowerCase().replace(/\s+/g, " "), n])).values()];
             })()}
-            canScreen={canEdit} canReview={has(role, "owner", "admin", "legal", "compliance")} who={(uid) => who(uid)}
+            canScreen={canEdit && !small} canReview={has(role, "owner", "admin", "legal", "compliance")} who={(uid) => who(uid)}
             onChanged={async (n) => {
               await reload();
               setNotice(n);
@@ -654,7 +729,7 @@ export default function Parties({ organisationId, role, userId = "" }: Props) {
 
         {screenings !== null && (current || screenings.some((x) => x.counterparty_id === party.id && x.kind === "media")) && (
           <AdverseMediaPanel party={party} searches={screenings.filter((x) => x.counterparty_id === party.id && x.kind === "media" && (!current || x.case_id === current.id))} caseId={current?.id ?? null}
-            canSearch={canEdit} canReview={has(role, "owner", "admin", "legal", "compliance")} who={(uid) => who(uid)}
+            canSearch={canEdit && !small} canReview={has(role, "owner", "admin", "legal", "compliance")} who={(uid) => who(uid)}
             onChanged={async (n) => {
               await reload();
               setNotice(n);
@@ -712,7 +787,7 @@ export default function Parties({ organisationId, role, userId = "" }: Props) {
                 Save concerns
               </button>
             )}
-            {data.ready && (current || advised.status === "cleared_with_conditions") && (
+            {!small && data.ready && (current || advised.status === "cleared_with_conditions") && (
               <>
                 <h3>Add a mitigation</h3>
                 <div className="row wrap">
@@ -847,7 +922,7 @@ export default function Parties({ organisationId, role, userId = "" }: Props) {
           </p>
         )}
 
-        {latest && data.ready && (latest.status === "rejected" || latest.status === "cleared_with_conditions") && (
+        {!small && latest && data.ready && (latest.status === "rejected" || latest.status === "cleared_with_conditions") && (
           <section className="card form block">
             <h2>Disagree with the advice?</h2>
             {latest.escalated_at ? (
@@ -950,7 +1025,11 @@ export default function Parties({ organisationId, role, userId = "" }: Props) {
     <>
       <p className="eyebrow">Third parties</p>
       <h1>Due Diligence</h1>
-      <p className="lead">Every supplier, agent, distributor, partner or customer goes through due diligence before we agree anything binding. Organisations and individuals are checked differently.</p>
+      <p className="lead">
+        {small
+          ? "Check anyone before you sign with them: request it here, send them the short questionnaire, run the checks with one click, then decide."
+          : "Every supplier, agent, distributor, partner or customer goes through due diligence before we agree anything binding. Organisations and individuals are checked differently."}
+      </p>
       {messages}
       <span className="segmented block-gap" role="group" aria-label="Organisations or individuals">
         {(
