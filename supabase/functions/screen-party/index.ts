@@ -229,6 +229,7 @@ Deno.serve(async (req) => {
       let subject: Subject = { ...p, key: "party" };
       if (body.case_id && body.subject_key && body.subject_key !== "party") {
         const found = await asUser.rpc("dd_case_screen_targets", { p_case: body.case_id });
+        if (found.error && /schema cache|Could not find the function/.test(found.error.message)) return reply({ error: "This needs database update 0062 (and 0063). Run them in Supabase, then try again." }, 503);
         if (found.error || !found.data) return reply({ error: "You cannot search for this case." }, 403);
         const all = (found.data as { targets: Target[] }).targets ?? [];
         const t = all.find((x) => x.key === body.subject_key);
@@ -266,7 +267,7 @@ Deno.serve(async (req) => {
         p_party: p.counterparty_id, p_user: who.user.id, p_query: q, p_total: findings.length, p_hits: findings,
         p_subject: { key: subject.key ?? "party", name: subject.name, subject_type: subject.subject_type, role: subject.role ?? null, declared_pep: Boolean(subject.declared_pep) }, p_kind: "media",
       });
-      if (saved.error) throw new Error(`Searched, but the result could not be saved: ${saved.error.message}`);
+      if (saved.error) throw new Error(/schema cache|Could not find the function/.test(saved.error.message) ? "Searched, but the result could not be saved: this needs database update 0063. Run it in Supabase, then search again." : `Searched, but the result could not be saved: ${saved.error.message}`);
       return reply({ screening_id: saved.data, findings: findings.length, sources: q.provider, warnings: [q.dilisense_error, q.claude_error].filter(Boolean) });
     }
     if (!key) return reply({ error: "Screening is not set up yet. Add DILISENSE_API_KEY in Supabase (see the README)." }, 503);
@@ -296,6 +297,7 @@ Deno.serve(async (req) => {
 
     if (body.action === "screen_case") {
       const found = await asUser.rpc("dd_case_screen_targets", { p_case: body.case_id });
+      if (found.error && /schema cache|Could not find the function/.test(found.error.message)) return reply({ error: "This needs database update 0062. Run it in Supabase, then try again." }, 503);
       if (found.error || !found.data) return reply({ error: "You cannot screen this case." }, 403);
       const { counterparty_id, targets } = found.data as { counterparty_id: string; targets: Target[] };
       const list = (targets ?? []).slice(0, MAX_SUBJECTS);

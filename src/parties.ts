@@ -204,8 +204,18 @@ function db() {
   return supabase;
 }
 
+/** Database functions each update adds, so a missing one can be named in plain words */
+const ADDED_BY: Record<string, string> = {
+  dd_case_screen_targets: "0062", review_dd_screening_rest: "0063", dd_screening_target: "0061", review_dd_screening_hit: "0061", set_dd_subject_type: "0061",
+};
 function check(error: { message: string } | null) {
-  if (error) throw new Error(error.message);
+  if (!error) return;
+  const missing = /Could not find the function public\.(\w+)/.exec(error.message);
+  if (missing) {
+    const n = ADDED_BY[missing[1]];
+    throw new Error(`This needs the latest database update${n ? ` (migration ${n} and any after it)` : ""}. Run it in Supabase's SQL editor, then reload this page.`);
+  }
+  throw new Error(error.message);
 }
 
 export async function loadParties(organisationId: string): Promise<PartiesData> {
