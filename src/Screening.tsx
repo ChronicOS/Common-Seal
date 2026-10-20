@@ -241,21 +241,16 @@ export default function ScreeningPanel({ party, screenings, caseId, named, canSc
 
 /** "Mark the rest not relevant": one reason for everything not yet reviewed */
 export function ReviewRest({ s, busy, run, label }: { s: Screening; busy: boolean; run: (work: () => Promise<string>) => void; label: string }) {
-  const [open, setOpen] = useState(false);
-  const [note, setNote] = useState("");
   const left = s.hits.filter((h) => !s.reviews[h.id]).length;
   if (left < 2) return null;
-  return open ? (
-    <div className="form block-gap">
-      <label htmlFor={`rest-${s.id}`}>Why are none of the remaining {left} relevant?</label>
-      <input id={`rest-${s.id}`} value={note} placeholder="All about different people of the same name" onChange={(e) => setNote(e.target.value)} />
-      <div className="row">
-        <button type="button" disabled={busy || note.trim().length < 5} onClick={() => run(async () => { await reviewRest(s.id, note); setOpen(false); return `${left} marked ${label}.`; })}>Save</button>
-        <button type="button" className="link-dark" onClick={() => setOpen(false)}>Cancel</button>
-      </div>
-    </div>
-  ) : (
-    <p className="small"><button type="button" className="link-dark" disabled={busy} onClick={() => setOpen(true)}>Mark the remaining {left} {label}…</button></p>
+  // One click: the reason is recorded for the record, so nobody has to type it
+  const note = label === "not relevant" ? "Marked together: none of the remaining findings is relevant" : "Marked together: none of the remaining possible matches is this subject";
+  return (
+    <p className="small">
+      <button type="button" className="link-dark" disabled={busy} onClick={() => run(async () => { await reviewRest(s.id, note); return `${left} marked ${label}.`; })}>
+        Mark the remaining {left} {label}
+      </button>
+    </p>
   );
 }
 
