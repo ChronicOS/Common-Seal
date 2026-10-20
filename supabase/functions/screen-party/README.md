@@ -58,7 +58,7 @@ When an organisation returns its questionnaire, its page shows **Run external ch
 The case page has an **Adverse media** section with **Search adverse media**. It searches the third party and everyone its returned questionnaire names, one at a time (each takes up to a minute), using whichever sources are set up:
 
 - **Dilisense adverse media**: uses the same `DILISENSE_API_KEY`. Counts adverse articles by category over the last ten years and shows up to 5 recent articles per category. Each person or organisation is one more Dilisense search.
-- **Claude news search**: Claude (Anthropic API) searches the web and reports adverse findings, each with its source link. A link that did not come from Claude's own search results is never shown.
+- **Claude news search** (built but not switched on: on the to-do list; leave `ANTHROPIC_API_KEY` unset until then): Claude (Anthropic API) searches the web and reports adverse findings, each with its source link. A link that did not come from Claude's own search results is never shown.
   1. Go to platform.claude.com, create an account for the organisation, add billing (prepaid credits are fine) and set a monthly spend limit (Settings → Limits).
   2. Check web search is allowed: Settings → Capabilities (it is on by default).
   3. Create an API key (Settings → API keys), name it "VeraPhius adverse media", and save it in your password manager.

@@ -521,6 +521,7 @@ const INTEGRATIONS: { name: string; what: string }[] = [
   { name: "Electronic signing", what: "Send NDAs, resolutions and contracts for signature and file the signed copy automatically." },
   { name: "ASIC", what: "Check company details against ASIC and track lodgements." },
   { name: "Accounting software", what: "Bring in revenue and entity figures for thresholds (Xero, MYOB, NetSuite)." },
+  { name: "Claude news search", what: "AI web search for adverse media about third parties and the people behind them, alongside Dilisense adverse media." },
 ];
 export function Integrations() {
   const status = useScreeningStatus();
@@ -540,14 +541,14 @@ export function Integrations() {
               <p className="small muted">Not connected. Whoever runs your Supabase project adds the Dilisense key there (see the set-up instructions). The key never goes into VeraPhius screens or chat.</p>
             )}
         </section>
-        <section className="card tier-card">
-          <p className="eyebrow">{status?.claude ? "Connected" : "Ready to connect"}</p>
-          <h3>Adverse media: Claude news search</h3>
-          <p className="small">Claude searches the web for adverse news about third parties and the people behind them, and links every finding to its source. Dilisense adverse media runs alongside it with the same Dilisense key.</p>
-          {status === undefined ? <p className="small muted">Checking…</p>
-            : status?.claude ? <p className="small ok-text">On.</p>
-            : <p className="small muted">Not connected. Whoever runs your Supabase project adds a Claude API key there (see the set-up guide).</p>}
-        </section>
+        {status?.claude && (
+          <section className="card tier-card">
+            <p className="eyebrow">Connected</p>
+            <h3>Adverse media: Claude news search</h3>
+            <p className="small">Claude searches the web for adverse news about third parties and the people behind them, and links every finding to its source.</p>
+            <p className="small ok-text">On.</p>
+          </section>
+        )}
         {INTEGRATIONS.map((i) => (
           <section key={i.name} className="card tier-card">
             <p className="eyebrow">Coming</p>
