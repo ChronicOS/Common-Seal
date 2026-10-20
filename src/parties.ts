@@ -613,6 +613,7 @@ async function invoke<T>(body: Record<string, unknown>): Promise<T> {
       // keep the general message
     }
     if (/Failed to send a request|FunctionsFetchError|not found/i.test(message)) message = "Screening is not set up yet: the screen-party function has not been deployed (see the README).";
+    if (/^Unknown action$/i.test(message)) message = "The screening function in Supabase is out of date. Redeploy screen-party from GitHub (set-up guide, Step 4.4), then try again.";
     throw new Error(message);
   }
   return data as T;
