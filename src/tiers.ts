@@ -10,7 +10,7 @@ export const TIERS: { id: Tier; name: string; suits: string; price: string; adds
       { group: "Company and board", items: ["Company Info, finance details and the group chart", "Ownership and the share register (with startup mode)", "Company register and ASIC filings", "Meetings, minutes and the board report", "Appointments and Authorities (signing and delegations)"] },
       { group: "Risk and compliance", items: ["Compliance calendar", "Risk Register (local)", "Policies and Training", "Employment law", "Privacy and cyber", "Work health and safety", "Confidential projects"] },
       { group: "Conduct", items: ["Gifts and hospitality", "Conflicts of interest"] },
-      { group: "Third parties", items: ["Due Diligence essentials: short questionnaire, one-click sanctions, PEP, watch-list and adverse media checks, and a decision"] },
+      { group: "Third parties", items: ["Due Diligence essentials: three questions to start, an optional short questionnaire, every check in one click, then approve or reject"] },
     ],
   },
   {

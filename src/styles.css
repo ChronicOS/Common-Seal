@@ -1890,3 +1890,10 @@ li.voided > *:not(.card):not(.warning-text) { text-decoration: line-through; opa
 fieldset.person-row { min-width: 0; }
 .person-row input, .person-row select { max-width: 100%; box-sizing: border-box; }
 .person-row .field { min-width: 0; max-width: 100%; } .person-row select { width: 100%; }
+
+/* Small tier due diligence steps */
+.small-steps ol { display: grid; gap: 14px; margin: 8px 0 12px; }
+.small-step { display: flex; gap: 12px; align-items: flex-start; }
+.small-step-n { flex: none; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--ink); display: grid; place-items: center; font-weight: 700; font-size: 14px; }
+.small-step.done .small-step-n { background: var(--ink); color: var(--paper, #fff); }
+.small-step > div { flex: 1; min-width: 0; }

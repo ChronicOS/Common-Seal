@@ -13,7 +13,7 @@ const MEDIA_OUTCOME: Record<Screening["outcome"], string> = {
   match: "Relevant adverse media",
 };
 
-function FindingRow({ f, s, canReview, busy, onReview }: { f: MediaFinding; s: Screening; canReview: boolean; busy: boolean; onReview: (d: "match" | "not_a_match" | "undo", note: string) => void }) {
+function FindingRow({ f, s, canReview, busy, onReview, quick = false }: { f: MediaFinding; s: Screening; canReview: boolean; busy: boolean; onReview: (d: "match" | "not_a_match" | "undo", note: string) => void; quick?: boolean }) {
   const review = s.reviews[f.id];
   const [deciding, setDeciding] = useState<"match" | "not_a_match" | null>(null);
   const [note, setNote] = useState("");
@@ -46,7 +46,7 @@ function FindingRow({ f, s, canReview, busy, onReview }: { f: MediaFinding; s: S
           </div>
         ) : (
           <div className="row">
-            <button type="button" className="quiet" disabled={busy} onClick={() => setDeciding("not_a_match")}>Not relevant</button>
+            <button type="button" className="quiet" disabled={busy} onClick={() => (quick ? onReview("not_a_match", "Not about them, or not a concern") : setDeciding("not_a_match"))}>Not relevant</button>
             <button type="button" className="quiet" disabled={busy} onClick={() => setDeciding("match")}>Relevant</button>
           </div>
         )
@@ -58,7 +58,8 @@ function FindingRow({ f, s, canReview, busy, onReview }: { f: MediaFinding; s: S
   );
 }
 
-function SubjectMedia({ s, older, canReview, busy, who, run }: { s: Screening; older: Screening[]; canReview: boolean; busy: boolean; who: (uid: string | null) => string; run: (work: () => Promise<string>) => void }) {
+function SubjectMedia({ s, older, canReview, busy, who, run, quick = false }: {
+  quick?: boolean; s: Screening; older: Screening[]; canReview: boolean; busy: boolean; who: (uid: string | null) => string; run: (work: () => Promise<string>) => void }) {
   const [showOld, setShowOld] = useState(false);
   const q = s.query as unknown as { provider?: string; dilisense_counts?: Record<string, number> | null; dilisense_total?: number | null; dilisense_error?: string | null; claude_conclusion?: string | null; claude_queries?: string[] | null; claude_error?: string | null; claude_dropped?: number | null };
   const findings = s.hits as unknown as MediaFinding[];
@@ -86,7 +87,7 @@ function SubjectMedia({ s, older, canReview, busy, who, run }: { s: Screening; o
       {findings.length > 0 && (
         <ul className="plain screen-hits">
           {findings.map((f) => (
-            <FindingRow key={f.id} f={f} s={s} canReview={canReview} busy={busy}
+            <FindingRow key={f.id} f={f} s={s} canReview={canReview} busy={busy} quick={quick}
               onReview={(d, note) => run(async () => {
                 const outcome = await reviewHit(s.id, f.id, d, note);
                 return outcome === "match" ? "Marked relevant. The adverse media check is now a concern." : outcome === "cleared" ? "All findings for this one reviewed." : "Saved.";
@@ -104,7 +105,8 @@ function SubjectMedia({ s, older, canReview, busy, who, run }: { s: Screening; o
 }
 
 /** Adverse media for one third party, and everyone its questionnaire names */
-export default function AdverseMediaPanel({ party, searches, caseId, canSearch, canReview, who, onChanged }: {
+export default function AdverseMediaPanel({ party, searches, caseId, canSearch, canReview, who, onChanged, quick = false }: {
+  quick?: boolean;
   party: Party;
   searches: Screening[];
   caseId: string | null;
@@ -162,7 +164,7 @@ export default function AdverseMediaPanel({ party, searches, caseId, canSearch, 
       </p>
       {problem && <p className="error" role="alert">{problem}</p>}
       {subjects.length === 0 && <p className="muted">Not searched yet.</p>}
-      {subjects.map(([key, list]) => <SubjectMedia key={key} s={list[0]} older={list.slice(1)} canReview={canReview} busy={busy} who={who} run={run} />)}
+      {subjects.map(([key, list]) => <SubjectMedia key={key} s={list[0]} older={list.slice(1)} canReview={canReview} busy={busy} who={who} run={run} quick={quick} />)}
       {canSearch && (
         status === undefined ? null : !ready ? (
           <p className="small muted">Adverse media search is not switched on yet. Whoever runs your Supabase project adds the keys (Settings, Integrations).</p>

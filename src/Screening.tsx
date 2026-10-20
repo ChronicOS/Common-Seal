@@ -19,7 +19,7 @@ export function useScreeningStatus() {
   return status;
 }
 
-function Hit({ hit, s, canReview, busy, onReview }: { hit: ScreeningHit; s: Screening; canReview: boolean; busy: boolean; onReview: (decision: "match" | "not_a_match" | "undo", note: string) => void }) {
+function Hit({ hit, s, canReview, busy, onReview, quick = false }: { hit: ScreeningHit; s: Screening; canReview: boolean; busy: boolean; onReview: (decision: "match" | "not_a_match" | "undo", note: string) => void; quick?: boolean }) {
   const review = s.reviews[hit.id];
   const [deciding, setDeciding] = useState<"match" | "not_a_match" | null>(null);
   const [note, setNote] = useState("");
@@ -66,7 +66,7 @@ function Hit({ hit, s, canReview, busy, onReview }: { hit: ScreeningHit; s: Scre
           </div>
         ) : (
           <div className="row">
-            <button type="button" className="quiet" disabled={busy} onClick={() => setDeciding("not_a_match")}>Not this {person ? "person" : "organisation"}</button>
+            <button type="button" className="quiet" disabled={busy} onClick={() => (quick ? onReview("not_a_match", `Not the same ${person ? "person" : "organisation"}`) : setDeciding("not_a_match"))}>{quick ? "Not them" : `Not this ${person ? "person" : "organisation"}`}</button>
             <button type="button" className="quiet" disabled={busy} onClick={() => setDeciding("match")}>It is them</button>
           </div>
         )
@@ -78,7 +78,8 @@ function Hit({ hit, s, canReview, busy, onReview }: { hit: ScreeningHit; s: Scre
 }
 
 /** One subject's latest screening: who, the outcome, and its possible matches */
-function SubjectResult({ s, older, canReview, busy, who, onReview, onBulk }: {
+function SubjectResult({ s, older, canReview, busy, who, onReview, onBulk, quick = false }: {
+  quick?: boolean;
   s: Screening;
   older: Screening[];
   canReview: boolean;
@@ -109,7 +110,7 @@ function SubjectResult({ s, older, canReview, busy, who, onReview, onBulk }: {
       )}
       {s.hits.length > 0 && (
         <ul className="plain screen-hits">
-          {s.hits.map((h) => <Hit key={h.id} hit={h} s={s} canReview={canReview} busy={busy} onReview={(d, note) => onReview(s, h, d, note)} />)}
+          {s.hits.map((h) => <Hit key={h.id} hit={h} s={s} canReview={canReview} busy={busy} quick={quick} onReview={(d, note) => onReview(s, h, d, note)} />)}
         </ul>
       )}
       {canReview && <ReviewRest s={s} busy={busy} run={(w) => onBulk(w)} label="not a match" />}
@@ -128,7 +129,9 @@ function SubjectResult({ s, older, canReview, busy, who, onReview, onBulk }: {
 }
 
 /** Sanctions, PEP and watch-list screening for one third party, and everyone its questionnaire names */
-export default function ScreeningPanel({ party, screenings, caseId, named, canScreen, canReview, who, onChanged }: {
+export default function ScreeningPanel({ party, screenings, caseId, named, canScreen, canReview, who, onChanged, quick = false }: {
+  /** Small tier: one-click "Not them" */
+  quick?: boolean;
   party: Party;
   screenings: Screening[];
   caseId: string | null;
@@ -195,7 +198,7 @@ export default function ScreeningPanel({ party, screenings, caseId, named, canSc
 
       {subjects.length === 0 && <p className="muted">Not screened yet.{named === null && !person ? " The external check is offered once the questionnaire comes back; you can also screen the organisation's name now." : ""}</p>}
       {subjects.map(([key, list]) => (
-        <SubjectResult key={key} s={list[0]} older={list.slice(1)} canReview={canReview} busy={busy} who={who} onReview={review} onBulk={(w) => void run(w)} />
+        <SubjectResult key={key} s={list[0]} older={list.slice(1)} canReview={canReview} busy={busy} who={who} onReview={review} onBulk={(w) => void run(w)} quick={quick} />
       ))}
 
       {canScreen && status?.configured && partyLatest && (

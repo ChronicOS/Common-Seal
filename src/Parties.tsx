@@ -6,6 +6,7 @@ import { attachFile, downloadFile, listFiles, type LinkedFile } from "./files";
 import { QuestionnaireAnswers, QuestionnaireAnswers2 } from "./DdQuestionnaire";
 import ScreeningPanel from "./Screening";
 import AdverseMediaPanel from "./AdverseMedia";
+import { SmallRequestForm, SmallSteps } from "./SmallDd";
 import {
   addMitigation,
   completeMitigation,
@@ -48,10 +49,6 @@ import {
   subjectOf,
   type IndividualDetails,
   type PartyType,
-  loadCaseTargets,
-  mediaSearch,
-  screenCase,
-  screenParty,
   isForm2,
   type Screening,
   type SubjectType,
@@ -113,50 +110,6 @@ function CheckRow({ check, canEdit, busy, onSave }: { check: DdCheck; canEdit: b
 const blankDetails = (userId: string): PartyDetails =>({ name: "", party_type: "", country: "", countries: [], registration_number: "", website: "", description: "", business_owner_user_id: userId, annual_value: "" });
 
 /** Asking for due diligence: the basics about the third party. The rest comes from the third party's questionnaire. */
-/** Small tier: every automatic check in one click (sanctions and watch lists, then adverse media) */
-function QuickChecks({ party, caseId, questionnaireBack, onDone }: { party: Party; caseId: string; questionnaireBack: boolean; onDone: (notice: string) => Promise<void> }) {
-  const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState("");
-  const [problem, setProblem] = useState<string | null>(null);
-  const person = subjectOf(party) === "individual";
-  const runAll = async () => {
-    setBusy(true);
-    setProblem(null);
-    try {
-      setProgress("Checking sanctions, PEP and watch lists…");
-      const lists = person || !questionnaireBack ? await screenParty(party.id, true).then((r) => ({ subjects: 1, total_hits: r.total_hits })) : await screenCase(caseId, true);
-      const targets = await loadCaseTargets(caseId).catch(() => [{ key: "party", name: party.name }]);
-      let media = 0;
-      const missed: string[] = [];
-      for (const [i, t] of targets.entries()) {
-        setProgress(`Searching adverse media ${i + 1} of ${targets.length}: ${t.name}…`);
-        try {
-          media += (await mediaSearch(party.id, caseId, t.key)).findings;
-        } catch (e) {
-          missed.push(`${t.name} (${e instanceof Error ? e.message : "failed"})`);
-        }
-      }
-      await onDone(`Checks run for ${lists.subjects} ${lists.subjects === 1 ? "name" : "names"}: ${lists.total_hits === 0 ? "no sanctions, PEP or watch-list matches" : `${lists.total_hits} possible list match${lists.total_hits === 1 ? "" : "es"} to review`}; ${media === 0 ? "no adverse media found" : `${media} adverse media finding${media === 1 ? "" : "s"} to review`}.${missed.length ? ` Adverse media not searched for: ${missed.join("; ")}.` : ""}`);
-    } catch (e) {
-      setProblem(e instanceof Error ? e.message : "The checks did not run.");
-    } finally {
-      setBusy(false);
-      setProgress("");
-    }
-  };
-  return (
-    <section className="card note block">
-      <h2>Run the checks</h2>
-      <p className="small">
-        {person ? "One click checks this person" : questionnaireBack ? "One click checks the organisation and everyone its questionnaire names" : "The questionnaire isn't back yet. You can check the organisation's name now and run the checks again when it returns, to cover its owners and managers"}{" "}
-        against sanctions lists, politically exposed persons, other watch lists and adverse media. The checks below fill in by themselves; you only review possible matches.
-      </p>
-      {problem && <p className="error" role="alert">{problem}</p>}
-      <button type="button" disabled={busy} onClick={() => void runAll()}>{busy ? progress || "Running…" : "Run all checks"}</button>
-    </section>
-  );
-}
-
 function PersonForm({ initial, busy, onSave, onCancel }: { initial: IndividualDetails; busy: boolean; onSave: (v: Omit<IndividualDetails, "counterparty_id">) => void; onCancel: () => void }) {
   const [v, setV] = useState({ date_of_birth: initial.date_of_birth ?? "", gender: initial.gender ?? "", citizenship: initial.citizenship ?? "", role_title: initial.role_title ?? "", employer: initial.employer ?? "" });
   return (
@@ -527,8 +480,23 @@ export default function Parties({ organisationId, role, userId = "", tier = "lar
         <button type="button" className="back" onClick={() => go(party ? { kind: "party", id: party.id } : { kind: "list" })}>
           ← Back
         </button>
+        {small ? (
+          <SmallRequestForm party={party} subject={party ? subjectOf(party) : view.subject ?? "entity"} userId={userId} busy={busy}
+            onCancel={() => go(party ? { kind: "party", id: party.id } : { kind: "list" })}
+            onRequest={(d, trigger, contact, answers) => {
+              let pid = "";
+              void run(async () => {
+                const r = await requestDueDiligence(organisationId, party?.id ?? null, d, trigger, answers);
+                pid = r.partyId;
+                if (contact.email.trim()) await sendQuestionnaire(r.caseId, contact.name, contact.email);
+              }).then((ok) => {
+                if (!ok) return;
+                go(pid ? { kind: "party", id: pid } : { kind: "list" });
+                setNotice(contact.email.trim() ? "Started. Open the email below to send them the questionnaire, then run the checks." : "Started. Run the checks below.");
+              });
+            }} />
+        ) : (
         <RequestForm
-          small={small}
           party={party}
           subject={party ? subjectOf(party) : view.subject ?? "entity"}
           people={data.people}
@@ -548,6 +516,7 @@ export default function Parties({ organisationId, role, userId = "", tier = "lar
             });
           }}
         />
+        )}
         {messages}
       </>
     );
@@ -624,7 +593,7 @@ export default function Parties({ organisationId, role, userId = "", tier = "lar
             <strong>Rejected.</strong> Contracts with this party cannot be approved.
           </p>
         )}
-        {party.dd_status === "open" && (
+        {party.dd_status === "open" && !(small && current) && (
           <p className="card warning" role="alert">
             <strong>Due diligence is not finished.</strong> Contracts with this party cannot be approved until it is cleared.
           </p>
@@ -635,6 +604,16 @@ export default function Parties({ organisationId, role, userId = "", tier = "lar
           </p>
         )}
         {messages}
+
+        {small && current && (
+          <SmallSteps party={party} current={current} checks={checks} canEdit={canEdit && screenings !== null} canDecide={canEdit}
+            questionnaire={questionnaires.some((q) => q.case_id === current.id && q.status === "submitted") ? "returned" : questionnaires.some((q) => q.case_id === current.id && q.status === "sent") ? "sent" : "none"}
+            screenings={(screenings ?? []).filter((x) => x.case_id === current.id)}
+            onDone={async (n) => {
+              await reload();
+              setNotice(n);
+            }} />
+        )}
 
         {subjectOf(party) === "entity" && (current || questionnaires.some((q) => cases.some((c) => c.id === q.case_id))) && (() => {
           const caseQs = questionnaires.filter((q) => cases.some((c) => c.id === q.case_id));
@@ -703,13 +682,6 @@ export default function Parties({ organisationId, role, userId = "", tier = "lar
           );
         })()}
 
-        {small && current && canEdit && screenings !== null && (
-          <QuickChecks party={party} caseId={current.id} questionnaireBack={subjectOf(party) === "individual" || questionnaires.some((q) => q.case_id === current.id && q.status === "submitted")}
-            onDone={async (n) => {
-              await reload();
-              setNotice(n);
-            }} />
-        )}
 
         {screenings !== null && (current || screenings.some((x) => x.counterparty_id === party.id)) && (
           <ScreeningPanel party={party} screenings={screenings.filter((x) => x.counterparty_id === party.id && x.kind !== "media" && (!current || x.case_id === current.id))} caseId={current?.id ?? null}
@@ -720,7 +692,7 @@ export default function Parties({ organisationId, role, userId = "", tier = "lar
               const names = [...a.owners.map((o) => o.name), ...a.officers.map((o) => o.name), ...a.management.map((o) => o.name)].map((n) => n.trim()).filter((n) => n.length >= 2);
               return [...new Map(names.map((n) => [n.toLowerCase().replace(/\s+/g, " "), n])).values()];
             })()}
-            canScreen={canEdit && !small} canReview={has(role, "owner", "admin", "legal", "compliance")} who={(uid) => who(uid)}
+            canScreen={canEdit && !small} canReview={small ? canEdit : has(role, "owner", "admin", "legal", "compliance")} quick={small} who={(uid) => who(uid)}
             onChanged={async (n) => {
               await reload();
               setNotice(n);
@@ -729,14 +701,14 @@ export default function Parties({ organisationId, role, userId = "", tier = "lar
 
         {screenings !== null && (current || screenings.some((x) => x.counterparty_id === party.id && x.kind === "media")) && (
           <AdverseMediaPanel party={party} searches={screenings.filter((x) => x.counterparty_id === party.id && x.kind === "media" && (!current || x.case_id === current.id))} caseId={current?.id ?? null}
-            canSearch={canEdit && !small} canReview={has(role, "owner", "admin", "legal", "compliance")} who={(uid) => who(uid)}
+            canSearch={canEdit && !small} canReview={small ? canEdit : has(role, "owner", "admin", "legal", "compliance")} quick={small} who={(uid) => who(uid)}
             onChanged={async (n) => {
               await reload();
               setNotice(n);
             }} />
         )}
 
-        {current && (
+        {current && !small && (
           <section className="card form block">
             <div className="row spread">
               <h2>Checks</h2>
@@ -777,7 +749,7 @@ export default function Parties({ organisationId, role, userId = "", tier = "lar
           </section>
         )}
 
-        {advised && canEdit && (
+        {advised && canEdit && !small && (
           <section className="card form block">
             <h2>{current ? "Engagement advice" : "Advice and mitigations"}</h2>
             <label htmlFor="dd-concerns">Areas of concern</label>
