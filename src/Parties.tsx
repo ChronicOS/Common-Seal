@@ -3,7 +3,7 @@ import { has, only } from "./roles";
 import { useCallback, useEffect, useState } from "react";
 import { formatDay, formatWhen } from "./board";
 import { attachFile, downloadFile, listFiles, type LinkedFile } from "./files";
-import { QuestionnaireAnswers } from "./DdQuestionnaire";
+import { QuestionnaireAnswers, QuestionnaireAnswers2 } from "./DdQuestionnaire";
 import ScreeningPanel from "./Screening";
 import {
   addMitigation,
@@ -46,6 +46,7 @@ import {
   setSubjectType,
   subjectOf,
   type IndividualDetails,
+  isForm2,
   type Screening,
   type SubjectType,
 } from "./parties";
@@ -166,7 +167,7 @@ function RequestForm({ party, subject, people, userId, busy, onRequest, onCancel
       <p className="lead">
         {person
           ? "For a person engaged directly: a consultant, agent, introducer, adviser or sole trader. Do this before agreeing anything binding. You answer a few questions; the person is then screened against sanctions, politically exposed persons and watch lists."
-          : "Do this before agreeing anything binding. Tell us the basics; the third party then answers a short questionnaire about its owners, office holders, any litigation, insolvency or adverse press, and its licences."}{" "}
+          : "Do this before agreeing anything binding. Tell us the basics; the third party then answers a short questionnaire about its owners, office holders and management, its services, its compliance record and its policies. When it comes back, one click screens everyone it names."}{" "}
         No contract can be approved until due diligence is cleared.
       </p>
 
@@ -585,7 +586,7 @@ export default function Parties({ organisationId, role, userId = "" }: Props) {
                     Returned {returned.submitted_at ? formatDay(returned.submitted_at) : ""}
                     {returned.contact_name ? ` by ${returned.contact_name}` : ""}.
                   </p>
-                  <QuestionnaireAnswers a={returned.answers} submittedAt={returned.submitted_at} />
+                  {isForm2(returned.answers) ? <QuestionnaireAnswers2 a={returned.answers} submittedAt={returned.submitted_at} /> : <QuestionnaireAnswers a={returned.answers} submittedAt={returned.submitted_at} />}
                   {["supplier", "service_provider", "sub_contractor", "distributor"].includes(party.party_type ?? "") && (
                     <p className="note small">
                       Next step for a supplier: send the modern slavery supplier questionnaire too (Risk and compliance → Modern slavery). It covers labour practices and supply chains, which this questionnaire does not.
@@ -635,7 +636,14 @@ export default function Parties({ organisationId, role, userId = "" }: Props) {
         })()}
 
         {screenings !== null && (current || screenings.some((x) => x.counterparty_id === party.id)) && (
-          <ScreeningPanel party={party} screenings={screenings.filter((x) => x.counterparty_id === party.id)} caseId={current?.id ?? null}
+          <ScreeningPanel party={party} screenings={screenings.filter((x) => x.counterparty_id === party.id && (!current || x.case_id === current.id))} caseId={current?.id ?? null}
+            named={(() => {
+              const back = current ? questionnaires.find((q) => q.case_id === current.id && q.status === "submitted" && isForm2(q.answers)) : undefined;
+              if (!back || !isForm2(back.answers)) return null;
+              const a = back.answers;
+              const names = [...a.owners.map((o) => o.name), ...a.officers.map((o) => o.name), ...a.management.map((o) => o.name)].map((n) => n.trim()).filter((n) => n.length >= 2);
+              return [...new Map(names.map((n) => [n.toLowerCase().replace(/\s+/g, " "), n])).values()];
+            })()}
             canScreen={canEdit} canReview={has(role, "owner", "admin", "legal", "compliance")} who={(uid) => who(uid)}
             onChanged={async (n) => {
               await reload();

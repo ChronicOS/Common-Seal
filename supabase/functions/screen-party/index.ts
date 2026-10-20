@@ -11,7 +11,9 @@
 //
 // Actions (POST, JSON body):
 //   { "action": "status" }                              is screening set up; this month's usage (free call)
-//   { "action": "screen", "party_id": "…", "fuzzy": true } run a search and record it
+//   { "action": "screen", "party_id": "…", "fuzzy": true } screen the third party itself
+//   { "action": "screen_case", "case_id": "…", "fuzzy": true } screen the third party and everyone its returned
+//                                                         questionnaire names (owners, office holders, management)
 //   { "action": "report", "screening_id": "…" }         the provider's PDF report for an earlier search (one paid call)
 
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -26,7 +28,8 @@ const cors = {
 };
 const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
-type Target = { organisation_id: string; counterparty_id: string; name: string; subject_type: "entity" | "individual"; date_of_birth: string | null; gender: string | null; citizenship: string | null };
+type Target = { key?: string; role?: string; declared_pep?: boolean; name: string; subject_type: "entity" | "individual"; date_of_birth: string | null; gender: string | null };
+const MAX_SUBJECTS = 40;
 
 /** Dilisense wants dd/mm/yyyy */
 const dmy = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
@@ -84,7 +87,7 @@ Deno.serve(async (req) => {
   const { data: who } = await asUser.auth.getUser();
   if (!who?.user) return reply({ error: "Sign in again." }, 401);
   const key = Deno.env.get("DILISENSE_API_KEY");
-  let body: { action?: string; party_id?: string; screening_id?: string; fuzzy?: boolean };
+  let body: { action?: string; party_id?: string; case_id?: string; screening_id?: string; fuzzy?: boolean };
   try {
     body = await req.json();
   } catch {
@@ -99,17 +102,42 @@ Deno.serve(async (req) => {
     }
     if (!key) return reply({ error: "Screening is not set up yet. Add DILISENSE_API_KEY in Supabase (see the README)." }, 503);
 
+    // Screens one subject and records it. Returns the number of possible matches.
+    const screenOne = async (partyId: string, t: Target) => {
+      const q = query(t, body.fuzzy !== false);
+      const endpoint = t.subject_type === "individual" ? "checkIndividual" : "checkEntity";
+      const raw = JSON.parse(await dilisense(endpoint, q, key)) as { total_hits?: number; found_records?: Record<string, unknown>[] };
+      const records = (raw.found_records ?? []).slice(0, MAX_HITS).map(trim);
+      const total = Number(raw.total_hits ?? records.length);
+      const saved = await asServer.rpc("record_dd_screening", {
+        p_party: partyId, p_user: who.user!.id, p_query: { ...q, endpoint, shown: records.length }, p_total: total, p_hits: records,
+        p_subject: { key: t.key ?? "party", name: t.name, subject_type: t.subject_type, role: t.role ?? null, declared_pep: Boolean(t.declared_pep) },
+      });
+      if (saved.error) throw new Error(`Searched, but the result could not be saved: ${saved.error.message}`);
+      return { screening_id: saved.data as string, total };
+    };
+
     if (body.action === "screen") {
       const target = await asUser.rpc("dd_screening_target", { p_party: body.party_id });
       if (target.error || !target.data) return reply({ error: "You cannot screen this party." }, 403);
-      const t = target.data as Target;
-      const q = query(t, body.fuzzy !== false);
-      const raw = JSON.parse(await dilisense(t.subject_type === "individual" ? "checkIndividual" : "checkEntity", q, key)) as { total_hits?: number; found_records?: Record<string, unknown>[] };
-      const records = (raw.found_records ?? []).slice(0, MAX_HITS).map(trim);
-      const total = Number(raw.total_hits ?? records.length);
-      const saved = await asServer.rpc("record_dd_screening", { p_party: t.counterparty_id, p_user: who.user.id, p_query: { ...q, endpoint: t.subject_type === "individual" ? "checkIndividual" : "checkEntity", shown: records.length }, p_total: total, p_hits: records });
-      if (saved.error) throw new Error(`Searched, but the result could not be saved: ${saved.error.message}`);
-      return reply({ screening_id: saved.data, total_hits: total, shown: records.length });
+      const t = target.data as Target & { counterparty_id: string };
+      const r = await screenOne(t.counterparty_id, t);
+      return reply({ screening_id: r.screening_id, total_hits: r.total, subjects: 1 });
+    }
+
+    if (body.action === "screen_case") {
+      const found = await asUser.rpc("dd_case_screen_targets", { p_case: body.case_id });
+      if (found.error || !found.data) return reply({ error: "You cannot screen this case." }, 403);
+      const { counterparty_id, targets } = found.data as { counterparty_id: string; targets: Target[] };
+      const list = (targets ?? []).slice(0, MAX_SUBJECTS);
+      let hits = 0;
+      let done = 0;
+      for (const t of list) {
+        hits += (await screenOne(counterparty_id, t)).total;
+        done++;
+        await new Promise((r) => setTimeout(r, 250)); // stay well inside the provider's rate limit
+      }
+      return reply({ subjects: done, total_hits: hits, skipped: Math.max(0, (targets ?? []).length - list.length) });
     }
 
     if (body.action === "report") {

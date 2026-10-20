@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { formatWhen } from "./board";
 import { attachFile } from "./files";
 import {
-  OUTCOME_LABELS, reviewHit, screenParty, screeningReport, screeningStatus, SOURCE_LABELS,
+  OUTCOME_LABELS, reviewHit, screenCase, screenParty, screeningReport, screeningStatus, SOURCE_LABELS,
   type Party, type Screening, type ScreeningHit, type ScreeningStatus,
 } from "./parties";
 
@@ -77,11 +77,61 @@ function Hit({ hit, s, canReview, busy, onReview }: { hit: ScreeningHit; s: Scre
   );
 }
 
-/** Sanctions, PEP and watch-list screening for one third party */
-export default function ScreeningPanel({ party, screenings, caseId, canScreen, canReview, who, onChanged }: {
+/** One subject's latest screening: who, the outcome, and its possible matches */
+function SubjectResult({ s, older, canReview, busy, who, onReview }: {
+  s: Screening;
+  older: Screening[];
+  canReview: boolean;
+  busy: boolean;
+  who: (uid: string | null) => string;
+  onReview: (s: Screening, hit: ScreeningHit, d: "match" | "not_a_match" | "undo", note: string) => void;
+}) {
+  const [showOld, setShowOld] = useState(false);
+  const person = s.subject_type === "individual";
+  const toReview = s.hits.filter((h) => !s.reviews[h.id]).length;
+  return (
+    <div className="screen-subject">
+      <p>
+        <strong>{s.subject_name ?? "The third party"}</strong>
+        {s.subject_role ? <span className="muted small"> · {s.subject_role}</span> : null}{" "}
+        <span className={s.outcome === "match" ? "chip chip-alert" : s.outcome === "to_review" ? "chip warning-text" : "chip"}>{OUTCOME_LABELS[s.outcome]}</span>{" "}
+        {s.declared_pep && <span className="chip chip-alert" title="The questionnaire says this person or body is, or is linked to, a government official">Government link declared</span>}
+      </p>
+      <p className="small muted">
+        Screened {formatWhen(s.screened_at)} by {who(s.screened_by)} · {s.total_hits} possible match{s.total_hits === 1 ? "" : "es"}
+        {s.outcome === "to_review" ? ` · ${toReview} to review` : ""}
+        {s.query.dob ? ` · born ${s.query.dob}` : person ? " · no date of birth used" : ""}
+        {s.query.fuzzy_search ? " · close spellings included" : " · exact spelling"}
+      </p>
+      {s.total_hits > s.hits.length && (
+        <p className="card warning small">Showing the first {s.hits.length} of {s.total_hits} possible matches. {person ? "A date of birth would narrow the list." : "Use the full registered name to narrow the list."}</p>
+      )}
+      {s.hits.length > 0 && (
+        <ul className="plain screen-hits">
+          {s.hits.map((h) => <Hit key={h.id} hit={h} s={s} canReview={canReview} busy={busy} onReview={(d, note) => onReview(s, h, d, note)} />)}
+        </ul>
+      )}
+      {older.length > 0 && (
+        <p className="small">
+          <button type="button" className="link-dark" onClick={() => setShowOld(!showOld)}>{showOld ? "Hide" : "Show"} earlier screenings ({older.length})</button>
+        </p>
+      )}
+      {showOld && (
+        <ul className="small">
+          {older.map((x) => <li key={x.id}>{formatWhen(x.screened_at)}: {OUTCOME_LABELS[x.outcome]} ({x.total_hits} possible match{x.total_hits === 1 ? "" : "es"}), by {who(x.screened_by)}</li>)}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Sanctions, PEP and watch-list screening for one third party, and everyone its questionnaire names */
+export default function ScreeningPanel({ party, screenings, caseId, named, canScreen, canReview, who, onChanged }: {
   party: Party;
   screenings: Screening[];
   caseId: string | null;
+  /** Names from the returned questionnaire (owners, office holders, management); null when none has come back */
+  named: string[] | null;
   canScreen: boolean;
   canReview: boolean;
   who: (uid: string | null) => string;
@@ -91,9 +141,7 @@ export default function ScreeningPanel({ party, screenings, caseId, canScreen, c
   const [fuzzy, setFuzzy] = useState(true);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const [showOld, setShowOld] = useState(false);
   const person = party.subject_type === "individual";
-  const latest = screenings[0];
   const run = async (work: () => Promise<string>) => {
     setBusy(true);
     setProblem(null);
@@ -105,7 +153,19 @@ export default function ScreeningPanel({ party, screenings, caseId, canScreen, c
       setBusy(false);
     }
   };
-  const toReview = latest ? latest.hits.filter((h) => !latest.reviews[h.id]).length : 0;
+  // Latest screening per subject; the third party first
+  const groups = new Map<string, Screening[]>();
+  for (const x of screenings) groups.set(x.subject_key ?? "party", [...(groups.get(x.subject_key ?? "party") ?? []), x]);
+  const rank = (k: string) => ["party", "owner", "officer", "manager"].indexOf(k.split(":")[0]) * 1000 + Number(k.split(":")[1] ?? 0);
+  const subjects = [...groups.entries()].sort(([a], [b]) => rank(a) - rank(b));
+  const partyLatest = groups.get("party")?.[0];
+  const caseScreened = named !== null && subjects.length > 1;
+  const subjectCount = named ? 1 + named.length : 1;
+  const review = (s: Screening, h: ScreeningHit, d: "match" | "not_a_match" | "undo", note: string) =>
+    void run(async () => {
+      const outcome = await reviewHit(s.id, h.id, d, note);
+      return outcome === "cleared" ? "All possible matches for this one reviewed." : outcome === "match" ? "Recorded as a match. The matching check is now a concern." : "Saved.";
+    });
 
   return (
     <section className="card block">
@@ -115,83 +175,60 @@ export default function ScreeningPanel({ party, screenings, caseId, canScreen, c
       </p>
       {problem && <p className="error" role="alert">{problem}</p>}
 
-      {latest ? (
-        <>
+      {canScreen && status?.configured && named !== null && caseId && (
+        <div className={caseScreened ? "block-gap" : "card note block-gap"}>
           <p>
-            <span className={latest.outcome === "match" ? "chip chip-alert" : latest.outcome === "to_review" ? "chip warning-text" : "chip"}>{OUTCOME_LABELS[latest.outcome]}</span>{" "}
-            <span className="small muted">
-              Screened {formatWhen(latest.screened_at)} by {who(latest.screened_by)} · {latest.total_hits} possible match{latest.total_hits === 1 ? "" : "es"}
-              {latest.outcome === "to_review" ? ` · ${toReview} to review` : ""}
-              {latest.query.dob ? ` · born ${latest.query.dob}` : person ? " · no date of birth used" : ""}
-              {latest.query.fuzzy_search ? " · close spellings included" : " · exact spelling"}
-            </span>
+            <strong>{caseScreened ? "Run the external check again" : "The questionnaire is back: run the external check."}</strong>{" "}
+            Screens {party.name}{named.length ? ` and the ${named.length} ${named.length === 1 ? "person or organisation" : "people and organisations"} the questionnaire names (${named.slice(0, 6).join(", ")}${named.length > 6 ? ", …" : ""})` : ""}, straight from the answers. Uses {subjectCount} search{subjectCount === 1 ? "" : "es"}.
           </p>
-          {latest.total_hits > latest.hits.length && (
-            <p className="card warning small">Showing the first {latest.hits.length} of {latest.total_hits} possible matches. {person ? "Add a date of birth and screen again to narrow the list." : "Use the full registered name and screen again."}</p>
-          )}
-          {latest.hits.length > 0 && (
-            <ul className="plain screen-hits">
-              {latest.hits.map((h) => (
-                <Hit key={h.id} hit={h} s={latest} canReview={canReview} busy={busy}
-                  onReview={(d, note) => void run(async () => {
-                    const outcome = await reviewHit(latest.id, h.id, d, note);
-                    return outcome === "cleared" ? "All possible matches reviewed. The screening checks are marked clear."
-                      : outcome === "match" ? "Recorded as a match. The matching check is now a concern."
-                      : "Saved.";
-                  })} />
-              ))}
-            </ul>
-          )}
-          {canScreen && status?.configured && (
-            <p className="small">
-              <button type="button" className="link-dark" disabled={busy} onClick={() => void run(async () => {
-                const file = await screeningReport(latest, party.name);
-                if (caseId) {
-                  await attachFile("dd_cases", caseId, file);
-                  return "The provider's PDF report is saved under Reports and evidence.";
-                }
-                const a = document.createElement("a");
-                a.href = URL.createObjectURL(file);
-                a.download = file.name;
-                a.click();
-                return "Report downloaded.";
-              })}>{caseId ? "Save the provider's PDF report to this case" : "Download the provider's PDF report"}</button>
-              <span className="muted"> (counts as one search)</span>
-            </p>
-          )}
-        </>
-      ) : (
-        <p className="muted">Not screened yet.</p>
+          <div className="row wrap">
+            <button type="button" className={caseScreened ? "quiet" : undefined} disabled={busy} onClick={() => void run(async () => {
+              const r = await screenCase(caseId, fuzzy);
+              return `${r.subjects} screened: ${r.total_hits === 0 ? "no possible matches." : `${r.total_hits} possible match${r.total_hits === 1 ? "" : "es"} to review.`}${r.skipped ? ` ${r.skipped} more were not screened (limit 40); screen them separately.` : ""}`;
+            })}>{busy ? "Screening…" : caseScreened ? "Run again" : "Run external check"}</button>
+            <label className="check small"><input type="checkbox" checked={fuzzy} onChange={(e) => setFuzzy(e.target.checked)} /> Include close spellings</label>
+          </div>
+        </div>
+      )}
+
+      {subjects.length === 0 && <p className="muted">Not screened yet.{named === null && !person ? " The external check is offered once the questionnaire comes back; you can also screen the organisation's name now." : ""}</p>}
+      {subjects.map(([key, list]) => (
+        <SubjectResult key={key} s={list[0]} older={list.slice(1)} canReview={canReview} busy={busy} who={who} onReview={review} />
+      ))}
+
+      {canScreen && status?.configured && partyLatest && (
+        <p className="small">
+          <button type="button" className="link-dark" disabled={busy} onClick={() => void run(async () => {
+            const file = await screeningReport(partyLatest, party.name);
+            if (caseId) {
+              await attachFile("dd_cases", caseId, file);
+              return "The provider's PDF report is saved under Reports and evidence.";
+            }
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(file);
+            a.download = file.name;
+            a.click();
+            return "Report downloaded.";
+          })}>{caseId ? `Save the provider's PDF report for ${person ? "this person" : "the organisation"} to this case` : "Download the provider's PDF report"}</button>
+          <span className="muted"> (counts as one search)</span>
+        </p>
       )}
 
       {canScreen && (
         status === undefined ? null : !status?.configured ? (
           <p className="small muted">Screening is not switched on for this organisation yet. An administrator needs to add the Dilisense key (Settings, Integrations).</p>
-        ) : (
+        ) : named === null || person ? (
           <div className="row wrap">
-            <button type="button" disabled={busy} onClick={() => void run(async () => {
+            <button type="button" className={partyLatest ? "quiet" : undefined} disabled={busy} onClick={() => void run(async () => {
               const r = await screenParty(party.id, fuzzy);
               return r.total_hits === 0 ? "Screened: no possible matches." : `Screened: ${r.total_hits} possible match${r.total_hits === 1 ? "" : "es"} to review.`;
-            })}>{busy ? "Screening…" : latest ? "Screen again" : "Screen now"}</button>
-            <label className="check small"><input type="checkbox" checked={fuzzy} onChange={(e) => setFuzzy(e.target.checked)} /> Include close spellings</label>
+            })}>{busy ? "Screening…" : partyLatest ? `Screen ${person ? "the person" : "the organisation"} again` : "Screen now"}</button>
+            {named === null && <label className="check small"><input type="checkbox" checked={fuzzy} onChange={(e) => setFuzzy(e.target.checked)} /> Include close spellings</label>}
             <span className="small muted">
-              Sends the {person ? "name, and date of birth and gender if recorded," : "name"} to Dilisense in Switzerland. Dilisense says it keeps no record of searches.
+              Sends {person ? "the name, and date of birth and gender if recorded," : "the name"} to Dilisense in Switzerland. Dilisense says it keeps no record of searches.
             </span>
           </div>
-        )
-      )}
-
-      {screenings.length > 1 && (
-        <p className="small">
-          <button type="button" className="link-dark" onClick={() => setShowOld(!showOld)}>{showOld ? "Hide" : "Show"} earlier screenings ({screenings.length - 1})</button>
-        </p>
-      )}
-      {showOld && (
-        <ul className="small">
-          {screenings.slice(1).map((x) => (
-            <li key={x.id}>{formatWhen(x.screened_at)}: {OUTCOME_LABELS[x.outcome]} ({x.total_hits} possible match{x.total_hits === 1 ? "" : "es"}), by {who(x.screened_by)}</li>
-          ))}
-        </ul>
+        ) : null
       )}
     </section>
   );

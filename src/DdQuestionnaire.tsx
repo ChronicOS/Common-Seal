@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { AGENT_TYPES, blankQAnswers, openPublicQuestionnaire, Q_TEXT, removeQuestionnaireUpload, submitPublicQuestionnaire, UPLOAD_KINDS, uploadForQuestionnaire, type PublicQuestionnaire, type QAnswers, type Upload, type YesNoDetails } from "./parties";
 import { Brand } from "./Seal";
+import { FormTwo } from "./DdQuestionnaire2";
+export { QuestionnaireAnswers2 } from "./DdQuestionnaire2";
 
 const day = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
 
@@ -213,7 +215,10 @@ export default function DdQuestionnaire({ token }: { token: string }) {
             <p className="lead">Your answers have been sent to {info.organisation}. They may contact you if they have questions.</p>
           </>
         )}
-        {info && !done && !info.submitted_at && (
+        {info && !done && !info.submitted_at && info.form === 2 && (
+          <FormTwo token={token} info={info} onDone={() => { setDone(true); window.scrollTo(0, 0); }} />
+        )}
+        {info && !done && !info.submitted_at && info.form !== 2 && (
           <>
             <p className="eyebrow">{info.organisation} · Third-party questionnaire</p>
             <h1>{info.party_name}</h1>

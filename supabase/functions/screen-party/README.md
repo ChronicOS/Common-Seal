@@ -45,6 +45,14 @@ If something goes wrong, the message on screen says what. Logs: Edge Functions â
 | "limit has been reached" | Monthly quota used. Upgrade the plan or wait for the month to roll over. |
 | "You cannot screen this party" | Only owners, admins, the company secretary, Legal and Compliance can screen. |
 
+## Screening from the questionnaire (migration 0062)
+
+When an organisation returns its questionnaire, its page shows **Run external check**. One click screens the organisation and everyone the questionnaire names (owners, office holders, key management), straight from the answers, so nobody retypes a name. Each person or organisation is one search (up to 40 per click).
+
+- Anyone the questionnaire says is, or is linked to, a government official (or a government owner) is flagged **Government link declared**, and the PEP check is set to a concern as soon as the questionnaire comes back.
+- The sanctions, PEP and other-lists checks clear only when every named person and organisation has been screened and every possible match reviewed.
+- If you changed the function since first deploying it, redeploy `index.ts` from GitHub (same steps as Step 3) to get the **Run external check** action.
+
 ## How it works (for the record)
 
 - The browser never sees the key. The function checks the person's role using their own sign-in, runs the search, and saves the result using the server's access. Nobody can type in or edit a result; the health check confirms this.

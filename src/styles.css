@@ -1883,3 +1883,10 @@ li.voided > *:not(.card):not(.warning-text) { text-decoration: line-through; opa
 /* Due diligence screening */
 .screen-hits { display: grid; gap: 12px; margin: 12px 0; }
 .screen-hit p { margin: 0 0 6px; }
+.screen-subject { border-top: 1px solid var(--line, #d9d3c4); padding-top: 12px; margin-top: 12px; }
+.screen-subject:first-of-type { border-top: 0; }
+.person-row { border-bottom: 1px dashed var(--line, #d9d3c4); padding-bottom: 10px; margin-bottom: 10px; }
+.label-like { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+fieldset.person-row { min-width: 0; }
+.person-row input, .person-row select { max-width: 100%; box-sizing: border-box; }
+.person-row .field { min-width: 0; max-width: 100%; } .person-row select { width: 100%; }

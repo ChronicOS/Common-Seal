@@ -339,15 +339,17 @@ export type QAnswers = {
   abc_policy?: { answer: "yes" | "no" | "" };
   declaration: { agreed: string; signed_name: string; position: string };
 };
-export type Upload = { path: string; kind: "company_extract" | "licence" | "insurance" | "other"; file_name: string };
+export type Upload = { path: string; kind: "company_extract" | "licence" | "insurance" | "policy" | "training" | "other"; file_name: string };
 export const UPLOAD_KINDS: { id: Upload["kind"]; label: string }[] = [
   { id: "company_extract", label: "Current company extract or registration certificate" },
   { id: "licence", label: "Licence, permit or membership" },
   { id: "insurance", label: "Certificate of insurance" },
+  { id: "policy", label: "Code of conduct or anti-corruption policy" },
+  { id: "training", label: "Training materials" },
   { id: "other", label: "Other" },
 ];
-export type Questionnaire = { id: string; case_id: string; contact_name: string | null; contact_email: string | null; status: "sent" | "submitted" | "cancelled"; sent_at: string | null; opened_at: string | null; submitted_at: string | null; answers: QAnswers | null };
-export type PublicQuestionnaire = { organisation: string; party_name: string; party_type: PartyType | null; uploads: Upload[]; country: string | null; countries: string[] | null; registration_number: string | null; website: string | null; description: string | null; contact_name: string | null; submitted_at: string | null; answers: QAnswers | null };
+export type Questionnaire = { id: string; case_id: string; contact_name: string | null; contact_email: string | null; status: "sent" | "submitted" | "cancelled"; sent_at: string | null; opened_at: string | null; submitted_at: string | null; answers: QAnswers | QAnswers2 | null; form?: number };
+export type PublicQuestionnaire = { form?: number; organisation: string; party_name: string; party_type: PartyType | null; uploads: Upload[]; country: string | null; countries: string[] | null; registration_number: string | null; website: string | null; description: string | null; contact_name: string | null; submitted_at: string | null; answers: QAnswers | null };
 
 export const Q_TEXT = {
   litigation: "Is the company, or any of its directors, involved in any active or threatened litigation, arbitration or regulatory proceedings?",
@@ -387,9 +389,13 @@ export const blankQAnswers = (p?: { party_name?: string; registration_number?: s
 });
 
 export async function loadQuestionnaires(organisationId: string): Promise<Questionnaire[]> {
-  const { data, error } = await db().from("dd_questionnaires").select("id, case_id, contact_name, contact_email, status, sent_at, opened_at, submitted_at, answers").eq("organisation_id", organisationId).order("created_at", { ascending: false });
+  const client = db();
+  const read = (cols: string) => client.from("dd_questionnaires").select(cols).eq("organisation_id", organisationId).order("created_at", { ascending: false });
+  let { data, error } = await read("id, case_id, contact_name, contact_email, status, sent_at, opened_at, submitted_at, answers, form");
+  // Before migration 0062 there is no form column
+  if (error) ({ data, error } = await read("id, case_id, contact_name, contact_email, status, sent_at, opened_at, submitted_at, answers"));
   if (error) return [];
-  return (data ?? []) as Questionnaire[];
+  return (data ?? []) as unknown as Questionnaire[];
 }
 export async function sendQuestionnaire(caseId: string, name: string, email: string): Promise<string> {
   const { data, error } = await db().rpc("send_dd_questionnaire", { p_case: caseId, p_contact_name: name, p_contact_email: email });
@@ -417,6 +423,16 @@ export async function submitPublicQuestionnaire(token: string, a: QAnswers) {
     shareholders: a.company.is_corporation === "yes" ? a.shareholders.filter((s) => s.name.trim()) : [],
     licences: { ...a.licences, items: a.licences.items.filter((i) => i.name.trim()) },
     ubos: a.company.is_corporation === "yes" && a.ubo_none !== "true" ? a.ubos.filter((u) => u.name.trim()) : [],
+  };
+  check((await db().rpc("submit_dd_questionnaire", { p_token: token, p_answers: clean })).error);
+}
+/** Form 2: empty rows are dropped before sending */
+export async function submitQuestionnaire2(token: string, a: QAnswers2) {
+  const clean: QAnswers2 = {
+    ...a,
+    owners: a.owners.filter((o) => o.name.trim()).map((o) => ({ ...o, percent: o.percent.trim(), dob: o.type === "individual" ? o.dob : "" })),
+    officers: a.officers.filter((o) => o.name.trim()),
+    management: a.management.filter((o) => o.name.trim()),
   };
   check((await db().rpc("submit_dd_questionnaire", { p_token: token, p_answers: clean })).error);
 }
@@ -540,6 +556,11 @@ export type Screening = {
   outcome: "no_matches" | "to_review" | "cleared" | "match";
   screened_by: string | null;
   screened_at: string;
+  /** Migration 0062: who in the case this screening was for */
+  subject_key?: string;
+  subject_name?: string | null;
+  subject_role?: string | null;
+  declared_pep?: boolean;
 };
 export const SOURCE_LABELS: Record<string, string> = {
   SANCTION: "Sanctions list",
@@ -557,7 +578,7 @@ export const OUTCOME_LABELS: Record<Screening["outcome"], string> = {
 
 /** Null until migration 0061 has been run */
 export async function loadScreenings(organisationId: string): Promise<Screening[] | null> {
-  const { data, error } = await db().from("dd_screenings").select("id, counterparty_id, case_id, provider, subject_type, query, total_hits, hits, reviews, outcome, screened_by, screened_at").eq("organisation_id", organisationId).order("screened_at", { ascending: false });
+  const { data, error } = await db().from("dd_screenings").select("*").eq("organisation_id", organisationId).order("screened_at", { ascending: false });
   return error ? null : (data as Screening[]);
 }
 
@@ -601,4 +622,60 @@ export async function reviewHit(screeningId: string, recordId: string, decision:
   const { data, error } = await db().rpc("review_dd_screening_hit", { p_screening: screeningId, p_record: recordId, p_decision: decision, p_note: note });
   check(error);
   return data as string;
+}
+
+// ---------------------------------------------------------------------
+// The questionnaire, version 2 (migration 0062)
+// ---------------------------------------------------------------------
+export type YN = "yes" | "no" | "";
+export type Owner2 = { name: string; type: "individual" | "company" | "government" | ""; percent: string; government: YN; country: string; dob: string };
+export type Person2 = { name: string; position: string; country: string; dob: string };
+export type Manager2 = { name: string; title: string; country: string; dob: string };
+export type QAnswers2 = {
+  form?: 2;
+  business: { legal_name: string; website: string; countries: string; employees: string; years: string };
+  contact: { name: string; phone: string; email: string; alt_email: string; address: string };
+  owners: Owner2[];
+  officers: Person2[];
+  management: Manager2[];
+  services: { description: string };
+  gov_interaction: YesNoDetails;
+  sub_contractors: YesNoDetails;
+  record: YesNoDetails;
+  government: YesNoDetails & { people: string[] };
+  framework: { code: YN; training: YN; cannot_upload: string };
+  declaration: { agreed: string; signed_name: string; title: string; signed_on?: string };
+};
+export const isForm2 = (a: unknown): a is QAnswers2 => Boolean(a && typeof a === "object" && "business" in (a as object));
+
+export const Q2_TEXT = {
+  gov_interaction: "Will your services involve dealing with government officials or agencies, or with regulated individuals such as financial advisers, health care professionals or lawyers?",
+  sub_contractors: "Do you use, or propose to use, sub-contractors to provide the services?",
+  record: 'Has your business, or any of its shareholders, office holders or management personnel ("key personnel"), ever been the subject of an investigation, legal proceedings or sanctions relating to compliance issues (including corruption or fraud)?',
+  government: "Are any of your key personnel, or their family members, government officials, otherwise closely related to government officials, or have they formerly held positions as a government official?",
+  code: "Do you have a written code of conduct, anti-corruption policy or similar policies?",
+  training: "Are your personnel trained on these policies?",
+};
+export const attestation = (organisation: string) =>
+  `By signing below, I affirm that the information submitted on this form and in any attachments is, to the best of my knowledge, accurate and complete, and I authorise ${organisation} to take such steps as it may require to verify the information provided. I have the requisite authority to sign this document in my or our capacity, or as authorised representative of my or our organisation (as applicable).`;
+
+export const blankOwner = (): Owner2 => ({ name: "", type: "", percent: "", government: "", country: "", dob: "" });
+export const blankQAnswers2 = (p?: { party_name?: string; website?: string | null; countries?: string[] | null; contact_name?: string | null }): QAnswers2 => ({
+  business: { legal_name: p?.party_name ?? "", website: p?.website ?? "", countries: (p?.countries ?? []).join(", "), employees: "", years: "" },
+  contact: { name: p?.contact_name ?? "", phone: "", email: "", alt_email: "", address: "" },
+  owners: [blankOwner()],
+  officers: [{ name: "", position: "Director", country: "", dob: "" }],
+  management: [{ name: "", title: "", country: "", dob: "" }],
+  services: { description: "" },
+  gov_interaction: { answer: "", details: "" },
+  sub_contractors: { answer: "", details: "" },
+  record: { answer: "", details: "" },
+  government: { answer: "", details: "", people: [] },
+  framework: { code: "", training: "", cannot_upload: "" },
+  declaration: { agreed: "", signed_name: "", title: "" },
+});
+
+/** Screens the third party and everyone its returned questionnaire names */
+export async function screenCase(caseId: string, fuzzy: boolean): Promise<{ subjects: number; total_hits: number; skipped: number }> {
+  return invoke({ action: "screen_case", case_id: caseId, fuzzy });
 }

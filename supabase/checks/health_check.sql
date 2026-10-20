@@ -18,15 +18,17 @@ checks (check_name, ok, detail) as (
          case when to_regclass('public.' || e.marker) is null then 'Table ' || e.marker || ' is missing' else '' end
   from expected e
   union all
+  select 'Migration 0062 has been run',
+         to_regprocedure('public.dd_case_screen_targets(uuid)') is not null, ''
+  union all
   select 'Migration 0061 has been run',
          to_regclass('public.dd_screenings') is not null and to_regclass('public.dd_individual_details') is not null, ''
   union all
   select 'Screening results can only be recorded by the server',
-         to_regprocedure('public.record_dd_screening(uuid, uuid, jsonb, integer, jsonb)') is null
-         or (not has_function_privilege('authenticated', 'public.record_dd_screening(uuid, uuid, jsonb, integer, jsonb)', 'execute')
-             and not has_function_privilege('anon', 'public.record_dd_screening(uuid, uuid, jsonb, integer, jsonb)', 'execute')
-             and not has_table_privilege('authenticated', 'public.dd_screenings', 'insert')
-             and not has_table_privilege('authenticated', 'public.dd_screenings', 'update')), ''
+         not exists (select 1 from pg_proc p where p.proname = 'record_dd_screening' and p.pronamespace = 'public'::regnamespace
+                     and (has_function_privilege('authenticated', p.oid, 'execute') or has_function_privilege('anon', p.oid, 'execute')))
+         and (to_regclass('public.dd_screenings') is null
+              or (not has_table_privilege('authenticated', 'public.dd_screenings', 'insert') and not has_table_privilege('authenticated', 'public.dd_screenings', 'update'))), ''
   union all
   select 'Migration 0060 has been run',
          to_regclass('public.sign_in_events') is not null and to_regprocedure('public.my_memberships()') is not null, ''
