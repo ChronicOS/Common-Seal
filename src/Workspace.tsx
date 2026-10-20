@@ -53,9 +53,10 @@ import { ClimateReporting, ConsumerLaw, EmploymentLaw } from "./RegulatoryPages"
 import Parties from "./Parties";
 import { loadPartySummary, type PartySummary } from "./parties";
 import Register from "./Register";
+import { supabase } from "./supabase";
 import { setPrintHeader } from "./RegisterDocs";
 import { loadOrgSettings } from "./settings";
-import { DataPrivacy, DefaultsSettings, EmailSettings, Integrations, MyProfile, SecuritySettings } from "./Settings";
+import { DataPrivacy, DefaultsSettings, EmailSettings, Integrations, MyProfile, SecuritySettings, SiteAccessLog } from "./Settings";
 import { loadRiskSummary, type RiskSummary } from "./risk";
 import { day as insDay, loadInsuranceSummary, type InsuranceSummary } from "./insurance";
 import type { GroupData, Membership } from "./types";
@@ -66,7 +67,7 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Tab =
   | "overview" | "company" | "authorities" | "insurance" | "foryou" | "report" | "modernslavery" | "oldregister" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
-  | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "conflicts" | "expenses" | "speakup" | "people" | "keyemployees" | "keycontracts" | "disputes" | "sanctions" | "legalaudit" | "ip" | "ownership" | "companyregister" | "calendar" | "whs" | "privacy" | "abc" | "employment" | "consumer" | "climate" | "mergers" | "confidential" | "account" | "profile" | "security" | "defaults" | "emails" | "integrations" | "data";
+  | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "conflicts" | "expenses" | "speakup" | "people" | "keyemployees" | "keycontracts" | "disputes" | "sanctions" | "legalaudit" | "ip" | "ownership" | "companyregister" | "calendar" | "whs" | "privacy" | "abc" | "employment" | "consumer" | "climate" | "mergers" | "confidential" | "account" | "profile" | "security" | "defaults" | "emails" | "integrations" | "data" | "accesslog";
 const SECTIONS = ["Company", "Board", "Risk and compliance", "Contracts", "Third parties", "Conduct"] as const;
 const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] | "Settings" }[] = [
   { id: "foryou", label: "For you" },
@@ -80,6 +81,7 @@ const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] | "Set
   { id: "emails", label: "Email and notifications", section: "Settings" },
   { id: "integrations", label: "Integrations", section: "Settings" },
   { id: "data", label: "Data and privacy", section: "Settings" },
+  { id: "accesslog", label: "Site access log", section: "Settings" },
   { id: "company", label: "Company Info", section: "Company" },
   { id: "ownership", label: "Ownership", section: "Company" },
   { id: "companyregister", label: "Company register", section: "Company" },
@@ -127,6 +129,11 @@ export default function Workspace({ membership, userId, userName }: { membership
   const [employeesSub, setEmployeesSub] = useState<EmployeesSub>("key");
   // Sections the person has opened by clicking. All start closed; the one holding the current page is marked.
   const [openSections, setOpenSections] = useState<string[]>([]);
+  // Site operators only (migration 0066)
+  const [siteAdmin, setSiteAdmin] = useState(false);
+  useEffect(() => {
+    void supabase?.rpc("am_site_admin").then(({ data }) => setSiteAdmin(data === true), () => setSiteAdmin(false));
+  }, []);
   useEffect(() => {
     setPrintHeader(null);
     void loadOrgSettings(organisation.id).then((o) => setPrintHeader(o ? { logo: o.logo_data_url, legalName: o.legal_name, abn: o.abn } : null), () => undefined);
@@ -266,7 +273,7 @@ export default function Workspace({ membership, userId, userName }: { membership
         <button type="button" className={TABS.some((t) => t.section === "Settings" && t.id === tab) ? "nav-head on" : "nav-head"} aria-expanded={openSections.includes("Settings")} onClick={() => setOpenSections((list) => (list.includes("Settings") ? list.filter((x) => x !== "Settings") : [...list, "Settings"]))}>
           Settings
         </button>
-        <div className="nav-items">{TABS.filter((t) => t.section === "Settings").map(item)}</div>
+        <div className="nav-items">{TABS.filter((t) => t.section === "Settings" && (t.id !== "accesslog" || siteAdmin)).map(item)}</div>
       </div>
     </nav>
   );
@@ -414,7 +421,7 @@ export default function Workspace({ membership, userId, userName }: { membership
     );
   }
 
-  if (tab === "account" || tab === "profile" || tab === "security" || tab === "defaults" || tab === "emails" || tab === "integrations" || tab === "data") {
+  if (tab === "account" || tab === "profile" || tab === "security" || tab === "defaults" || tab === "emails" || tab === "integrations" || tab === "data" || tab === "accesslog") {
     const p = { organisationId: organisation.id, role, userId };
     return (
       <div className="workspace">
@@ -426,6 +433,7 @@ export default function Workspace({ membership, userId, userName }: { membership
             : tab === "defaults" ? <DefaultsSettings {...p} onOpen={(t) => go(t as Tab)} />
             : tab === "emails" ? <EmailSettings {...p} />
             : tab === "integrations" ? <Integrations />
+            : tab === "accesslog" ? <SiteAccessLog />
             : <DataPrivacy {...p} />}
         </div>
       </div>

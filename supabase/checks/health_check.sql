@@ -18,6 +18,14 @@ checks (check_name, ok, detail) as (
          case when to_regclass('public.' || e.marker) is null then 'Table ' || e.marker || ' is missing' else '' end
   from expected e
   union all
+  select 'Migration 0066 has been run',
+         to_regclass('public.site_sessions') is not null, ''
+  union all
+  select 'The site access log is open only to site operators',
+         to_regclass('public.site_sessions') is null
+         or (not has_table_privilege('authenticated', 'public.site_sessions', 'select') and not has_table_privilege('anon', 'public.site_sessions', 'select')
+             and not has_table_privilege('authenticated', 'app.site_admins', 'select')), ''
+  union all
   select 'Migration 0065 has been run',
          to_regprocedure('app.dd_case_small(uuid)') is not null, ''
   union all

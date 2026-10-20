@@ -712,3 +712,86 @@ export function DataPrivacy({ organisationId, role }: Props) {
 }
 
 export const storageText = (u: Usage | null) => (u ? `${u.files} file${u.files === 1 ? "" : "s"}, ${bytes(u.storage_bytes)}` : "");
+
+// ---------------------------------------------------------------------
+// Site access log (site operators only, migration 0066)
+// ---------------------------------------------------------------------
+type Visit = { session_id: string; email: string; full_name: string; organisation: string | null; started_at: string; last_seen_at: string; active_seconds: number; user_agent: string | null };
+const minutes = (sec: number) => (sec < 60 ? "under a minute" : sec < 3600 ? `${Math.round(sec / 60)} min` : `${Math.floor(sec / 3600)} h ${Math.round((sec % 3600) / 60)} min`);
+const when = (iso: string) => new Date(iso).toLocaleString("en-AU", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+
+export function SiteAccessLog() {
+  const [days, setDays] = useState(30);
+  const [visits, setVisits] = useState<Visit[] | null | undefined>(undefined);
+  const [person, setPerson] = useState("");
+  const [problem, setProblem] = useState<string | null>(null);
+  useEffect(() => {
+    setVisits(undefined);
+    if (!supabase) return;
+    void supabase.rpc("site_access_log", { p_days: days }).then(({ data, error }) => {
+      if (error) {
+        setProblem(/Could not find the function|schema cache/.test(error.message) ? "This needs database update 0066." : error.message);
+        setVisits(null);
+      } else setVisits((data ?? []) as Visit[]);
+    });
+  }, [days]);
+  const people = visits ? [...new Map(visits.map((v) => [v.email, v])).values()] : [];
+  const summary = people
+    .map((p) => {
+      const mine = (visits ?? []).filter((v) => v.email === p.email);
+      return { email: p.email, name: p.full_name, visits: mine.length, active: mine.reduce((n, v) => n + v.active_seconds, 0), last: mine[0]?.last_seen_at ?? p.last_seen_at };
+    })
+    .sort((a, b) => b.last.localeCompare(a.last));
+  const shown = (visits ?? []).filter((v) => !person || v.email === person);
+  return (
+    <>
+      <Head title="Site access log" lead="Who has used VeraPhius, when, and for how long. Visible only to the site operator." />
+      {problem && <p className="error" role="alert">{problem}</p>}
+      <p className="row wrap">
+        <label htmlFor="sal-days">Show the last</label>
+        <select id="sal-days" value={days} onChange={(e) => setDays(Number(e.target.value))}>
+          {[7, 30, 90, 180].map((d) => <option key={d} value={d}>{d} days</option>)}
+        </select>
+        <span className="small muted">Active time counts only while the page is in front of them and they've used it in the last 5 minutes. Visits are kept for 180 days.</span>
+      </p>
+      {visits === undefined ? <p className="muted">Loading…</p> : visits === null ? null : visits.length === 0 ? <p className="muted">No visits in this period.</p> : (
+        <>
+          <section className="block">
+            <h2>By person</h2>
+            <div className="table-scroll">
+              <table className="report-table wide">
+                <thead><tr><th>Person</th><th>Visits</th><th>Active time</th><th>Last seen</th><th></th></tr></thead>
+                <tbody>
+                  {summary.map((p) => (
+                    <tr key={p.email}>
+                      <td>{p.name}{p.name !== p.email ? <span className="muted small"> · {p.email}</span> : null}</td>
+                      <td>{p.visits}</td><td>{minutes(p.active)}</td><td>{when(p.last)}</td>
+                      <td><button type="button" className="link-dark" onClick={() => setPerson(person === p.email ? "" : p.email)}>{person === p.email ? "Show everyone" : "Visits"}</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section className="block">
+            <h2>Visits{person ? `: ${summary.find((p) => p.email === person)?.name ?? person}` : ""}</h2>
+            <div className="table-scroll">
+              <table className="report-table wide">
+                <thead><tr><th>Started</th><th>Person</th><th>Organisation</th><th>Active time</th><th>Last active</th><th>Device</th></tr></thead>
+                <tbody>
+                  {shown.map((v) => (
+                    <tr key={v.session_id}>
+                      <td>{when(v.started_at)}</td><td>{v.full_name}</td><td>{v.organisation ?? <span className="muted">None open</span>}</td>
+                      <td>{minutes(v.active_seconds)}</td><td>{when(v.last_seen_at)}</td><td>{describeAgent(v.user_agent)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      )}
+      <p className="small muted">Tell people their use is logged: the privacy notice and terms of use should mention it.</p>
+    </>
+  );
+}

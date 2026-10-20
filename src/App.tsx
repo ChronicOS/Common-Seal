@@ -314,6 +314,44 @@ function ChooseOrganisation({ memberships, onChoose, onCreate }: { memberships: 
   );
 }
 
+/** Site access log (migration 0066): records this visit and roughly how long the person is actively using it */
+function VisitBeacon({ organisationId }: { organisationId: string | null }) {
+  useEffect(() => {
+    if (!supabase) return;
+    const client = supabase;
+    let visit = "";
+    try {
+      visit = window.sessionStorage.getItem("veraphius-visit") ?? "";
+      if (!visit) {
+        visit = crypto.randomUUID();
+        window.sessionStorage.setItem("veraphius-visit", visit);
+      }
+    } catch {
+      visit = crypto.randomUUID();
+    }
+    let lastActive = Date.now();
+    const touch = () => {
+      lastActive = Date.now();
+    };
+    const events = ["pointerdown", "keydown", "scroll", "touchstart"];
+    events.forEach((e) => window.addEventListener(e, touch, { passive: true }));
+    const beat = (active: boolean) =>
+      void client.rpc("site_heartbeat", { p_session: visit, p_org: organisationId, p_user_agent: navigator.userAgent.slice(0, 300), p_active: active }).then(
+        () => undefined,
+        () => undefined,
+      );
+    beat(false);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") beat(Date.now() - lastActive < 5 * 60_000);
+    }, 60_000);
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, touch));
+      window.clearInterval(timer);
+    };
+  }, [organisationId]);
+  return null;
+}
+
 /** Signs out after the organisation's idle time, with a minute's warning */
 function IdleGuard({ organisationId }: { organisationId: string }) {
   const [minutes, setMinutes] = useState<number | null>(null);
@@ -477,6 +515,7 @@ export default function App() {
     body = (
       <>
         <IdleGuard organisationId={current.organisation.id} />
+        <VisitBeacon organisationId={current.organisation.id} />
         <Workspace key={current.organisation.id} membership={current} userId={session.user.id} userName={session.user.email ?? "Someone"} />
       </>
     );
