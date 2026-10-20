@@ -5,6 +5,7 @@ import { formatDay, formatWhen } from "./board";
 import { attachFile, downloadFile, listFiles, type LinkedFile } from "./files";
 import { QuestionnaireAnswers, QuestionnaireAnswers2 } from "./DdQuestionnaire";
 import ScreeningPanel from "./Screening";
+import AdverseMediaPanel from "./AdverseMedia";
 import {
   addMitigation,
   completeMitigation,
@@ -636,7 +637,7 @@ export default function Parties({ organisationId, role, userId = "" }: Props) {
         })()}
 
         {screenings !== null && (current || screenings.some((x) => x.counterparty_id === party.id)) && (
-          <ScreeningPanel party={party} screenings={screenings.filter((x) => x.counterparty_id === party.id && (!current || x.case_id === current.id))} caseId={current?.id ?? null}
+          <ScreeningPanel party={party} screenings={screenings.filter((x) => x.counterparty_id === party.id && x.kind !== "media" && (!current || x.case_id === current.id))} caseId={current?.id ?? null}
             named={(() => {
               const back = current ? questionnaires.find((q) => q.case_id === current.id && q.status === "submitted" && isForm2(q.answers)) : undefined;
               if (!back || !isForm2(back.answers)) return null;
@@ -645,6 +646,15 @@ export default function Parties({ organisationId, role, userId = "" }: Props) {
               return [...new Map(names.map((n) => [n.toLowerCase().replace(/\s+/g, " "), n])).values()];
             })()}
             canScreen={canEdit} canReview={has(role, "owner", "admin", "legal", "compliance")} who={(uid) => who(uid)}
+            onChanged={async (n) => {
+              await reload();
+              setNotice(n);
+            }} />
+        )}
+
+        {screenings !== null && (current || screenings.some((x) => x.counterparty_id === party.id && x.kind === "media")) && (
+          <AdverseMediaPanel party={party} searches={screenings.filter((x) => x.counterparty_id === party.id && x.kind === "media" && (!current || x.case_id === current.id))} caseId={current?.id ?? null}
+            canSearch={canEdit} canReview={has(role, "owner", "admin", "legal", "compliance")} who={(uid) => who(uid)}
             onChanged={async (n) => {
               await reload();
               setNotice(n);

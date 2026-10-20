@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { formatWhen } from "./board";
 import { attachFile } from "./files";
 import {
-  OUTCOME_LABELS, reviewHit, screenCase, screenParty, screeningReport, screeningStatus, SOURCE_LABELS,
+  OUTCOME_LABELS, reviewHit, reviewRest, screenCase, screenParty, screeningReport, screeningStatus, SOURCE_LABELS,
   type Party, type Screening, type ScreeningHit, type ScreeningStatus,
 } from "./parties";
 
@@ -78,13 +78,14 @@ function Hit({ hit, s, canReview, busy, onReview }: { hit: ScreeningHit; s: Scre
 }
 
 /** One subject's latest screening: who, the outcome, and its possible matches */
-function SubjectResult({ s, older, canReview, busy, who, onReview }: {
+function SubjectResult({ s, older, canReview, busy, who, onReview, onBulk }: {
   s: Screening;
   older: Screening[];
   canReview: boolean;
   busy: boolean;
   who: (uid: string | null) => string;
   onReview: (s: Screening, hit: ScreeningHit, d: "match" | "not_a_match" | "undo", note: string) => void;
+  onBulk: (work: () => Promise<string>) => void;
 }) {
   const [showOld, setShowOld] = useState(false);
   const person = s.subject_type === "individual";
@@ -111,6 +112,7 @@ function SubjectResult({ s, older, canReview, busy, who, onReview }: {
           {s.hits.map((h) => <Hit key={h.id} hit={h} s={s} canReview={canReview} busy={busy} onReview={(d, note) => onReview(s, h, d, note)} />)}
         </ul>
       )}
+      {canReview && <ReviewRest s={s} busy={busy} run={(w) => onBulk(w)} label="not a match" />}
       {older.length > 0 && (
         <p className="small">
           <button type="button" className="link-dark" onClick={() => setShowOld(!showOld)}>{showOld ? "Hide" : "Show"} earlier screenings ({older.length})</button>
@@ -171,7 +173,7 @@ export default function ScreeningPanel({ party, screenings, caseId, named, canSc
     <section className="card block">
       <h2>Sanctions and watch-list screening</h2>
       <p className="small muted">
-        Searches sanctions lists, politically exposed persons and criminal and other watch lists through Dilisense. Adverse media is not covered: check it separately.
+        Searches sanctions lists, politically exposed persons and criminal and other watch lists through Dilisense. Adverse media is searched separately, below.
       </p>
       {problem && <p className="error" role="alert">{problem}</p>}
 
@@ -193,7 +195,7 @@ export default function ScreeningPanel({ party, screenings, caseId, named, canSc
 
       {subjects.length === 0 && <p className="muted">Not screened yet.{named === null && !person ? " The external check is offered once the questionnaire comes back; you can also screen the organisation's name now." : ""}</p>}
       {subjects.map(([key, list]) => (
-        <SubjectResult key={key} s={list[0]} older={list.slice(1)} canReview={canReview} busy={busy} who={who} onReview={review} />
+        <SubjectResult key={key} s={list[0]} older={list.slice(1)} canReview={canReview} busy={busy} who={who} onReview={review} onBulk={(w) => void run(w)} />
       ))}
 
       {canScreen && status?.configured && partyLatest && (
@@ -233,3 +235,24 @@ export default function ScreeningPanel({ party, screenings, caseId, named, canSc
     </section>
   );
 }
+
+/** "Mark the rest not relevant": one reason for everything not yet reviewed */
+export function ReviewRest({ s, busy, run, label }: { s: Screening; busy: boolean; run: (work: () => Promise<string>) => void; label: string }) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const left = s.hits.filter((h) => !s.reviews[h.id]).length;
+  if (left < 2) return null;
+  return open ? (
+    <div className="form block-gap">
+      <label htmlFor={`rest-${s.id}`}>Why are none of the remaining {left} relevant?</label>
+      <input id={`rest-${s.id}`} value={note} placeholder="All about different people of the same name" onChange={(e) => setNote(e.target.value)} />
+      <div className="row">
+        <button type="button" disabled={busy || note.trim().length < 5} onClick={() => run(async () => { await reviewRest(s.id, note); setOpen(false); return `${left} marked ${label}.`; })}>Save</button>
+        <button type="button" className="link-dark" onClick={() => setOpen(false)}>Cancel</button>
+      </div>
+    </div>
+  ) : (
+    <p className="small"><button type="button" className="link-dark" disabled={busy} onClick={() => setOpen(true)}>Mark the remaining {left} {label}…</button></p>
+  );
+}
+

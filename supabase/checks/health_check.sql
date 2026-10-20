@@ -18,6 +18,9 @@ checks (check_name, ok, detail) as (
          case when to_regclass('public.' || e.marker) is null then 'Table ' || e.marker || ' is missing' else '' end
   from expected e
   union all
+  select 'Migration 0063 has been run',
+         to_regprocedure('public.review_dd_screening_rest(uuid, text)') is not null, ''
+  union all
   select 'Migration 0062 has been run',
          to_regprocedure('public.dd_case_screen_targets(uuid)') is not null, ''
   union all

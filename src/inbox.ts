@@ -52,13 +52,15 @@ export async function loadInbox(organisationId: string, role: string, userId: st
     safely(async () => {
       // Screening matches waiting for Legal or Compliance (migration 0061)
       if (!has(role, "owner", "admin", "legal", "compliance") || !supabase) return;
-      const { data, error } = await supabase.from("dd_screenings").select("id, counterparty_id, outcome, screened_at, party:counterparties(name)").eq("organisation_id", organisationId).order("screened_at", { ascending: false });
+      const { data, error } = await supabase.from("dd_screenings").select("*, party:counterparties(name)").eq("organisation_id", organisationId).order("screened_at", { ascending: false });
       if (error) return;
       const seen = new Set<string>();
-      for (const x of (data ?? []) as unknown as { id: string; counterparty_id: string; outcome: string; party: { name: string } | null }[]) {
-        if (seen.has(x.counterparty_id)) continue;
-        seen.add(x.counterparty_id);
-        if (x.outcome === "to_review") add("parties", "Screening: possible matches to review", x.id, x.party?.name ?? "A third party", null);
+      for (const x of (data ?? []) as unknown as { id: string; counterparty_id: string; outcome: string; kind?: string; subject_key?: string; subject_name?: string | null; party: { name: string } | null }[]) {
+        const k = `${x.counterparty_id}:${x.kind ?? "lists"}:${x.subject_key ?? "party"}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        const who = x.subject_name && x.subject_key && x.subject_key !== "party" ? `${x.subject_name} (${x.party?.name ?? "a third party"})` : x.party?.name ?? "A third party";
+        if (x.outcome === "to_review") add("parties", x.kind === "media" ? "Adverse media: findings to review" : "Screening: possible matches to review", x.id, who, null);
       }
     }),
     safely(async () => {

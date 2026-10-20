@@ -561,6 +561,15 @@ export type Screening = {
   subject_name?: string | null;
   subject_role?: string | null;
   declared_pep?: boolean;
+  /** Migration 0063: "lists" (sanctions, PEP, watch lists) or "media" (adverse media) */
+  kind?: "lists" | "media";
+};
+/** An adverse media finding (stored as a screening "hit") */
+export type MediaFinding = { id: string; source: "dilisense" | "claude"; category: string; headline: string; summary: string; url: string; publisher?: string; published?: string; language?: string; same_subject?: string };
+export const MEDIA_CATEGORY_LABELS: Record<string, string> = {
+  bribery_corruption: "Bribery or corruption", fraud: "Fraud", financial_crime: "Financial crime", sanctions: "Sanctions", regulatory: "Regulatory action",
+  litigation_insolvency: "Litigation or insolvency", human_rights_environment: "Human rights, labour or environment", organized_crime: "Organised crime",
+  violent_crime: "Violent crime", terrorism: "Terrorism", political: "Political", other: "Other",
 };
 export const SOURCE_LABELS: Record<string, string> = {
   SANCTION: "Sanctions list",
@@ -598,7 +607,7 @@ async function invoke<T>(body: Record<string, unknown>): Promise<T> {
   }
   return data as T;
 }
-export type ScreeningStatus = { configured: boolean; provider?: string; usage?: Record<string, number> | null };
+export type ScreeningStatus = { configured: boolean; claude?: boolean; provider?: string; usage?: Record<string, number> | null };
 export async function screeningStatus(): Promise<ScreeningStatus | null> {
   try {
     return await invoke<ScreeningStatus>({ action: "status" });
@@ -678,4 +687,23 @@ export const blankQAnswers2 = (p?: { party_name?: string; website?: string | nul
 /** Screens the third party and everyone its returned questionnaire names */
 export async function screenCase(caseId: string, fuzzy: boolean): Promise<{ subjects: number; total_hits: number; skipped: number }> {
   return invoke({ action: "screen_case", case_id: caseId, fuzzy });
+}
+
+// ---------------------------------------------------------------------
+// Adverse media (migration 0063)
+// ---------------------------------------------------------------------
+export type CaseTarget = { key: string; name: string; subject_type: SubjectType; role: string | null; declared_pep: boolean };
+/** Who a case's searches cover: the third party, and everyone its returned questionnaire names */
+export async function loadCaseTargets(caseId: string): Promise<CaseTarget[]> {
+  const { data, error } = await db().rpc("dd_case_screen_targets", { p_case: caseId });
+  check(error);
+  return ((data as { targets?: CaseTarget[] } | null)?.targets ?? []) as CaseTarget[];
+}
+export async function mediaSearch(partyId: string, caseId: string | null, subjectKey: string): Promise<{ findings: number; sources: string; warnings: string[] }> {
+  return invoke({ action: "media", party_id: partyId, case_id: caseId, subject_key: subjectKey });
+}
+export async function reviewRest(screeningId: string, note: string): Promise<string> {
+  const { data, error } = await db().rpc("review_dd_screening_rest", { p_screening: screeningId, p_note: note });
+  check(error);
+  return data as string;
 }
