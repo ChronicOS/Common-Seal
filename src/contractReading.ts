@@ -25,11 +25,25 @@ export type ContractValues = {
   auto_renews: string;
   notice_by: string;
   renewal_terms: string;
+  agreement_type: string;
+  agreement_type_other: string;
+  business_function: string;
+  value: string;
+  currency: string;
+  value_basis: string;
+  signed_on: string;
+  our_signatories: string;
+  family_role: string;
+  parent_title: string;
+  /** Chosen by the person (not read): the master agreement this belongs to */
+  parent_contract_id: string;
 };
 
 export const EMPTY_VALUES: ContractValues = {
   counterparty: "", title: "", description: "", purpose: "", start_date: "", end_date: "",
   tfc_available: "", tfc_by: "", tfc_notice: "", tfc_from: "", auto_renews: "", notice_by: "", renewal_terms: "",
+  agreement_type: "", agreement_type_other: "", business_function: "", value: "", currency: "", value_basis: "", signed_on: "", our_signatories: "",
+  family_role: "", parent_title: "", parent_contract_id: "",
 };
 
 export const valuesFrom = (fields: ReadFields | null | undefined): ContractValues => {
@@ -99,7 +113,10 @@ export async function discardFile(documentId: string) {
   if (r.error) throw new Error(r.error.message);
 }
 
-export type Saved = { contract_id: string; counterparty_id: string; new_counterparty: boolean; needs_due_diligence: boolean };
+export type Saved = {
+  contract_id: string; counterparty_id: string; new_counterparty: boolean; needs_due_diligence: boolean;
+  display_name?: string; signatory_check?: import("./contractFiling").SignatoryCheck | null;
+};
 
 /** Saves after the person has checked every answer. Unsigned contracts then go for approval, as typed ones do. */
 export async function saveRead(
@@ -111,7 +128,15 @@ export async function saveRead(
 ): Promise<Saved> {
   const v = { ...values } as Record<string, string>;
   // Online terms only carry the description and purpose
-  if (source.url) for (const k of ["start_date", "end_date", "tfc_available", "tfc_by", "tfc_notice", "tfc_from", "auto_renews", "notice_by", "renewal_terms"]) v[k] = "";
+  if (source.url) {
+    for (const k of ["start_date", "end_date", "tfc_available", "tfc_by", "tfc_notice", "tfc_from", "auto_renews", "notice_by", "renewal_terms", "signed_on", "our_signatories", "family_role", "parent_title", "parent_contract_id"]) v[k] = "";
+    v.agreement_type ||= "TERMS";
+  }
+  if (!v.parent_contract_id) v.family_role = "";
+  if (!signed) {
+    v.our_signatories = "";
+    v.signed_on = "";
+  }
   const saved = await db().rpc("save_read_contract", {
     p_org: organisationId, p_entity: entityId, p_signed: signed, p_values: v,
     p_version: source.versionId ?? null, p_extraction: source.extractionId ?? null, p_terms_url: source.url ?? null,

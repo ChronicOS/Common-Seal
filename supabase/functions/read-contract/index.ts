@@ -25,7 +25,7 @@ import { unzipSync, strFromU8 } from "npm:fflate@0.8.2";
 const REGION = Deno.env.get("BEDROCK_REGION") ?? "ap-southeast-2";
 const MODEL = Deno.env.get("BEDROCK_MODEL_ID") ?? "au.anthropic.claude-sonnet-4-5-20250929-v1:0";
 const ENDPOINT = Deno.env.get("BEDROCK_BASE_URL") ?? `https://bedrock-runtime.${REGION}.amazonaws.com`;
-const PROMPT = "contracts-v1";
+const PROMPT = "contracts-v2";
 const MAX_TEXT = 400_000; // characters of text sent for a Word or text file, or a web page
 
 const cors = {
@@ -47,6 +47,22 @@ const field = (description: string, values?: string[]) => ({
   required: ["value", "quote"],
 });
 
+const TYPES: [string, string][] = [
+  ["NDA", "confidentiality / non-disclosure"], ["SUP", "supply of goods"], ["MSA", "master services or framework agreement"], ["SOW", "statement of work or order under a master"],
+  ["SVC", "services (standalone)"], ["SAAS", "software, cloud or SaaS"], ["DIST", "distribution"], ["AGY", "agency"], ["CUST", "customer or sales terms"],
+  ["LIC", "IP licence"], ["IPA", "IP assignment"], ["RD", "research, development or collaboration"], ["QA", "quality agreement"], ["PV", "pharmacovigilance"],
+  ["DPA", "data processing"], ["LEASE", "lease or licence of premises"], ["LOAN", "loan or facility"], ["GTEE", "guarantee"], ["SHA", "shareholders"],
+  ["SPA", "sale and purchase of shares or a business"], ["JV", "joint venture"], ["TERMS", "online terms"], ["OTH", "anything else"],
+];
+const TYPE_CODES = TYPES.map(([c]) => c);
+const TYPE_HELP = TYPES.map(([c, d]) => `${c} = ${d}`).join("; ");
+const FUNCTIONS: [string, string][] = [
+  ["commercial", "sales and commercial"], ["marketing", "marketing"], ["procurement", "supply chain and procurement"], ["operations", "operations and manufacturing"],
+  ["finance", "finance"], ["it", "IT"], ["people", "people and HR"], ["rdq", "R&D, regulatory and quality"], ["legal", "legal and corporate"],
+];
+const FUNCTION_CODES = FUNCTIONS.map(([c]) => c);
+const FUNCTION_HELP = FUNCTIONS.map(([c, d]) => `${c} = ${d}`).join("; ");
+
 const CONTRACT_FIELDS = {
   counterparty: field("The legal name of the other party (not our entity). If several, the main one."),
   title: field("A short title for the contract, e.g. its heading such as 'Master Services Agreement'"),
@@ -61,12 +77,23 @@ const CONTRACT_FIELDS = {
   auto_renews: field("Does the contract renew or extend automatically unless someone gives notice?", ["yes", "no", "unclear"]),
   notice_by: field("If it renews automatically: the last date to give notice to stop the renewal, as YYYY-MM-DD, worked out from the end date and the notice period. Null if it cannot be worked out."),
   renewal_terms: field("If it renews automatically: the renewal rule in plain words, e.g. 'renews for 12 months unless 60 days' notice is given before the end'"),
+  agreement_type: field(`The kind of agreement, as one code: ${TYPE_HELP}`, TYPE_CODES),
+  agreement_type_other: field("Only if the code is OTH: a short name for the kind of agreement (two or three words)"),
+  business_function: field(`Which part of our business most likely owns this relationship: ${FUNCTION_HELP}`, FUNCTION_CODES),
+  value: field("The total contract value as a plain number with no currency symbol or commas, e.g. 250000. If only a recurring fee is stated, the amount for one year. Null if no amount is stated (e.g. rates only)."),
+  currency: field("The currency of the value as a three-letter code, e.g. AUD, USD"),
+  value_basis: field("What the value covers, in a few words, e.g. 'total over the term', 'per year', 'per year, plus usage fees'"),
+  signed_on: field("The date our entity signed, from the signing page, as YYYY-MM-DD. If only one date is given for all parties, that date. Null if not shown."),
+  our_signatories: field("Who signed for our entity, from the signing page, as 'Name (Title)' separated by semicolons, e.g. 'Jane Smith (Director); John Lee (Company Secretary)'. Only our side. Null if the signing page is blank or missing."),
+  family_role: field("If this document amends, varies, renews or sits under another agreement (e.g. a statement of work under a master agreement), which: amendment, sow, variation, renewal or side_letter. Null if it is a standalone agreement.", ["amendment", "sow", "variation", "renewal", "side_letter"]),
+  parent_title: field("If it sits under or changes another agreement: that agreement's title and date as the document names it, e.g. 'Master Services Agreement dated 1 July 2025'"),
 };
 const TERMS_FIELDS = {
   counterparty: field("The legal name of the business offering these terms"),
   title: field("The name of the terms, e.g. 'Acme Cloud Terms of Service'"),
   description: field("One or two plain-English sentences on what these terms cover"),
   purpose: field("One plain-English sentence on what the service is for, from the customer's point of view"),
+  business_function: field(`Which part of our business most likely uses this service: ${FUNCTION_HELP}`, FUNCTION_CODES),
 };
 
 function system(entity: string, org: string, online: boolean) {
@@ -86,7 +113,7 @@ async function callClaude(aws: AwsClient, content: unknown[], online: boolean, e
   const props = online ? TERMS_FIELDS : CONTRACT_FIELDS;
   const body = {
     anthropic_version: "bedrock-2023-05-31",
-    max_tokens: 3000,
+    max_tokens: 4000,
     temperature: 0,
     system: system(entity, org, online),
     tools: [{ name: "record_contract", description: "Record what the document says", input_schema: { type: "object", properties: props, required: Object.keys(props) } }],
@@ -132,8 +159,10 @@ function clean(input: Record<string, unknown>, keys: string[]): Fields {
   for (const k of keys) {
     const f = (input[k] ?? {}) as { value?: unknown; quote?: unknown };
     let value = typeof f.value === "string" && f.value.trim() ? f.value.trim().slice(0, 2000) : null;
-    if (value && ["start_date", "end_date", "notice_by"].includes(k) && !/^\d{4}-\d{2}-\d{2}$/.test(value)) value = null;
-    if (value && ["start_date", "end_date", "notice_by"].includes(k) && Number.isNaN(Date.parse(value))) value = null;
+    if (value && ["start_date", "end_date", "notice_by", "signed_on"].includes(k) && !/^\d{4}-\d{2}-\d{2}$/.test(value)) value = null;
+    if (value && ["start_date", "end_date", "notice_by", "signed_on"].includes(k) && Number.isNaN(Date.parse(value))) value = null;
+    if (value && k === "value") value = /^\d+(\.\d+)?$/.test(value.replace(/[,\s$]/g, "")) ? value.replace(/[,\s$]/g, "") : null;
+    if (value && k === "currency") value = /^[A-Za-z]{3}$/.test(value) ? value.toUpperCase() : null;
     const quote = typeof f.quote === "string" && f.quote.trim() ? f.quote.trim().slice(0, 1000) : null;
     out[k] = { value, quote };
   }
@@ -259,7 +288,7 @@ Deno.serve(async (req) => {
       } catch (e) {
         failure = (e as Error).message;
       }
-      const recorded = await admin.rpc("record_contract_reading", { p_version: body.version_id, p_model: MODEL, p_fields: fields ?? {}, p_error: failure });
+      const recorded = await admin.rpc("record_contract_reading", { p_version: body.version_id, p_model: `${PROMPT} ${MODEL}`, p_fields: fields ?? {}, p_error: failure });
       if (recorded.error) console.error("record", recorded.error.message);
       if (failure) return reply({ error: failure }, 400);
       return reply({ extraction_id: recorded.data ?? null, fields, model: MODEL, prompt: PROMPT });

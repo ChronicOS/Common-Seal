@@ -1912,3 +1912,20 @@ fieldset.person-row { min-width: 0; }
 .reader-item .field { min-width: 0; flex: 1 1 180px; }
 .reader-item label:not(.check) { display: block; }
 .reader-group > input, .reader-group > textarea { width: 100%; box-sizing: border-box; }
+
+/* Contract filing (0068) */
+.register-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 8px; }
+.register-filters input { flex: 1 1 220px; min-width: 0; }
+.register-filters select { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.chip-button { border: 1px solid var(--line, #cfc8b8); background: #fff; border-radius: 999px; padding: 3px 10px; font-size: 0.85em; cursor: pointer; color: inherit; }
+.chip-button.on { background: #1f2a24; color: #fff; border-color: #1f2a24; }
+.register-group h3 { margin: 18px 0 4px; font-size: 1em; }
+.family-child .entity-row { padding-left: 28px; background: #fbfaf5; }
+.row-chips { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.chip.verdict-authorised { background: #e5f4e4; color: #1d5a2a; }
+.chip.verdict-outside { background: #fbebeb; color: #8a1f1f; }
+.chip.verdict-check { background: #f9eeda; color: #7a4b00; }
+.signing-check.verdict-outside { border-color: #e8b4b4; }
+.signing-check.verdict-check { border-color: #ecd09a; }
+.reader-item .field.narrow { flex: 0 1 90px; }

@@ -33,6 +33,21 @@ export type Contract = {
   tfc_from?: string | null;
   renewal_terms?: string | null;
   source?: "typed" | "document" | "online_terms";
+  /** Filing (migration 0068) */
+  agreement_type?: string | null;
+  agreement_type_other?: string | null;
+  business_function?: string | null;
+  parent_contract_id?: string | null;
+  family_role?: string | null;
+  family_no?: number | null;
+  display_name?: string | null;
+  name_is_custom?: boolean;
+  value_basis?: string | null;
+  currency?: string | null;
+  signed_on?: string | null;
+  our_signatories?: { name: string; title?: string | null }[];
+  signatory_check?: import("./contractFiling").SignatoryCheck | null;
+  is_key?: boolean;
 };
 
 export type Approval = {
@@ -95,7 +110,7 @@ export function partyGate(data: ContractsData, partyId: string | undefined, toda
   const p = data.counterparties.find((x) => x.id === partyId);
   if (!p?.dd_status) {
     if (data.exempt.includes(partyId)) cleared.push("Recorded as out of scope for due diligence.");
-    else flags.push("No due diligence on record for the other party.");
+    else blocks.push("No due diligence on the other party yet. Start it, or record the party as out of scope.");
   } else if (p.dd_status === "rejected") blocks.push("The other party was rejected in due diligence.");
   else if (p.dd_status === "open") blocks.push("Due diligence on the other party is not finished.");
   else cleared.push(`Due diligence: cleared${p.dd_status === "cleared_with_conditions" ? " with conditions" : ""} (${p.risk_rating ?? "unrated"} risk).`);
@@ -206,6 +221,8 @@ export type NewContract = {
   noticeBy: string | null;
   autoRenews: boolean;
   summary: string;
+  agreementType?: string;
+  businessFunction?: string;
 };
 
 /** Files the contract and sends it for approval. The approver is worked out by the database from the delegation rules. */
@@ -236,6 +253,8 @@ export async function fileContract(organisationId: string, data: ContractsData, 
       notice_by: c.noticeBy,
       auto_renews: c.autoRenews,
       summary: c.summary.trim() || null,
+      ...(c.agreementType ? { agreement_type: c.agreementType } : {}),
+      ...(c.businessFunction ? { business_function: c.businessFunction } : {}),
     })
     .select("id")
     .single();
@@ -279,6 +298,7 @@ export async function recordSignature(
 export const EXCEPTION_LABELS: Record<string, string> = {
   signed_before_approval: "Signed before approval",
   signed_outside_authority: "Signed outside authority",
+  signed_before_due_diligence: "Signed before due diligence",
 };
 
 export const ARRANGEMENT_TYPES = [

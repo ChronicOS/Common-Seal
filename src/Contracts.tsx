@@ -16,6 +16,8 @@ import { formatDay, formatWhen } from "./board";
 import DropZone from "./DropZone";
 import ContractReader from "./ContractReader";
 import { tfcLine } from "./contractReading";
+import { FilingPanel, SigningPanel } from "./ContractPanels";
+import { AGREEMENT_TYPES, FUNCTIONS, TYPE_GROUPS, typeLabel, VERDICT_LABEL, type SignatoryCheck } from "./contractFiling";
 import { attachFile, downloadFile, listFiles, type LinkedFile } from "./files";
 import {
   CONTRACT_STATUS,
@@ -41,6 +43,8 @@ type Props = {
   role: string;
   /** Opens straight onto one contract, e.g. when arriving from the intercompany map. */
   initialOpenId?: string | null;
+  /** Opens Due Diligence, ready to start on this third party */
+  onStartDueDiligence?: (partyId: string) => void;
 };
 
 const NO_RULE = "__none__";
@@ -139,7 +143,7 @@ function SignForm({
   );
 }
 
-export default function Contracts({ organisationId, group, role, initialOpenId }: Props) {
+export default function Contracts({ organisationId, group, role, initialOpenId, onStartDueDiligence }: Props) {
   const canFile = !only(role, "auditor");
   const canRecord = has(role, ...["owner", "admin", "secretary", "legal", "compliance"]);
 
@@ -149,6 +153,9 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [openId, setOpenId] = useState<string | null>(initialOpenId ?? null);
+  const [filter, setFilter] = useState({ entity: "", type: "", fn: "", status: "", quick: "", text: "" });
+  const [newType, setNewType] = useState("");
+  const [newFn, setNewFn] = useState("");
 
   // New contract
   const [entityId, setEntityId] = useState(group.entities[0]?.id ?? "");
@@ -235,8 +242,9 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
         <p className="eyebrow">
           {entityName(open.entity_id)} · {otherName(open)}
         </p>
-        <h1>{open.title}</h1>
+        <h1>{open.display_name ?? open.title}</h1>
         <p className="lead">
+          {open.display_name && open.display_name !== open.title && <span className="muted">{open.title} · </span>}
           <span className="chip">{CONTRACT_STATUS[open.status]}</span>
           {twoSided && (
             <>
@@ -249,12 +257,15 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
           <p className="muted">Both sides are group entities, so third-party due diligence and sanctions checks do not apply.</p>
         ) : (
           <div className={blocked ? "card warning" : gate.flags.length ? "card note" : "muted"} role={blocked ? "alert" : undefined}>
-            {blocked && <p><strong>This contract cannot be approved yet.</strong></p>}
+            {blocked && <p><strong>{open.status === "signed" ? "Already signed, but checks on the other party are outstanding." : "This contract cannot be approved yet."}</strong></p>}
             <ul className="plain small">
               {gate.blocks.map((x) => <li key={x} className="warning-text">{x}</li>)}
               {gate.flags.map((x) => <li key={x}><strong>Flag:</strong> {x}</li>)}
               {gate.cleared.map((x) => <li key={x}>{x}</li>)}
             </ul>
+            {partyId && onStartDueDiligence && gate.blocks.some((b) => b.startsWith("No due diligence")) && (
+              <button type="button" onClick={() => onStartDueDiligence(partyId)}>Start due diligence on {otherName(open)}</button>
+            )}
           </div>
         )}
 
@@ -276,14 +287,18 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
         )}
 
         <dl className="detail-list two">
-          <div>
-            <dt>Type</dt>
-            <dd>{twoSided ? (open.arrangement_type ?? "Intercompany") : open.transaction_type === ANY ? "Not specified" : open.transaction_type}</dd>
-          </div>
-          <div>
-            <dt>{open.arrangement_type === "Loan" ? "Principal" : "Value"}</dt>
-            <dd>{open.value_amount === null ? "Not stated" : money(open.value_amount)}</dd>
-          </div>
+          {(twoSided || open.transaction_type !== ANY) && (
+            <div>
+              <dt>{twoSided ? "Type" : "Approval category"}</dt>
+              <dd>{twoSided ? (open.arrangement_type ?? "Intercompany") : open.transaction_type}</dd>
+            </div>
+          )}
+          {twoSided && (
+            <div>
+              <dt>{open.arrangement_type === "Loan" ? "Principal" : "Value"}</dt>
+              <dd>{open.value_amount === null ? "Not stated" : money(open.value_amount)}</dd>
+            </div>
+          )}
           {open.pricing_basis && (
             <div>
               <dt>Pricing basis</dt>
@@ -352,6 +367,31 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
           <p className="muted small">Details read by Claude (in Australia) and checked by a person before saving.</p>
         )}
 
+        {!twoSided && (
+          <FilingPanel
+            key={`f-${open.id}-${open.display_name}`}
+            contract={open}
+            masters={data.contracts.filter((c) => !c.parent_contract_id && !c.counterparty_entity_id).map((c) => ({ id: c.id, name: c.display_name ?? c.title }))}
+            canEdit={canRecord || open.status === "draft"}
+            onSaved={reload}
+            onOpen={(id) => setOpenId(id)}
+          />
+        )}
+        {!twoSided && data.contracts.some((c) => c.parent_contract_id === open.id) && (
+          <section className="block">
+            <h2>In this family</h2>
+            <ul className="plain rows">
+              {data.contracts.filter((c) => c.parent_contract_id === open.id).map((c) => (
+                <li key={c.id}>
+                  <button type="button" className="link-dark" onClick={() => setOpenId(c.id)}>{c.display_name ?? c.title}</button>{" "}
+                  <span className="chip">{CONTRACT_STATUS[c.status]}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {!twoSided && <SigningPanel key={`s-${open.id}-${open.signatory_check ? JSON.stringify(open.signatory_check).length : 0}`} contract={open} canEdit={canRecord} onSaved={reload} />}
+
         <section className="block">
           <h2>Contract documents</h2>
           {files.filter((f) => f.subject_id === open.id).length === 0 ? (
@@ -397,6 +437,9 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
           </section>
         )}
 
+        {open.status === "signed" && approvals.length === 0 && signatures.length === 0 ? (
+          <p className="muted block">Added as a contract that was already signed, so approval and signing were not run in VeraPhius. Who signed is checked above.</p>
+        ) : (<>
         <section className="card block">
           <h2>1. Approval</h2>
           {approvals.length === 0 && <p>Not yet sent for approval.</p>}
@@ -496,6 +539,7 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
             );
           })}
         </section>
+        </>)}
 
         <section className="card block">
           <Attachments subjectTable="contracts" subjectId={open.id} canAttach={canRecord} label="Contract documents" />
@@ -506,7 +550,7 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
           {reminders.length === 0 ? (
             <p>
               {open.status === "signed"
-                ? "No reminders: this contract has no end date or notice date."
+                ? "No reminders: this contract has no end date or notice date still to come."
                 : "Set automatically from the end date and notice date once the contract is signed."}
             </p>
           ) : (
@@ -530,6 +574,7 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
     const amount = value.trim() === "" ? null : Number(value.replace(/[$,\s]/g, ""));
     if (amount !== null && !(Number.isFinite(amount) && amount >= 0)) return setError("Enter the value as a number, or leave it blank.");
     if (counterparty.trim().length < 2 || title.trim().length < 2) return setError("Enter the other party and a title.");
+    if (!newType) return setError("Choose the type of agreement.");
     let created = "";
     const ok = await run(async () => {
       created = await fileContract(organisationId, data!, {
@@ -543,6 +588,8 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
         noticeBy: noticeBy || null,
         autoRenews,
         summary,
+        agreementType: newType,
+        businessFunction: newFn,
       });
     });
     if (ok) {
@@ -572,7 +619,7 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
           <ul className="plain">
             {data.exceptions.map((x) => (
               <li key={x.id}>
-                <strong>{data.contracts.find((c) => c.id === x.contract_id)?.title ?? "Contract"}:</strong>{" "}
+                <strong>{(() => { const c = data.contracts.find((k) => k.id === x.contract_id); return c?.display_name ?? c?.title ?? "Contract"; })()}:</strong>{" "}
                 {EXCEPTION_LABELS[x.kind] ?? x.kind} <span className="muted">· {formatDay(x.created_at)}</span>
               </li>
             ))}
@@ -583,26 +630,108 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
       {data.contracts.length === 0 ? (
         <p className="lead">No contracts yet.</p>
       ) : (
-        <ul className="entity-list">
-          {data.contracts.map((c) => (
-            <li key={c.id}>
+        (() => {
+          const today = localToday();
+          const in90 = new Date(Date.now() + 90 * 864e5).toLocaleDateString("en-CA");
+          const live = (c: Contract) => c.status !== "terminated" && (!c.ends_on || c.ends_on >= today);
+          const quick: Record<string, { label: string; test: (c: Contract) => boolean }> = {
+            renewing: { label: "Notice or end in the next 90 days", test: (c) => c.status === "signed" && [c.notice_by, c.ends_on].some((d) => d && d >= today && d <= in90) },
+            tfc: { label: "Can be ended by notice", test: (c) => c.tfc_available === "yes" && live(c) },
+            key: { label: "Key contracts", test: (c) => !!c.is_key },
+            drafts: { label: "Not signed yet", test: (c) => c.status !== "signed" && c.status !== "terminated" },
+            check: { label: "Signing needs a look", test: (c) => !!c.signatory_check && (c.signatory_check as SignatoryCheck).verdict !== "authorised" },
+          };
+          const text = filter.text.trim().toLowerCase();
+          const matches = (c: Contract) =>
+            (!filter.entity || c.entity_id === filter.entity) &&
+            (!filter.type || (c.agreement_type ?? "OTH") === filter.type) &&
+            (!filter.fn || (c.business_function ?? "") === filter.fn) &&
+            (!filter.status || (filter.status === "live" ? c.status === "signed" && live(c) : filter.status === "ended" ? !live(c) : c.status !== "signed")) &&
+            (!filter.quick || quick[filter.quick].test(c)) &&
+            (!text || [c.display_name, c.title, otherName(c), c.description].some((x) => x?.toLowerCase().includes(text)));
+          // Families: a linked document shows under its master (and the master shows if any of its family matches)
+          const children = (id: string) => data.contracts.filter((c) => c.parent_contract_id === id);
+          const masters = data.contracts.filter((c) => !c.parent_contract_id || !data.contracts.some((m) => m.id === c.parent_contract_id));
+          const shown = masters.filter((m) => matches(m) || children(m.id).some(matches));
+          const groups = new Map<string, Contract[]>();
+          for (const c of shown) {
+            const key = `${entityName(c.entity_id)}|${c.counterparty_entity_id ? "Intercompany" : typeLabel(c.agreement_type ?? "OTH", null)}`;
+            groups.set(key, [...(groups.get(key) ?? []), c]);
+          }
+          const row = (c: Contract, child = false) => (
+            <li key={c.id} className={child ? "family-child" : undefined}>
               <button type="button" className="entity-row" onClick={() => setOpenId(c.id)}>
                 <span>
-                  <span className="entity-name">{c.title}</span>
-                  <span className="muted"> · {otherName(c)}</span>
+                  <span className="entity-name">{child ? "↳ " : ""}{c.display_name ?? c.title}</span>
                   <br />
                   <span className="muted">
-                    {entityName(c.entity_id)}
-                    {c.counterparty_entity_id ? " · intercompany" : ""}
+                    {c.display_name && c.display_name !== c.title ? c.title : otherName(c)}
+                    {c.business_function ? ` · ${FUNCTIONS[c.business_function]}` : ""}
                     {c.value_amount !== null ? ` · ${money(c.value_amount)}` : ""}
                     {nextDate(c) ? ` · ${nextDate(c)}` : ""}
                   </span>
                 </span>
-                <span className="chip">{CONTRACT_STATUS[c.status]}</span>
+                <span className="row-chips">
+                  {c.signatory_check && (c.signatory_check as SignatoryCheck).verdict !== "authorised" && (
+                    <span className={`chip verdict-${(c.signatory_check as SignatoryCheck).verdict}`}>{VERDICT_LABEL[(c.signatory_check as SignatoryCheck).verdict]}</span>
+                  )}
+                  <span className="chip">{CONTRACT_STATUS[c.status]}</span>
+                </span>
               </button>
             </li>
-          ))}
-        </ul>
+          );
+          const usedTypes = new Set(data.contracts.map((c) => c.agreement_type ?? "OTH"));
+          return (
+            <>
+              <div className="filters register-filters">
+                <input aria-label="Search contracts" placeholder="Search name, party or description" value={filter.text} onChange={(e) => setFilter({ ...filter, text: e.target.value })} />
+                {group.entities.length > 1 && (
+                  <select aria-label="Company" value={filter.entity} onChange={(e) => setFilter({ ...filter, entity: e.target.value })}>
+                    <option value="">All companies</option>
+                    {group.entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+                  </select>
+                )}
+                <select aria-label="Type of agreement" value={filter.type} onChange={(e) => setFilter({ ...filter, type: e.target.value })}>
+                  <option value="">All types</option>
+                  {AGREEMENT_TYPES.filter((t) => usedTypes.has(t.code)).map((t) => <option key={t.code} value={t.code}>{t.label}</option>)}
+                </select>
+                <select aria-label="Business function" value={filter.fn} onChange={(e) => setFilter({ ...filter, fn: e.target.value })}>
+                  <option value="">All functions</option>
+                  {Object.entries(FUNCTIONS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </select>
+                <select aria-label="Status" value={filter.status} onChange={(e) => setFilter({ ...filter, status: e.target.value })}>
+                  <option value="">Any status</option>
+                  <option value="live">Signed and in force</option>
+                  <option value="draft">Not signed yet</option>
+                  <option value="ended">Ended</option>
+                </select>
+              </div>
+              <div className="chip-row" role="group" aria-label="Quick filters">
+                {Object.entries(quick).map(([k, q]) => (
+                  <button key={k} type="button" className={filter.quick === k ? "chip-button on" : "chip-button"} aria-pressed={filter.quick === k}
+                    onClick={() => setFilter({ ...filter, quick: filter.quick === k ? "" : k })}>
+                    {q.label} ({data.contracts.filter(q.test).length})
+                  </button>
+                ))}
+              </div>
+              {shown.length === 0 ? (
+                <p className="muted">No contracts match. <button type="button" className="link-dark" onClick={() => setFilter({ entity: "", type: "", fn: "", status: "", quick: "", text: "" })}>Clear the filters</button></p>
+              ) : (
+                [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, list]) => {
+                  const [ent, type] = key.split("|");
+                  return (
+                    <section key={key} className="register-group">
+                      <h3>{group.entities.length > 1 ? `${ent} · ` : ""}{type} <span className="muted small">({list.length})</span></h3>
+                      <ul className="entity-list">
+                        {list.sort((a, b) => (a.display_name ?? a.title).localeCompare(b.display_name ?? b.title)).flatMap((m) => [row(m), ...children(m.id).sort((a, b) => (a.family_no ?? 0) - (b.family_no ?? 0)).map((k) => row(k, true))])}
+                      </ul>
+                    </section>
+                  );
+                })
+              )}
+            </>
+          );
+        })()
       )}
 
       {canFile &&
@@ -614,6 +743,8 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
             organisationId={organisationId}
             entities={group.entities}
             counterparties={data.counterparties}
+            existing={data.contracts.filter((c) => !c.counterparty_entity_id).map((c) => ({ id: c.id, name: c.display_name ?? c.title, party: c.counterparty?.name ?? "", isMaster: !c.parent_contract_id }))}
+            onStartDueDiligence={onStartDueDiligence}
             onSaved={reload}
             onOpen={(id) => { setOpenId(id); setError(null); setNotice(null); }}
           />
@@ -636,9 +767,29 @@ export default function Contracts({ organisationId, group, role, initialOpenId }
                 <option key={p.id} value={p.name} />
               ))}
             </datalist>
+            <div className="row wrap">
+              <span className="field">
+                <label htmlFor="c-atype">Type of agreement</label>
+                <select id="c-atype" value={newType} onChange={(e) => setNewType(e.target.value)}>
+                  <option value="">Choose</option>
+                  {TYPE_GROUPS.map((g) => (
+                    <optgroup key={g} label={g}>
+                      {AGREEMENT_TYPES.filter((t) => t.group === g).map((t) => <option key={t.code} value={t.code}>{t.code} · {t.label}</option>)}
+                    </optgroup>
+                  ))}
+                </select>
+              </span>
+              <span className="field">
+                <label htmlFor="c-fn">Business function</label>
+                <select id="c-fn" value={newFn} onChange={(e) => setNewFn(e.target.value)}>
+                  <option value="">Not set</option>
+                  {Object.entries(FUNCTIONS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </select>
+              </span>
+            </div>
             <label htmlFor="c-title">Title</label>
             <input id="c-title" placeholder="e.g. Supply agreement" value={title} onChange={(e) => setTitle(e.target.value)} />
-            <label htmlFor="c-type">Type of transaction</label>
+            <label htmlFor="c-type">Approval category (from your delegations; leave blank if none)</label>
             <input id="c-type" list="contract-types" autoComplete="off" value={type} onChange={(e) => setType(e.target.value)} />
             <datalist id="contract-types">
               {types.map((t) => (

@@ -18,6 +18,13 @@ checks (check_name, ok, detail) as (
          case when to_regclass('public.' || e.marker) is null then 'Table ' || e.marker || ' is missing' else '' end
   from expected e
   union all
+  select 'Migration 0068 has been run',
+         to_regprocedure('public.set_contract_filing(uuid, text, text, text, uuid, text, text, numeric, text)') is not null, ''
+  union all
+  select 'Contracts with a third party cannot be approved before due diligence',
+         to_regprocedure('app.party_needs_dd(uuid)') is null
+         or position('Blocked: there is no due diligence on' in pg_get_functiondef('public.decide_contract_approval(uuid, boolean, text)'::regprocedure)) > 0, ''
+  union all
   select 'Migration 0067 has been run',
          to_regprocedure('public.save_read_contract(uuid, uuid, boolean, jsonb, uuid, uuid, text)') is not null, ''
   union all

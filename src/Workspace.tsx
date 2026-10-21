@@ -155,6 +155,8 @@ export default function Workspace({ membership, userId, userName }: { membership
   const [entityId, setEntityId] = useState<string | null>(null);
   const [meetingId, setMeetingId] = useState<string | null>(null);
   const [contractId, setContractId] = useState<string | null>(null);
+  // Opening Due Diligence from a contract, ready to start on that third party
+  const [ddPartyId, setDdPartyId] = useState<string | null>(null);
   // Entities opened in this visit are not nagged about again until the next visit.
   const [visited, setVisited] = useState<string[]>([]);
   const [name, setName] = useState("");
@@ -208,6 +210,7 @@ export default function Workspace({ membership, userId, userName }: { membership
   };
 
   const go = (next: Tab) => {
+    setDdPartyId(null);
     // Investigations live under Company, Employees
     setEmployeesSub(next === "speakup" ? "investigations" : "key");
     setTab(next === "speakup" ? "keyemployees" : next);
@@ -549,7 +552,7 @@ export default function Workspace({ membership, userId, userName }: { membership
       <div className="workspace">
         {nav}
         <div className="workspace-main">
-        <Parties organisationId={organisation.id} role={role} userId={userId} tier={organisation.tier} />
+        <Parties key={ddPartyId ?? "dd"} organisationId={organisation.id} role={role} userId={userId} tier={organisation.tier} initialRequestPartyId={ddPartyId} />
         </div>
       </div>
     );
@@ -700,7 +703,17 @@ export default function Workspace({ membership, userId, userName }: { membership
       <div className="workspace">
         {nav}
         <div className="workspace-main">
-        <Contracts key={contractId ?? "list"} organisationId={organisation.id} group={data} role={role} initialOpenId={contractId} />
+        <Contracts
+          key={contractId ?? "list"}
+          organisationId={organisation.id}
+          group={data}
+          role={role}
+          initialOpenId={contractId}
+          onStartDueDiligence={(partyId) => {
+            setDdPartyId(partyId);
+            setTab("parties");
+          }}
+        />
         </div>
       </div>
     );

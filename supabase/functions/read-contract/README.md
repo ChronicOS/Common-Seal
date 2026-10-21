@@ -54,6 +54,10 @@ A person checks every answer (shown with the words it came from) before a contra
 | Start and end dates | yes | no |
 | Termination for convenience: whether, who, notice, from when | yes | no |
 | Auto-renewal, last day for notice, renewal rule | yes | no |
+| Type of agreement and business function (suggested) | yes | function only |
+| Value, currency and what it covers | yes | no |
+| Who signed for us, and the date signed | yes | no |
+| Whether it amends or sits under another agreement | yes | no |
 
 Online terms: the link is kept with the date it was added. No copy of the page is stored, so the
 page may change later.

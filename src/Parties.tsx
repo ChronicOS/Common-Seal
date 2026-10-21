@@ -54,7 +54,15 @@ import {
   type SubjectType,
 } from "./parties";
 
-type Props = { organisationId: string; role: string; userId?: string; /** The organisation's tier: Small gets the essentials only */ tier?: string };
+type Props = {
+  organisationId: string;
+  role: string;
+  userId?: string;
+  /** The organisation's tier: Small gets the essentials only */
+  tier?: string;
+  /** Opens straight onto starting due diligence on this third party (e.g. from a contract) */
+  initialRequestPartyId?: string | null;
+};
 
 /** Small tier: a shorter list of kinds of third party */
 const SMALL_TYPES: { id: PartyType; label: string }[] = [
@@ -343,7 +351,7 @@ function RequestForm({ party, subject, people, userId, busy, onRequest, onCancel
   );
 }
 
-export default function Parties({ organisationId, role, userId = "", tier = "large" }: Props) {
+export default function Parties({ organisationId, role, userId = "", tier = "large", initialRequestPartyId = null }: Props) {
   const canEdit = has(role, ...RECORDS);
   // TEST ONLY (remove before go-live): each browser tab can show Due Diligence as Small or as Medium/Large
   const [testView, setTestView] = useState<"small" | "full" | null>(() => {
@@ -383,7 +391,7 @@ export default function Parties({ organisationId, role, userId = "", tier = "lar
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [view, setView] = useState<View>({ kind: "list" });
+  const [view, setView] = useState<View>(initialRequestPartyId ? { kind: "request", partyId: initialRequestPartyId } : { kind: "list" });
   const [filter, setFilter] = useState<"all" | "open" | "attention" | "mine">("all");
   const [subject, setSubject] = useState<SubjectType>("entity");
   const [smallProgress, setSmallProgress] = useState("");

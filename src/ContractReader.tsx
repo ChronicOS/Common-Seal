@@ -14,6 +14,9 @@ import {
   type ReadFields,
   type Saved,
 } from "./contractReading";
+import { AGREEMENT_TYPES, FAMILY_ROLES, FUNCTIONS, previewName, shortParty, TYPE_GROUPS, VERDICT_LABEL } from "./contractFiling";
+
+type Existing = { id: string; name: string; party: string; isMaster: boolean };
 
 type Item = {
   key: string;
@@ -36,14 +39,27 @@ type Props = {
   organisationId: string;
   entities: { id: string; name: string }[];
   counterparties: { id: string; name: string }[];
+  /** Contracts already on file, to link amendments and statements of work to their master */
+  existing: Existing[];
   onSaved: () => Promise<void> | void;
   onOpen: (contractId: string) => void;
+  onStartDueDiligence?: (partyId: string) => void;
 };
+
+/** The master agreement a document most likely belongs to: same other party, and the title it names */
+function suggestParent(existing: Existing[], v: ContractValues) {
+  if (!v.family_role) return "";
+  const party = shortParty(v.counterparty).toLowerCase();
+  const mine = existing.filter((c) => c.isMaster && shortParty(c.party).toLowerCase() === party);
+  const words = (v.parent_title || "").toLowerCase().split(/\W+/).filter((w) => w.length > 3);
+  const scored = mine.map((c) => ({ c, n: words.filter((w) => c.name.toLowerCase().includes(w)).length })).sort((a, b) => b.n - a.n);
+  return scored[0]?.c.id ?? "";
+}
 
 const ACCEPT = ".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain";
 
 /** Add contracts by dropping them in: Claude (in Australia) reads the details, a person checks them, then they are saved */
-export default function ContractReader({ organisationId, entities, counterparties, onSaved, onOpen }: Props) {
+export default function ContractReader({ organisationId, entities, counterparties, existing, onSaved, onOpen, onStartDueDiligence }: Props) {
   const [entityId, setEntityId] = useState(entities[0]?.id ?? "");
   const [signed, setSigned] = useState(true);
   const [items, setItems] = useState<Item[]>([]);
@@ -80,7 +96,9 @@ export default function ContractReader({ organisationId, entities, counterpartie
           patch(item.key, { documentId: staged.document_id, versionId: staged.version_id, duplicateOf: staged.duplicate_of });
           if (ready === false) throw new Error("Reading is not switched on yet, so type the details in.");
           const r = await readFile(staged.version_id, item.entityId);
-          patch(item.key, { status: "ready", fields: r.fields, extractionId: r.extraction_id, values: valuesFrom(r.fields) });
+          const values = valuesFrom(r.fields);
+          values.parent_contract_id = suggestParent(existing, values);
+          patch(item.key, { status: "ready", fields: r.fields, extractionId: r.extraction_id, values });
         } catch (e) {
           patch(item.key, { status: "failed", error: e instanceof Error ? e.message : "The file could not be read." });
         }
@@ -105,7 +123,7 @@ export default function ContractReader({ organisationId, entities, counterpartie
         try {
           if (ready === false) throw new Error("Reading is not switched on yet, so type the details in.");
           const r = await readUrl(organisationId, item.entityId, item.label);
-          patch(item.key, { status: "ready", fields: r.fields, values: valuesFrom(r.fields) });
+          patch(item.key, { status: "ready", fields: r.fields, values: { ...valuesFrom(r.fields), agreement_type: "TERMS" } });
         } catch (e) {
           patch(item.key, { status: "failed", error: e instanceof Error ? e.message : "The page could not be read." });
         }
@@ -211,6 +229,8 @@ export default function ContractReader({ organisationId, entities, counterpartie
               item={item}
               entityName={entityName(item.entityId)}
               counterparties={counterparties}
+              existing={existing}
+              onStartDueDiligence={onStartDueDiligence}
               onChange={(values) => patch(item.key, { values })}
               onSigned={(s) => patch(item.key, { signed: s })}
               onTypeIn={() => patch(item.key, { status: "ready", error: undefined, extractionId: null, fields: undefined })}
@@ -234,6 +254,8 @@ function ReadCard({
   item,
   entityName,
   counterparties,
+  existing,
+  onStartDueDiligence,
   onChange,
   onSigned,
   onTypeIn,
@@ -244,6 +266,8 @@ function ReadCard({
   item: Item;
   entityName: string;
   counterparties: { id: string; name: string }[];
+  existing: Existing[];
+  onStartDueDiligence?: (partyId: string) => void;
   onChange: (v: ContractValues) => void;
   onSigned: (s: boolean) => void;
   onTypeIn: () => void;
@@ -278,20 +302,31 @@ function ReadCard({
       </div>
     );
 
-  if (item.status === "saved" && item.saved)
+  if (item.status === "saved" && item.saved) {
+    const sc = item.saved.signatory_check;
     return (
       <div className="reader-item saved">
         <p>
-          <strong>Saved: {v.title}</strong> <span className="muted">· {v.counterparty} · {item.signed ? "signed" : "sent for approval"}</span>{" "}
+          <strong>Saved as {item.saved.display_name ?? v.title}</strong> <span className="muted">· {item.signed ? "signed" : "sent for approval"}</span>{" "}
           <button type="button" className="link-dark small" onClick={onOpen}>Open</button>
         </p>
+        {sc && (
+          <p className="small">
+            <span className={`chip verdict-${sc.verdict}`}>{VERDICT_LABEL[sc.verdict]}</span> {sc.summary}
+          </p>
+        )}
         {item.saved.needs_due_diligence && (
           <p className="small warning-text">
-            {item.saved.new_counterparty ? `${v.counterparty} is new to your records` : `${v.counterparty} has had no due diligence`}. Start it on the Due Diligence page when you are ready.
+            {item.saved.new_counterparty ? `${v.counterparty} is new to your records` : `${v.counterparty} has had no due diligence`}.{" "}
+            {item.signed ? "The contract is already signed, so start due diligence now." : "It cannot be approved until due diligence is done."}{" "}
+            {onStartDueDiligence && (
+              <button type="button" className="link-dark small" onClick={() => onStartDueDiligence(item.saved!.counterparty_id)}>Start due diligence</button>
+            )}
           </p>
         )}
       </div>
     );
+  }
 
   const canSave = v.counterparty.trim().length >= 2 && v.title.trim().length >= 2 && item.status !== "saving";
   return (
@@ -320,6 +355,82 @@ function ReadCard({
 
       <label htmlFor={id("title")}>Title</label>
       <input id={id("title")} value={v.title} onChange={set("title")} />
+
+      <fieldset className="reader-group">
+        <legend>Filing</legend>
+        <div className="row wrap">
+          <span className="field">
+            <label htmlFor={id("type")}>Type of agreement</label>
+            <select id={id("type")} value={v.agreement_type} onChange={set("agreement_type")}>
+              <option value="">Choose</option>
+              {TYPE_GROUPS.map((g) => (
+                <optgroup key={g} label={g}>
+                  {AGREEMENT_TYPES.filter((t) => t.group === g).map((t) => <option key={t.code} value={t.code}>{t.code} · {t.label}</option>)}
+                </optgroup>
+              ))}
+            </select>
+          </span>
+          <span className="field">
+            <label htmlFor={id("fn")}>Business function</label>
+            <select id={id("fn")} value={v.business_function} onChange={set("business_function")}>
+              <option value="">Not set</option>
+              {Object.entries(FUNCTIONS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+          </span>
+        </div>
+        {v.agreement_type === "OTH" && (
+          <>
+            <label htmlFor={id("oth")}>What kind (two or three words)</label>
+            <input id={id("oth")} value={v.agreement_type_other} onChange={set("agreement_type_other")} />
+          </>
+        )}
+        <Quote f={f.agreement_type} />
+        {!online && (
+          <>
+            <div className="row wrap">
+              <span className="field">
+                <label htmlFor={id("fam")}>Part of another agreement?</label>
+                <select id={id("fam")} value={v.family_role} onChange={(e) => onChange({ ...v, family_role: e.target.value, parent_contract_id: e.target.value ? v.parent_contract_id || suggestParent(existing, { ...v, family_role: e.target.value }) : "" })}>
+                  <option value="">No, it stands alone</option>
+                  {Object.entries(FAMILY_ROLES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </select>
+              </span>
+              {v.family_role && (
+                <span className="field">
+                  <label htmlFor={id("parent")}>Master agreement</label>
+                  <select id={id("parent")} value={v.parent_contract_id} onChange={set("parent_contract_id")}>
+                    <option value="">Choose</option>
+                    {existing.filter((c) => c.isMaster).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </span>
+              )}
+            </div>
+            <Quote f={f.parent_title} />
+            {v.family_role && !v.parent_contract_id && <span className="muted small">The master agreement is not on file yet: add it too, or save this on its own.</span>}
+          </>
+        )}
+      </fieldset>
+
+      {!online && (
+        <fieldset className="reader-group">
+          <legend>Value</legend>
+          <div className="row wrap">
+            <span className="field">
+              <label htmlFor={id("val")}>Amount</label>
+              <input id={id("val")} inputMode="decimal" placeholder="Leave blank if none" value={v.value} onChange={set("value")} />
+            </span>
+            <span className="field narrow">
+              <label htmlFor={id("cur")}>Currency</label>
+              <input id={id("cur")} maxLength={3} placeholder="AUD" value={v.currency} onChange={(e) => onChange({ ...v, currency: e.target.value.toUpperCase() })} />
+            </span>
+            <span className="field">
+              <label htmlFor={id("basis")}>Covers</label>
+              <input id={id("basis")} placeholder="e.g. total over the term, per year" value={v.value_basis} onChange={set("value_basis")} />
+            </span>
+          </div>
+          <Quote f={f.value} />
+        </fieldset>
+      )}
 
       <label htmlFor={id("desc")}>What it is</label>
       <textarea id={id("desc")} rows={2} value={v.description} onChange={set("description")} />
@@ -413,6 +524,23 @@ function ReadCard({
       <label className="check">
         <input type="checkbox" checked={item.signed} onChange={(e) => onSigned(e.target.checked)} /> {online ? "Accepted (in force)" : "Fully signed"}
       </label>
+      {item.signed && !online && (
+        <fieldset className="reader-group">
+          <legend>Who signed for us</legend>
+          <label htmlFor={id("sig")}>Names and titles, separated by ;</label>
+          <input id={id("sig")} placeholder="e.g. Jane Smith (Director); John Lee (Company Secretary)" value={v.our_signatories} onChange={set("our_signatories")} />
+          <Quote f={f.our_signatories} />
+          <label htmlFor={id("son")}>Date signed</label>
+          <input id={id("son")} type="date" value={v.signed_on} onChange={set("signed_on")} />
+          <span className="muted small">Checked against the Signing Delegation (and Financial Approval Matrix limits) in force on that date when you save.</span>
+        </fieldset>
+      )}
+      <p className="small">
+        Will be filed as{" "}
+        <strong>
+          {previewName({ type: v.agreement_type || (online ? "TERMS" : "OTH"), other: v.agreement_type_other, party: v.counterparty, start: online ? new Date().toLocaleDateString("en-CA") : v.start_date, signedOn: v.signed_on, role: v.family_role, parentName: v.parent_contract_id ? existing.find((c) => c.id === v.parent_contract_id)?.name : null, signed: item.signed })}
+        </strong>
+      </p>
       {item.error && <p className="error small" role="alert">{item.error}</p>}
       <div className="row">
         <button type="submit" disabled={!canSave}>{item.status === "saving" ? "Saving…" : "Save"}</button>
