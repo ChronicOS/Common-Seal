@@ -7,8 +7,8 @@ export const TIERS: { id: Tier; name: string; suits: string; price: string; adds
     suits: "Startups and private companies: one or a few companies, up to about 50 staff.",
     price: "Pricing to come",
     adds: [
-      { group: "Company and board", items: ["Company Info, finance details and the group chart", "Ownership and the share register (with startup mode)", "Company register and ASIC filings", "Meetings, minutes and the board report", "Appointments and Authorities (signing and delegations)"] },
-      { group: "Risk and compliance", items: ["Compliance calendar", "Risk Register (local)", "Policies and Training", "Employment law", "Privacy and cyber", "Work health and safety", "Confidential projects"] },
+      { group: "Company and board", items: ["Company Info, finance details and the group chart", "Finance: results against budget for the board, by a named preparer, with supporting papers", "Ownership and the share register (with startup mode)", "Company register and ASIC filings", "Meetings, minutes and the board report", "Appointments and Authorities (signing and delegations)"] },
+      { group: "Risk and compliance", items: ["Compliance calendar", "Risk Register (local)", "AI register: approved tools, approved and prohibited uses", "Policies and Training", "Employment law", "Privacy and cyber", "Work health and safety", "Confidential projects"] },
       { group: "Conduct", items: ["Gifts and hospitality", "Conflicts of interest"] },
       { group: "Third parties", items: ["Due Diligence essentials: three questions to start, an optional short questionnaire, every check in one click, then approve or reject"] },
     ],
@@ -20,7 +20,7 @@ export const TIERS: { id: Tier; name: string; suits: string; price: string; adds
     price: "Pricing to come",
     adds: [
       { group: "Contracts and third parties", items: ["Contract Management and Key Contracts", "Full Due Diligence: special interest persons, ownership and state ownership, modern slavery and customer checks, red flag and enhanced reports, mitigations and escalation", "Sanctions", "Disputes"] },
-      { group: "Risk and compliance", items: ["Regional risk registers", "Anti-bribery", "Consumer law", "Legal Audit", "Workflows"] },
+      { group: "Risk and compliance", items: ["Regional risk registers", "AI projects: AI the business builds, with risk, oversight and approval", "Anti-bribery", "Consumer law", "Legal Audit", "Workflows"] },
       { group: "Company and people", items: ["Insurance", "IP Register", "Employees, key people and investigations", "Speak up", "Expenses"] },
     ],
   },

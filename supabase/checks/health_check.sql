@@ -18,6 +18,14 @@ checks (check_name, ok, detail) as (
          case when to_regclass('public.' || e.marker) is null then 'Table ' || e.marker || ' is missing' else '' end
   from expected e
   union all
+  select 'Migration 0069 has been run',
+         to_regclass('public.ai_tools') is not null and to_regclass('public.fin_periods') is not null, ''
+  union all
+  select 'Financial results are open only to the board, auditors and the preparer',
+         to_regclass('public.fin_periods') is null
+         or (not has_table_privilege('authenticated', 'public.fin_periods', 'insert') and not has_table_privilege('authenticated', 'public.fin_periods', 'update')
+             and exists (select 1 from pg_policies where tablename = 'fin_periods' and policyname = 'fin_periods_read')), ''
+  union all
   select 'Migration 0068 has been run',
          to_regprocedure('public.set_contract_filing(uuid, text, text, text, uuid, text, text, numeric, text)') is not null, ''
   union all

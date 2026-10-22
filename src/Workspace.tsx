@@ -51,6 +51,8 @@ import AccountSettings from "./AccountSettings";
 import MergerControl from "./MergerControl";
 import { ClimateReporting, ConsumerLaw, EmploymentLaw } from "./RegulatoryPages";
 import Parties from "./Parties";
+import FinancialResults from "./FinancialResults";
+import AiRegister from "./AiRegister";
 import { loadPartySummary, type PartySummary } from "./parties";
 import Register from "./Register";
 import { supabase } from "./supabase";
@@ -67,7 +69,7 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Tab =
   | "overview" | "company" | "authorities" | "insurance" | "foryou" | "report" | "modernslavery" | "oldregister" | "meetings" | "register" | "policies" | "training" | "workflows" | "horizon"
-  | "contracts" | "intercompany" | "parties" | "authority" | "declarations" | "conflicts" | "expenses" | "speakup" | "people" | "keyemployees" | "keycontracts" | "disputes" | "sanctions" | "legalaudit" | "ip" | "ownership" | "companyregister" | "calendar" | "whs" | "privacy" | "abc" | "employment" | "consumer" | "climate" | "mergers" | "confidential" | "account" | "profile" | "security" | "defaults" | "emails" | "integrations" | "data" | "accesslog";
+  | "contracts" | "finance" | "aiRegister" | "intercompany" | "parties" | "authority" | "declarations" | "conflicts" | "expenses" | "speakup" | "people" | "keyemployees" | "keycontracts" | "disputes" | "sanctions" | "legalaudit" | "ip" | "ownership" | "companyregister" | "calendar" | "whs" | "privacy" | "abc" | "employment" | "consumer" | "climate" | "mergers" | "confidential" | "account" | "profile" | "security" | "defaults" | "emails" | "integrations" | "data" | "accesslog";
 const SECTIONS = ["Company", "Board", "Risk and compliance", "Contracts", "Third parties", "Conduct"] as const;
 const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] | "Settings" }[] = [
   { id: "foryou", label: "For you" },
@@ -83,6 +85,7 @@ const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] | "Set
   { id: "data", label: "Data and privacy", section: "Settings" },
   { id: "accesslog", label: "Site access log", section: "Settings" },
   { id: "company", label: "Company Info", section: "Company" },
+  { id: "finance", label: "Finance", section: "Company" },
   { id: "ownership", label: "Ownership", section: "Company" },
   { id: "companyregister", label: "Company register", section: "Company" },
   { id: "insurance", label: "Insurance", section: "Company" },
@@ -93,6 +96,7 @@ const TABS: { id: Tab; label: string; section?: (typeof SECTIONS)[number] | "Set
   { id: "authorities", label: "Authorities", section: "Board" },
   { id: "calendar", label: "Compliance calendar", section: "Risk and compliance" },
   { id: "register", label: "Risk Register", section: "Risk and compliance" },
+  { id: "aiRegister", label: "AI register", section: "Risk and compliance" },
   { id: "whs", label: "Work health and safety", section: "Risk and compliance" },
   { id: "privacy", label: "Privacy and cyber", section: "Risk and compliance" },
   { id: "abc", label: "Anti-bribery", section: "Risk and compliance" },
@@ -346,6 +350,28 @@ export default function Workspace({ membership, userId, userName }: { membership
         {nav}
         <div className="workspace-main">
           <Sanctions organisationId={organisation.id} role={role} userId={userId} group={data} />
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === "finance") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+          <FinancialResults organisationId={organisation.id} entities={data?.entities ?? []} canSetUp={canEdit} canReview={has(role, "owner", "admin", "secretary", "legal", "compliance", "director")} userId={userId} />
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === "aiRegister") {
+    return (
+      <div className="workspace">
+        {nav}
+        <div className="workspace-main">
+          <AiRegister organisationId={organisation.id} canEdit={canEdit} tier={organisation.tier} entities={data?.entities ?? []} />
         </div>
       </div>
     );

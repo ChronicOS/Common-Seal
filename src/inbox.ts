@@ -50,6 +50,29 @@ export async function loadInbox(organisationId: string, role: string, userId: st
 
   await Promise.all([
     safely(async () => {
+      // Financial results this person prepares, once the period has ended (migration 0069)
+      if (!supabase) return;
+      const me = await supabase.from("people").select("id").eq("organisation_id", organisationId).eq("user_id", userId);
+      const ids = ((me.data ?? []) as { id: string }[]).map((x) => x.id);
+      if (!ids.length) return;
+      const reps = await supabase.from("fin_reports").select("id, name, frequency").eq("organisation_id", organisationId).eq("is_active", true).in("preparer_person_id", ids);
+      if (reps.error || !reps.data?.length) return;
+      const { periodLabel } = await import("./finResults");
+      for (const r of reps.data as { id: string; name: string; frequency: string }[]) {
+        await supabase.rpc("ensure_fin_periods", { p_report: r.id });
+        const ps = await supabase.from("fin_periods").select("id, period_start, period_end, due_on").eq("report_id", r.id).eq("status", "open").lt("period_end", t);
+        for (const p of (ps.data ?? []) as { id: string; period_start: string; period_end: string; due_on: string }[])
+          add("finance", "Financial results", p.id, `${r.name}: ${periodLabel(p, r.frequency)}`, p.due_on);
+      }
+    }),
+    safely(async () => {
+      // AI tools due for review (migration 0069)
+      if (!manage || !supabase) return;
+      const { data, error } = await supabase.from("ai_tools").select("id, name, review_on").eq("organisation_id", organisationId).in("status", ["approved", "limited", "review"]).not("review_on", "is", null);
+      if (error) return;
+      for (const x of (data ?? []) as { id: string; name: string; review_on: string }[]) if (soon(x.review_on, 30)) add("aiRegister", "AI register", x.id, `Review ${x.name}`, x.review_on);
+    }),
+    safely(async () => {
       // Screening matches waiting for Legal or Compliance (migration 0061)
       if (!has(role, "owner", "admin", "legal", "compliance") || !supabase) return;
       const { data, error } = await supabase.from("dd_screenings").select("*, party:counterparties(name)").eq("organisation_id", organisationId).order("screened_at", { ascending: false });
