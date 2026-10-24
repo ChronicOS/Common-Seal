@@ -14,7 +14,7 @@ export type Meeting = {
   location: string | null;
   status: MeetingStatus;
   ended_at: string | null;
-  body: { id: string; name: string; entity: { id: string; name: string } };
+  body: { id: string; name: string; entity: { id: string; name: string; acn?: string | null } };
 };
 
 export type AgendaItem = { id: string; position: number; title: string; kind: ItemKind };
@@ -74,7 +74,7 @@ export const STATUS_LABELS: Record<MeetingStatus, string> = {
 };
 
 const MEETING_COLUMNS =
-  "id, title, scheduled_at, location, status, ended_at, body:bodies(id, name, entity:entities(id, name))";
+  "id, title, scheduled_at, location, status, ended_at, body:bodies(id, name, entity:entities(id, name, acn))";
 
 function db() {
   if (!supabase) throw new Error("The site is not connected to its database.");
@@ -496,46 +496,130 @@ export function formatDay(iso: string) {
   return new Date(iso).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric", timeZone: SYDNEY });
 }
 
-const OUTCOME_WORD: Record<Outcome, string> = { passed: "RESOLVED", not_passed: "NOT PASSED", deferred: "DEFERRED" };
 
-/** Builds a first draft of the minutes from attendance, notes, resolutions and actions. No AI is involved. */
+export const DRAFT_HEADER = "DRAFT – FOR APPROVAL OF THE BOARD";
+
+/**
+ * Builds a first draft of the minutes from attendance, notes, resolutions and actions, in the house
+ * style (the company's minutes template: decisions and actions). No AI is involved. Anything the
+ * records do not show is left as a [bracketed] prompt rather than guessed.
+ */
 export function draftMinutes(d: MeetingDetail): string {
-  const names = (status: AttendanceStatus) =>
-    d.attendees
-      .filter((a) => a.status === status)
-      .map((a) => `- ${a.person.full_name}${a.capacity ? ` (${a.capacity})` : ""}`);
+  const entity = d.meeting.body.entity;
+  const DIRECTOR = /^(director|chair|alternate director)$/i;
+  const who = (a: Attendee) => {
+    const cap = a.capacity ?? "";
+    if (/^chair$/i.test(cap)) return `${a.person.full_name}, Director (Chair)`;
+    return cap && !/^invitee$/i.test(cap) ? `${a.person.full_name}, ${cap}` : a.person.full_name;
+  };
+  const present = d.attendees.filter((a) => a.status === "present");
+  const directors = present.filter((a) => DIRECTOR.test(a.capacity ?? ""));
+  const others = present.filter((a) => !DIRECTOR.test(a.capacity ?? ""));
+  const apologies = d.attendees.filter((a) => a.status === "apology");
+  const held = new Date(d.meeting.scheduled_at);
+  const day = held.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric", timeZone: SYDNEY });
+  const time = (x: Date) => x.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit", timeZone: SYDNEY }).replace(/\s/g, "");
+  const acn = entity.acn ? `ACN ${entity.acn.replace(/(\d{3})(\d{3})(\d{3})/, "$1 $2 $3")}` : "[ACN]";
+  const body = d.meeting.body.name.toLowerCase().includes("board") ? "the Board of Directors" : d.meeting.body.name;
+
   const lines: string[] = [
-    `Minutes of the ${d.meeting.body.name.toLowerCase()}`,
-    d.meeting.body.entity.name,
+    DRAFT_HEADER,
     "",
-    `Meeting: ${d.meeting.title}`,
-    `Held: ${formatWhen(d.meeting.scheduled_at)}`,
+    `Company number: ${acn}`,
+    entity.name,
+    "(the “Company”)",
+    "",
+    `MINUTES of a meeting of ${body}`,
+    `held at ${d.meeting.location?.trim() || "[location]"}`,
+    `on ${day} at ${time(held)}`,
+    "",
+    "Present:",
+    ...(directors.length ? directors.map(who) : ["[No directors recorded as present]"]),
   ];
-  if (d.meeting.location) lines.push(`Location: ${d.meeting.location}`);
-  lines.push("", "Present", ...(names("present").length ? names("present") : ["- None recorded"]));
-  if (names("apology").length) lines.push("", "Apologies", ...names("apology"));
-  if (names("absent").length) lines.push("", "Absent", ...names("absent"));
+  if (others.length) lines.push("", "In attendance:", ...others.map(who));
+  if (apologies.length) lines.push("", "Apologies:", ...apologies.map(who));
 
-  d.agenda.forEach((item, index) => {
-    const capture = d.captures.find((c) => c.agenda_item_id === item.id);
-    lines.push("", `${index + 1}. ${item.title}`);
-    if (capture?.notes.trim()) lines.push(capture.notes.trim());
-    if (capture?.conflicts.trim()) lines.push(`Interests declared: ${capture.conflicts.trim()}`);
-    for (const r of d.resolutions.filter((x) => x.agenda_item_id === item.id))
-      lines.push(`${OUTCOME_WORD[r.outcome]}: ${r.text}`);
-    for (const a of d.actions.filter((x) => x.agenda_item_id === item.id)) {
-      const owner = d.people.find((p) => p.id === a.assignee_person_id)?.full_name;
-      const parts = [owner, a.due_at ? `due ${formatDay(a.due_at)}` : null].filter(Boolean).join(", ");
-      lines.push(`Action: ${a.title}${parts ? ` (${parts})` : ""}`);
+  let n = 0;
+  const section = (title: string) => {
+    n += 1;
+    lines.push("", `${n}. ${title.toUpperCase()}`);
+    let k = 0;
+    return (text: string) => {
+      k += 1;
+      lines.push(`${n}.${k} ${text}`);
+    };
+  };
+
+  // 1. Quorum and interests
+  let p = section("Quorum and disclosure of interests");
+  p(directors.length >= 2
+    ? "It was noted that a quorum was present and that the meeting had been duly convened in accordance with the Company’s constitution."
+    : `[Check quorum: ${directors.length} director${directors.length === 1 ? " is" : "s are"} recorded as present.]`);
+  const interests = d.agenda
+    .map((item) => ({ item, text: d.captures.find((c) => c.agenda_item_id === item.id)?.conflicts.trim() ?? "" }))
+    .filter((x) => x.text);
+  if (interests.length) {
+    p("The following interests were declared in accordance with section 191 of the Corporations Act 2001 (Cth) (the “Act”) and the Company’s constitution:");
+    for (const x of interests) lines.push(`    - ${x.item.title}: ${x.text}`);
+  } else {
+    p("No director declared a material personal interest in the matters considered at the meeting.");
+  }
+
+  // 2. Business
+  p = section("Business of the meeting");
+  p(d.agenda.length ? "It was noted that the business of the meeting was to consider:" : "It was noted that the business of the meeting was to [purpose of the meeting].");
+  d.agenda.forEach((item, i) => lines.push(`    (${String.fromCharCode(97 + (i % 26))}) ${item.title}`));
+
+  // 3. Documents
+  p = section("Documents tabled for meeting");
+  p("[List the board papers tabled at the meeting.]");
+
+  // 4. Matters discussed (key points in brief)
+  const discussed = d.agenda.map((item) => ({ item, notes: d.captures.find((c) => c.agenda_item_id === item.id)?.notes.trim() ?? "" })).filter((x) => x.notes);
+  if (discussed.length) {
+    p = section("Matters discussed");
+    for (const x of discussed) p(`${x.item.title}: ${x.notes}`);
+  }
+
+  // 5. Resolutions
+  p = section("Resolutions");
+  const passed = d.resolutions.filter((r) => r.outcome === "passed");
+  if (passed.length) {
+    p("After careful consideration of the business of the meeting and the documents tabled, the directors agreed the matters below.");
+    p("Accordingly IT WAS RESOLVED THAT:");
+    // "IT WAS RESOLVED THAT:" already introduces each one, so a leading "Resolved that" or "That" is dropped
+    const clause = (t: string) => t.trim().replace(/^(it was\s+)?resolved\s*(that)?[:,]?\s*/i, "").replace(/^that\s+/i, "").replace(/[.;]\s*$/, "");
+    passed.forEach((r, i) => lines.push(`    (${String.fromCharCode(97 + (i % 26))}) ${clause(r.text)}${i < passed.length - 2 ? ";" : i === passed.length - 2 ? "; and" : "."}`));
+  } else {
+    p("No resolutions were passed at the meeting.");
+  }
+  const notPassed = d.resolutions.filter((r) => r.outcome === "not_passed");
+  const deferred = d.resolutions.filter((r) => r.outcome === "deferred");
+  if (notPassed.length) {
+    p("The following proposed resolutions were not passed:");
+    for (const r of notPassed) lines.push(`    - ${r.text.trim()}`);
+  }
+  if (deferred.length) {
+    p("The following matters were deferred to a later meeting:");
+    for (const r of deferred) lines.push(`    - ${r.text.trim()}`);
+  }
+
+  // 6. Actions
+  if (d.actions.length) {
+    p = section("Actions");
+    for (const a of d.actions) {
+      const owner = d.people.find((x) => x.id === a.assignee_person_id)?.full_name ?? "[owner]";
+      p(`${a.title}: ${owner}${a.due_at ? `, by ${formatDay(a.due_at)}` : ""}.`);
     }
-  });
+  }
 
-  lines.push("", "Close");
-  lines.push(
-    d.meeting.ended_at
-      ? `There being no further business, the meeting closed at ${new Date(d.meeting.ended_at).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit", timeZone: SYDNEY })}.`
-      : "There being no further business, the meeting closed.",
-  );
-  lines.push("", "Signed as a correct record:", "", "____________________", "Chair");
+  // Filing and close
+  p = section("Filing");
+  p("It was resolved to arrange for all necessary and appropriate entries to be made in the books and registers of the Company and for the necessary forms and documents to be filed.");
+  p = section("Close");
+  p(d.meeting.ended_at
+    ? `There being no further business, the Chair declared the meeting closed at ${time(new Date(d.meeting.ended_at))}.`
+    : "There being no further business, the Chair declared the meeting closed.");
+  lines.push("", "", "………………………………", "Chair", "Signed as a correct record");
   return lines.join("\n");
 }

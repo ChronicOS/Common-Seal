@@ -317,7 +317,9 @@ begin
               format('The chair sent the minutes back: %s', v_note), 'Change the draft and approve it again, or send it back to the drafter',
               'Sent to the chair again to sign', v_appr.user_id, v_appr.roles, current_date + 7, c.payload);
     elsif p_decision = 'approve' then
-      update public.minutes set status = 'final', review_status = 'signed', chair_signed_at = now(),
+      -- The draft banner comes off the signed record
+      update public.minutes set content = regexp_replace(content, '^\s*DRAFT [–-] FOR APPROVAL OF THE BOARD\s*\n+', ''),
+             status = 'final', review_status = 'signed', chair_signed_at = now(),
              signed_on_behalf = coalesce((c.payload ->> 'on_behalf')::boolean, false)
        where id = mi.id;
       perform app.minutes_follow_ups(mi.meeting_id);
