@@ -1970,3 +1970,24 @@ fieldset.person-row { min-width: 0; }
 .ai-tool { padding: 12px 14px; }
 .rule-list li button { margin-left: 8px; }
 .rule-list form { margin-top: 6px; flex-wrap: nowrap; }
+
+/* Action cards and the minutes workflow (0070) */
+.action-cards { display: grid; gap: 14px; margin-bottom: 22px; }
+.action-cards h2 { margin-bottom: 0; }
+.action-card { padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.action-card header h3 { margin: 0; font-size: 1.05em; }
+.action-card header p { margin: 2px 0 6px; }
+.ac-label { margin: 6px 0 0; font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.05em; color: #6b6458; font-weight: 600; }
+.ac-decision { background: #eef4fb; border: 1px solid #c9dcf0; border-radius: 8px; padding: 8px 12px; margin: 6px 0; }
+.ac-decision p { margin: 2px 0; }
+.ac-flags li { color: #7a4b00; font-size: 0.9em; padding: 2px 0; }
+.ac-evidence summary { cursor: pointer; font-size: 0.9em; }
+.ac-evidence li { padding: 4px 0; }
+.ac-next { background: #f3f1ea; border-radius: 6px; padding: 6px 10px; margin: 6px 0 2px; }
+.ac-minutes { max-height: 320px; overflow: auto; }
+.ac-buttons { margin-top: 6px; gap: 8px; }
+.minutes-steps { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; padding: 0; margin: 4px 0 12px; counter-reset: step; }
+.minutes-steps li { counter-increment: step; font-size: 0.85em; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line, #cfc8b8); color: #6b6458; }
+.minutes-steps li::before { content: counter(step) ". "; }
+.minutes-steps li.done { background: #e5f4e4; border-color: #b9dbb6; color: #1d5a2a; }
+.minutes-steps li.now { background: #1f2a24; border-color: #1f2a24; color: #fff; }

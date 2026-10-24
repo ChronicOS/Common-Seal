@@ -37,13 +37,15 @@ export type OrgSettings = {
   email_footer: string | null;
   gift_approval_threshold?: number | null;
   expense_receipt_threshold?: number | null;
+  /** Approves draft minutes before the chair signs (migration 0070); null = the company secretary */
+  minutes_approver_user_id?: string | null;
 };
 export type EditableSettings = Partial<
   Pick<
     OrgSettings,
     | "name" | "legal_name" | "abn" | "address" | "logo_data_url" | "billing_contact_name" | "billing_contact_email" | "mfa_required_roles" | "idle_timeout_minutes"
     | "invite_domains" | "link_days" | "policy_review_months" | "default_conf_months" | "default_reminder_emails" | "email_from_address" | "email_footer"
-    | "gift_approval_threshold" | "expense_receipt_threshold"
+    | "gift_approval_threshold" | "expense_receipt_threshold" | "minutes_approver_user_id"
   >
 >;
 

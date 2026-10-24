@@ -1,3 +1,4 @@
+import { submitMinutes } from "./actionCards";
 import { has } from "./roles";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
@@ -8,7 +9,6 @@ import {
   decideWipe,
   draftMinutes,
   executeWipe,
-  finaliseMinutes,
   formatDay,
   formatWhen,
   loadMeeting,
@@ -292,14 +292,14 @@ export default function MeetingPage({ organisationId, meetingId, role, userId, o
 
   const draftText = minutesText ?? minutes?.content ?? "";
 
-  const lockMinutes = () => {
-    if (!window.confirm("Lock these minutes? They become the permanent record and cannot be changed afterwards.")) return;
+  const review = minutes?.review_status ?? "drafting";
+  const withSomeone = review === "with_approver" || review === "with_chair";
+  const sendForApproval = () =>
     void run(async () => {
       await saveMinutes(organisationId, meetingId, draftText);
-      await finaliseMinutes(meetingId, draftText);
+      await submitMinutes(meetingId, draftText);
       setMinutesText(null);
     });
-  };
 
   const latest = detail.requests[0];
   const activeHolds = detail.holds.filter((h) => h.status === "active");
@@ -470,8 +470,26 @@ export default function MeetingPage({ organisationId, meetingId, role, userId, o
           <h2>Draft minutes</h2>
           {canWrite ? (
             <>
+              <ol className="minutes-steps" aria-label="Minutes approval">
+                {[["drafting", "Draft"], ["with_approver", "Approval"], ["with_chair", "Chair signs"], ["signed", "Final"]].map(([k, l], i, all) => {
+                  const at = all.findIndex(([x]) => x === (review === "sent_back" ? "drafting" : review));
+                  return <li key={k} className={i < at ? "done" : i === at ? "now" : undefined}>{l}</li>;
+                })}
+              </ol>
+              {review === "sent_back" && minutes?.sent_back_note && (
+                <p className="card warning small" role="status"><strong>Sent back:</strong> {minutes.sent_back_note}</p>
+              )}
+              {withSomeone ? (
+                <>
+                  <p className="muted">
+                    {review === "with_approver" ? "With the approver: it is in their For you as a card." : "Approved, and with the chair to sign."} The draft is locked while it is with them; they can change it there.
+                  </p>
+                  <pre className="minutes">{draftText}</pre>
+                </>
+              ) : (
+              <>
               <p className="muted">
-                Drafted from the attendance, notes, resolutions and actions you recorded. Edit freely, then lock.
+                Drafted from the attendance, notes, resolutions and actions you recorded. Edit freely, then send for approval. The company secretary (or the person named in Defaults) approves it, then the chair signs.
               </p>
               <textarea
                 className="minutes-edit"
@@ -481,8 +499,8 @@ export default function MeetingPage({ organisationId, meetingId, role, userId, o
                 onChange={(e) => setMinutesText(e.target.value)}
               />
               <div className="row">
-                <button type="button" disabled={busy} onClick={lockMinutes}>
-                  Approve and lock minutes
+                <button type="button" disabled={busy} onClick={sendForApproval}>
+                  {review === "sent_back" ? "Send for approval again" : "Send for approval"}
                 </button>
                 <button
                   type="button"
@@ -512,6 +530,8 @@ export default function MeetingPage({ organisationId, meetingId, role, userId, o
                   Back to note taking
                 </button>
               </div>
+              </>
+              )}
             </>
           ) : (
             <p className="muted">The minutes are being drafted. They appear here once they are final.</p>
@@ -525,7 +545,9 @@ export default function MeetingPage({ organisationId, meetingId, role, userId, o
           <section className="block">
             <h2>Minutes</h2>
             <p className="locked">
-              Locked{minutes.finalised_at ? ` on ${formatWhen(minutes.finalised_at)}` : ""} by {who(minutes.finalised_by)}
+              {minutes.chair_signed_at
+                ? `Signed by the chair${minutes.signed_on_behalf ? " (recorded by the company secretary)" : ""} on ${formatWhen(minutes.chair_signed_at)}`
+                : `Locked${minutes.finalised_at ? ` on ${formatWhen(minutes.finalised_at)}` : ""} by ${who(minutes.finalised_by)}`}
               . This is the permanent record.
             </p>
             <pre className="minutes">{minutes.content}</pre>

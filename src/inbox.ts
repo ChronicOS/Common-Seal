@@ -50,6 +50,11 @@ export async function loadInbox(organisationId: string, role: string, userId: st
 
   await Promise.all([
     safely(async () => {
+      // Action cards waiting on this person (migration 0070); shown as cards on For you
+      const { loadMyCards } = await import("./actionCards");
+      for (const c of await loadMyCards(organisationId, userId, role)) add("foryou", "Decision", c.id, c.title, c.due_on);
+    }),
+    safely(async () => {
       // Financial results this person prepares, once the period has ended (migration 0069)
       if (!supabase) return;
       const me = await supabase.from("people").select("id").eq("organisation_id", organisationId).eq("user_id", userId);

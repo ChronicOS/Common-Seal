@@ -26,7 +26,12 @@ export type Attendee = {
 };
 export type Capture = { agenda_item_id: string; notes: string; conflicts: string };
 export type Resolution = { id: string; agenda_item_id: string | null; text: string; outcome: Outcome };
-export type Minutes = { content: string; status: "draft" | "final"; finalised_at: string | null; finalised_by: string | null };
+export type Minutes = {
+  content: string; status: "draft" | "final"; finalised_at: string | null; finalised_by: string | null;
+  /** Approval workflow (migration 0070); absent before it is run */
+  review_status?: "drafting" | "with_approver" | "sent_back" | "with_chair" | "signed";
+  sent_back_note?: string | null; approved_at?: string | null; chair_signed_at?: string | null; signed_on_behalf?: boolean;
+};
 export type Action = {
   id: string;
   title: string;
@@ -185,7 +190,7 @@ export async function loadMeeting(organisationId: string, meetingId: string): Pr
         .order("created_at"),
       client
         .from("minutes")
-        .select("content, status, finalised_at, finalised_by")
+        .select("*")
         .eq("meeting_id", meetingId)
         .maybeSingle(),
       client

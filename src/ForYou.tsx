@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import { formatDay } from "./board";
 import type { InboxItem } from "./inbox";
+import ActionCards from "./ActionCards";
 
 /** Everything waiting on the signed-in person, across the platform. Common items can be done right here. */
 export function ReminderChoice({ organisationId, userId }: { organisationId: string; userId: string }) {
@@ -32,7 +33,10 @@ export function ReminderChoice({ organisationId, userId }: { organisationId: str
   );
 }
 
-export default function ForYou({ items, onOpen, onChanged, organisationId, userId }: { items: InboxItem[] | null; onOpen: (tab: string) => void; onChanged?: () => void; organisationId?: string; userId?: string }) {
+export default function ForYou({ items: all, onOpen, onChanged, organisationId, userId, role }: { items: InboxItem[] | null; onOpen: (tab: string) => void; onChanged?: () => void; organisationId?: string; userId?: string; role?: string }) {
+  // Decisions are shown as cards above the list
+  const decisions = all?.filter((i) => i.kind === "Decision").length ?? 0;
+  const items = all ? all.filter((i) => i.kind !== "Decision") : null;
   const [doing, setDoing] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -60,10 +64,11 @@ export default function ForYou({ items, onOpen, onChanged, organisationId, userI
       <h1>For you</h1>
       {done && <p className="card note" role="status">{done}</p>}
       {problem && <p className="error" role="alert">{problem}</p>}
+      {organisationId && userId && role !== undefined && <ActionCards organisationId={organisationId} userId={userId} role={role} onOpen={onOpen} onChanged={onChanged} />}
       {items === null ? (
         <p className="lead">Loading…</p>
       ) : items.length === 0 ? (
-        <p className="lead">Nothing is waiting on you.</p>
+        <p className="lead">{decisions ? "Nothing else is waiting on you." : "Nothing is waiting on you."}</p>
       ) : (
         <ul className="entity-list">
           {items.map((i) => (

@@ -18,6 +18,14 @@ checks (check_name, ok, detail) as (
          case when to_regclass('public.' || e.marker) is null then 'Table ' || e.marker || ' is missing' else '' end
   from expected e
   union all
+  select 'Migration 0070 has been run',
+         to_regclass('public.action_cards') is not null and to_regprocedure('public.decide_card(uuid, text, text, jsonb)') is not null, ''
+  union all
+  select 'Action cards can only be decided through their workflow',
+         to_regclass('public.action_cards') is null
+         or (not has_table_privilege('authenticated', 'public.action_cards', 'insert') and not has_table_privilege('authenticated', 'public.action_cards', 'update')
+             and not has_table_privilege('authenticated', 'public.action_cards', 'delete')), ''
+  union all
   select 'Migration 0069 has been run',
          to_regclass('public.ai_tools') is not null and to_regclass('public.fin_periods') is not null, ''
   union all

@@ -428,6 +428,16 @@ export function DefaultsSettings({ organisationId, role, onOpen }: Props & { onO
             }))}
           </>
         )}
+        {"minutes_approver_user_id" in s && (
+          <>
+            <label htmlFor="def-minutes">Approves draft minutes before the chair signs</label>
+            <select id="def-minutes" disabled={!admin || busy} value={s.minutes_approver_user_id ?? ""} onChange={(e) => void save({ minutes_approver_user_id: e.target.value || null })}>
+              <option value="">The company secretary</option>
+              {members.map((m) => <option key={m.user_id} value={m.user_id}>{m.name}</option>)}
+            </select>
+            <p className="small muted">For example the general counsel. Draft minutes go to them as a card in For you; the chair then signs.</p>
+          </>
+        )}
         <p className="small">
           Default legal contact for confidential projects: <strong>{usage?.legal_contact ?? "the directors"}</strong>.{" "}
           <span className="muted">This is whoever holds the General Counsel position, or failing that the CEO. Set those positions in </span>

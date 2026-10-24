@@ -633,7 +633,7 @@ export default function Workspace({ membership, userId, userName }: { membership
       <div className="workspace">
         {nav}
         <div className="workspace-main">
-        <ForYou items={inbox} organisationId={organisation.id} userId={userId} onOpen={(t) => go(t as Tab)} onChanged={() => void loadInbox(organisation.id, role, userId).then(setInbox, () => undefined)} />
+        <ForYou items={inbox} organisationId={organisation.id} userId={userId} role={role} onOpen={(t) => go(t as Tab)} onChanged={() => void loadInbox(organisation.id, role, userId).then(setInbox, () => undefined)} />
         </div>
       </div>
     );
